@@ -15,6 +15,7 @@ import {
   IconSparkles,
   IconHistory,
   IconShieldCheck,
+  IconActivityHeartbeat,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import classes from "./settings.module.css";
@@ -102,6 +103,12 @@ const groupedData: DataGroup[] = [
         icon: IconShieldCheck,
         path: "/settings/verifications",
         feature: Feature.PAGE_VERIFICATION,
+      },
+      {
+        label: "Documentation health",
+        icon: IconActivityHeartbeat,
+        path: "/settings/health",
+        role: "admin",
       },
       {
         label: "API management",

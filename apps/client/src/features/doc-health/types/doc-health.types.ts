@@ -1,0 +1,60 @@
+export type HealthIssueCategory =
+  | "outdated"
+  | "missing-owner"
+  | "unverified-critical"
+  | "weak-content";
+
+export interface ISignalBreakdown {
+  freshness: number;
+  ownership: number;
+  verification: number | null;
+  contentStrength: number;
+}
+
+export interface ISpaceScoreSummary {
+  spaceId: string;
+  spaceName: string | null;
+  spaceSlug: string;
+  isCritical: boolean;
+  score: number | null;
+  pageCount: number;
+  insufficientData: boolean;
+}
+
+export interface IHealthScore {
+  score: number | null;
+  pageCount: number;
+  scoredPageCount: number;
+  signals: ISignalBreakdown;
+  insufficientData: boolean;
+}
+
+export interface IWorkspaceHealth extends IHealthScore {
+  spaces: ISpaceScoreSummary[];
+}
+
+export interface IHealthIssue {
+  pageId: string;
+  pageSlugId: string;
+  pageTitle: string | null;
+  spaceId: string;
+  spaceName: string | null;
+  spaceSlug: string;
+  category: HealthIssueCategory;
+  severity: "low" | "medium" | "high";
+  detail: string;
+}
+
+export interface IHealthIssuesPage {
+  items: IHealthIssue[];
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface IHealthIssuesQuery {
+  category: HealthIssueCategory;
+  spaceId?: string;
+  page?: number;
+  limit?: number;
+}

@@ -1,4 +1,13 @@
-import { Group, Box, Button, TextInput, Stack, Textarea } from "@mantine/core";
+import {
+  Group,
+  Box,
+  Button,
+  TextInput,
+  Stack,
+  Textarea,
+  Switch,
+  Text,
+} from "@mantine/core";
 import React from "react";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
@@ -18,6 +27,7 @@ const formSchema = z.object({
       /^[a-zA-Z0-9]+$/,
       "Space slug must be alphanumeric. No special characters",
     ),
+  isCritical: z.boolean(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -35,14 +45,11 @@ export function EditSpaceForm({ space, readOnly }: EditSpaceFormProps) {
       name: space?.name,
       description: space?.description || "",
       slug: space.slug,
+      isCritical: space?.isCritical ?? false,
     },
   });
 
-  const handleSubmit = async (values: {
-    name?: string;
-    description?: string;
-    slug?: string;
-  }) => {
+  const handleSubmit = async (values: FormValues) => {
     const spaceData: Partial<ISpace> = {
       spaceId: space.id,
     };
@@ -55,6 +62,10 @@ export function EditSpaceForm({ space, readOnly }: EditSpaceFormProps) {
 
     if (form.isDirty("slug")) {
       spaceData.slug = values.slug;
+    }
+
+    if (form.isDirty("isCritical")) {
+      spaceData.isCritical = values.isCritical;
     }
 
     await updateSpaceMutation.mutateAsync(spaceData);
@@ -94,6 +105,23 @@ export function EditSpaceForm({ space, readOnly }: EditSpaceFormProps) {
               maxRows={3}
               {...form.getInputProps("description")}
             />
+
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Stack gap={2}>
+                <Text fw={500} size="sm">
+                  {t("Critical space")}
+                </Text>
+                <Text c="dimmed" size="xs">
+                  {t(
+                    "Pages here are tracked for verification and weigh the workspace health score.",
+                  )}
+                </Text>
+              </Stack>
+              <Switch
+                disabled={readOnly}
+                {...form.getInputProps("isCritical", { type: "checkbox" })}
+              />
+            </Group>
           </Stack>
 
           {!readOnly && (

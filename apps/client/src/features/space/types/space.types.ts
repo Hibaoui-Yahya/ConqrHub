@@ -32,6 +32,7 @@ export interface ISpace {
   spaceId?: string;
   membership?: IMembership;
   settings?: ISpaceSettings;
+  isCritical?: boolean;
   // for updates
   disablePublicSharing?: boolean;
   allowViewerComments?: boolean;
