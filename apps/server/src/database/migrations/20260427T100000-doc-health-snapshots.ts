@@ -25,23 +25,17 @@ export async function up(db: Kysely<any>): Promise<void> {
   // One row per (scope, day). Two partial unique indexes — one for workspace-level
   // rows (space_id IS NULL) and one for per-space rows — because Postgres treats
   // NULL as distinct in a regular unique index, which would let duplicates through.
-  await db.schema
-    .createIndex('uniq_doc_health_snapshots_workspace_day')
-    .ifNotExists()
-    .on('doc_health_snapshots')
-    .columns(['workspace_id', 'captured_at'])
-    .where('space_id', 'is', null)
-    .unique()
-    .execute();
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_doc_health_snapshots_workspace_day
+      ON doc_health_snapshots (workspace_id, captured_at)
+      WHERE space_id IS NULL
+  `.execute(db);
 
-  await db.schema
-    .createIndex('uniq_doc_health_snapshots_space_day')
-    .ifNotExists()
-    .on('doc_health_snapshots')
-    .columns(['workspace_id', 'space_id', 'captured_at'])
-    .where('space_id', 'is not', null)
-    .unique()
-    .execute();
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_doc_health_snapshots_space_day
+      ON doc_health_snapshots (workspace_id, space_id, captured_at)
+      WHERE space_id IS NOT NULL
+  `.execute(db);
 
   await db.schema
     .createIndex('idx_doc_health_snapshots_trend')

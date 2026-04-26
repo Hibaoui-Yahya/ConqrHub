@@ -177,7 +177,7 @@
       "^@docmost/ee/(.*)$": "<rootDir>/ee/$1"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(?:\\.pnpm/)?(?:uuid)(?:@[^/]+)?/)"
+      "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:uuid|nanoid)(?:@[^\\\\/]+)?[\\\\/])"
     ]
   }
 }

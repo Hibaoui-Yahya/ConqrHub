@@ -127,7 +127,9 @@ describe('HealthSnapshotService', () => {
         workspaces: [{ id: 'ws-1' }, { id: 'ws-2' }, { id: 'ws-3' }],
       });
       const result = await service.captureAll(NOW);
-      expect(result).toEqual({ captured: 3, failed: 0 });
+      expect(result.captured).toBe(3);
+      expect(result.failed).toBe(0);
+      expect(result.workspaceIds).toEqual(['ws-1', 'ws-2', 'ws-3']);
       expect(docHealth.getWorkspaceHealth).toHaveBeenCalledTimes(3);
     });
 
@@ -155,7 +157,9 @@ describe('HealthSnapshotService', () => {
       });
 
       const result = await service.captureAll(NOW);
-      expect(result).toEqual({ captured: 1, failed: 1 });
+      expect(result.captured).toBe(1);
+      expect(result.failed).toBe(1);
+      expect(result.workspaceIds).toEqual(['ws-2']);
     });
   });
 });

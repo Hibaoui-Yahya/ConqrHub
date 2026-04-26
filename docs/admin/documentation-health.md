@@ -52,6 +52,9 @@ The "Issues to fix" list filters pages by one of four categories:
 | `POST /api/workspace-health/issues` | Workspace admin/owner for workspace-wide queries; Space admin for queries scoped to their space |
 | `POST /api/workspace-health/trend` | Workspace admin/owner for workspace-wide trend; Space admin for queries scoped to their space |
 | `POST /api/workspace-health/snapshot` | Workspace admin or owner — triggers an immediate capture (otherwise waits for the daily cron) |
+| `POST /api/workspace-health/alerts` | Any authenticated user — lists their own alert subscriptions for this workspace |
+| `POST /api/workspace-health/alerts/subscribe` | Any authenticated user — upserts a subscription (one row per `user × workspace × space` scope) |
+| `POST /api/workspace-health/alerts/unsubscribe` | Any authenticated user — removes one of their own subscriptions |
 
 The issue list is computed against `pages.deleted_at IS NULL` and joins to `spaces` and `users` so deactivated/deleted users surface as "missing owner".
 
@@ -60,6 +63,14 @@ The issue list is computed against `pages.deleted_at IS NULL` and joins to `spac
 A daily cron (`0 2 * * *` UTC) snapshots every workspace's score (one workspace-level row + one row per space) into `doc_health_snapshots`. A second job 30 minutes later prunes anything older than 365 days. Both jobs run on the `general-queue` and are registered by `DocHealthCronService` at module init.
 
 The Documentation Health page renders a sparkline chart of the workspace-level score with selectable ranges (7d / 30d / 90d / 1y). Admins can hit **Snapshot now** to capture an extra point immediately — useful right after a bulk content fix, or for demos where waiting until 02:00 UTC isn't an option.
+
+## Drop alerts (v1.1)
+
+Any user (not just admins) can subscribe to a "tell me when the workspace score drops below X" alert from the Documentation Health page. Subscriptions live in `doc_health_alert_subscriptions` (one row per `user × workspace × space` scope) and are evaluated immediately after the daily snapshot job — so an alert fires at most once per day per subscription, with an additional 24-hour dedupe window guarding against repeat firings while a workspace stays under threshold.
+
+Notifications use the existing in-app notification path (`NotificationType.DOC_HEALTH_DROPPED`, surfaced in the **Direct** notification tab). The notification payload carries `{ score, threshold, scope }` so the client can render a meaningful message without an extra round-trip.
+
+A subscription is silent during "insufficient data" periods — if the workspace doesn't have enough scored pages to produce a score (i.e., latest snapshot row has `score: null`), the alert evaluator skips that subscription rather than treating null as zero.
 
 ## Operational notes
 
@@ -71,9 +82,10 @@ The Documentation Health page renders a sparkline chart of the workspace-level s
 
 | Capability | Tracking |
 |---|---|
-| Subscribe-to-alert when score drops | v1.1 (in flight) |
+| Email digest of alert events | v1.2 (in-app fires today) |
 | Broken external link detection | v1.2 |
 | Semantic duplicate detection | v1.2 |
+| Per-space alert thresholds via UI | v1.2 (API supports it; UI surfaces only the workspace-level subscription for now) |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |
 | Knowledge gap detection | v2 (PRD 21.3) |

@@ -31,6 +31,19 @@ function buildController() {
       ]),
     captureWorkspace: jest.fn().mockResolvedValue(undefined),
   };
+  const alerts: any = {
+    listForUser: jest.fn().mockResolvedValue([]),
+    subscribe: jest.fn().mockResolvedValue({
+      id: 'sub-1',
+      userId: 'user-1',
+      workspaceId: 'workspace-1',
+      spaceId: null,
+      threshold: 70,
+      lastFiredAt: null,
+      createdAt: new Date('2026-04-26T00:00:00Z'),
+    }),
+    unsubscribe: jest.fn().mockResolvedValue(undefined),
+  };
   const workspaceAbility: any = { createForUser: jest.fn() };
   const spaceAbility: any = { createForUser: jest.fn() };
   const spaceRepo: any = { findById: jest.fn() };
@@ -39,6 +52,7 @@ function buildController() {
     docHealth,
     issues,
     snapshots,
+    alerts,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -49,6 +63,7 @@ function buildController() {
     docHealth,
     issues,
     snapshots,
+    alerts,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -343,6 +358,48 @@ describe('DocHealthController', () => {
         controller.captureSnapshot(mockUser, mockWorkspace),
       ).rejects.toThrow(ForbiddenException);
       expect(snapshots.captureWorkspace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('alerts', () => {
+    it('listAlerts returns the user own subscriptions', async () => {
+      const { controller, alerts } = buildController();
+      const result = await controller.listAlerts(mockUser, mockWorkspace);
+      expect(result.items).toEqual([]);
+      expect(alerts.listForUser).toHaveBeenCalledWith(
+        mockUser.id,
+        mockWorkspace.id,
+      );
+    });
+
+    it('subscribeAlert delegates to the service with the user scope', async () => {
+      const { controller, alerts } = buildController();
+      const result = await controller.subscribeAlert(
+        { threshold: 70 },
+        mockUser,
+        mockWorkspace,
+      );
+      expect(alerts.subscribe).toHaveBeenCalledWith({
+        userId: mockUser.id,
+        workspaceId: mockWorkspace.id,
+        spaceId: null,
+        threshold: 70,
+      });
+      expect(result.threshold).toBe(70);
+    });
+
+    it('unsubscribeAlert calls the service', async () => {
+      const { controller, alerts } = buildController();
+      await controller.unsubscribeAlert(
+        { subscriptionId: 'sub-1' },
+        mockUser,
+        mockWorkspace,
+      );
+      expect(alerts.unsubscribe).toHaveBeenCalledWith({
+        userId: mockUser.id,
+        workspaceId: mockWorkspace.id,
+        subscriptionId: 'sub-1',
+      });
     });
   });
 });

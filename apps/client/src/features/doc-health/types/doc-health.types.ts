@@ -72,3 +72,20 @@ export interface IHealthTrendQuery {
   spaceId?: string;
   days?: number;
 }
+
+export interface IHealthAlert {
+  id: string;
+  spaceId: string | null;
+  threshold: number;
+  lastFiredAt: string | null;
+  createdAt: string;
+}
+
+export interface IHealthAlertsResponse {
+  items: IHealthAlert[];
+}
+
+export interface IHealthAlertSubscribeInput {
+  spaceId?: string;
+  threshold: number;
+}

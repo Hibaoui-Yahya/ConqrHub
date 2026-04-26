@@ -12,9 +12,13 @@ import {
   getHealthTrend,
   getSpaceHealth,
   getWorkspaceHealth,
+  listHealthAlerts,
   snapshotHealthNow,
+  subscribeHealthAlert,
+  unsubscribeHealthAlert,
 } from "@/features/doc-health/services/doc-health-service";
 import {
+  IHealthAlertsResponse,
   IHealthIssuesPage,
   IHealthIssuesQuery,
   IHealthScore,
@@ -75,6 +79,50 @@ export function useSnapshotHealthNowMutation() {
     },
     onError: (error) => {
       const message = (error as any)?.response?.data?.message ?? t("Snapshot failed");
+      notifications.show({ message, color: "red" });
+    },
+  });
+}
+
+export function useHealthAlertsQuery(): UseQueryResult<
+  IHealthAlertsResponse,
+  Error
+> {
+  return useQuery({
+    queryKey: ["doc-health", "alerts"],
+    queryFn: listHealthAlerts,
+  });
+}
+
+export function useSubscribeHealthAlertMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  return useMutation({
+    mutationFn: subscribeHealthAlert,
+    onSuccess: () => {
+      notifications.show({ message: t("Alert saved") });
+      queryClient.invalidateQueries({ queryKey: ["doc-health", "alerts"] });
+    },
+    onError: (error) => {
+      const message =
+        (error as any)?.response?.data?.message ?? t("Could not save alert");
+      notifications.show({ message, color: "red" });
+    },
+  });
+}
+
+export function useUnsubscribeHealthAlertMutation() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+  return useMutation({
+    mutationFn: unsubscribeHealthAlert,
+    onSuccess: () => {
+      notifications.show({ message: t("Alert removed") });
+      queryClient.invalidateQueries({ queryKey: ["doc-health", "alerts"] });
+    },
+    onError: (error) => {
+      const message =
+        (error as any)?.response?.data?.message ?? t("Could not remove alert");
       notifications.show({ message, color: "red" });
     },
   });

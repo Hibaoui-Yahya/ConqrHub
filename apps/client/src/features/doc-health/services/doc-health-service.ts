@@ -1,5 +1,8 @@
 import api from "@/lib/api-client";
 import {
+  IHealthAlert,
+  IHealthAlertsResponse,
+  IHealthAlertSubscribeInput,
   IHealthIssuesPage,
   IHealthIssuesQuery,
   IHealthScore,
@@ -47,4 +50,27 @@ export async function snapshotHealthNow(): Promise<{ capturedAt: string }> {
     "/workspace-health/snapshot",
   );
   return req.data;
+}
+
+export async function listHealthAlerts(): Promise<IHealthAlertsResponse> {
+  const req = await api.post<IHealthAlertsResponse>(
+    "/workspace-health/alerts",
+  );
+  return req.data;
+}
+
+export async function subscribeHealthAlert(
+  input: IHealthAlertSubscribeInput,
+): Promise<IHealthAlert> {
+  const req = await api.post<IHealthAlert>(
+    "/workspace-health/alerts/subscribe",
+    input,
+  );
+  return req.data;
+}
+
+export async function unsubscribeHealthAlert(
+  subscriptionId: string,
+): Promise<void> {
+  await api.post("/workspace-health/alerts/unsubscribe", { subscriptionId });
 }

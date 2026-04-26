@@ -10,6 +10,7 @@ export const NotificationType = {
   PAGE_VERIFIED: 'page.verified',
   PAGE_APPROVAL_REQUESTED: 'page.approval_requested',
   PAGE_APPROVAL_REJECTED: 'page.approval_rejected',
+  DOC_HEALTH_DROPPED: 'doc_health.dropped',
 } as const;
 
 export type NotificationType =
@@ -40,6 +41,7 @@ export const DIRECT_NOTIFICATION_TYPES: NotificationType[] = [
   NotificationType.COMMENT_RESOLVED,
   NotificationType.PAGE_USER_MENTION,
   NotificationType.PAGE_PERMISSION_GRANTED,
+  NotificationType.DOC_HEALTH_DROPPED,
 ];
 
 export const UPDATES_NOTIFICATION_TYPES: NotificationType[] = [

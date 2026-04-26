@@ -246,6 +246,17 @@ export interface GroupUsers {
   userId: string;
 }
 
+export interface DocHealthAlertSubscriptions {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lastFiredAt: Timestamp | null;
+  spaceId: string | null;
+  threshold: number;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  workspaceId: string;
+}
+
 export interface DocHealthSnapshots {
   capturedAt: Timestamp;
   createdAt: Generated<Timestamp>;
@@ -556,6 +567,7 @@ export interface DB {
   backlinks: Backlinks;
   billing: Billing;
   comments: Comments;
+  docHealthAlertSubscriptions: DocHealthAlertSubscriptions;
   docHealthSnapshots: DocHealthSnapshots;
   favorites: Favorites;
   fileTasks: FileTasks;

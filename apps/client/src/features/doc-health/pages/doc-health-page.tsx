@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import SettingsTitle from "@/components/settings/settings-title";
 import { getAppName } from "@/lib/config";
 import useUserRole from "@/hooks/use-user-role";
+import HealthAlertCard from "@/features/doc-health/components/health-alert-card";
 import HealthScoreCard from "@/features/doc-health/components/health-score-card";
 import HealthTrendChart from "@/features/doc-health/components/health-trend-chart";
 import SpaceScoresTable from "@/features/doc-health/components/space-scores-table";
@@ -54,6 +55,8 @@ export default function DocHealthPage() {
         <Card withBorder padding="lg" radius="md">
           <HealthTrendChart days={trendDays} onDaysChange={setTrendDays} />
         </Card>
+
+        <HealthAlertCard />
 
         <Stack gap="xs">
           <Title order={4}>{t("Spaces")}</Title>

@@ -27,6 +27,13 @@ import { DocHealthService } from './services/doc-health.service';
 import { HealthIssuesService } from './services/issues.service';
 import { HealthSnapshotService } from './services/snapshot.service';
 import {
+  AlertSubscription,
+  HealthAlertsService,
+} from './services/alerts.service';
+import {
+  HealthAlertItem,
+  HealthAlertSubscribeDto,
+  HealthAlertUnsubscribeDto,
   HealthIssuesQueryDto,
   HealthTrendQueryDto,
   HealthTrendResponse,
@@ -40,6 +47,7 @@ export class DocHealthController {
     private readonly docHealth: DocHealthService,
     private readonly issues: HealthIssuesService,
     private readonly snapshots: HealthSnapshotService,
+    private readonly alerts: HealthAlertsService,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly spaceRepo: SpaceRepo,
@@ -196,4 +204,55 @@ export class DocHealthController {
     await this.snapshots.captureWorkspace(workspace.id, now);
     return { capturedAt: now.toISOString() };
   }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/alerts')
+  async listAlerts(
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<{ items: HealthAlertItem[] }> {
+    const subs = await this.alerts.listForUser(user.id, workspace.id);
+    return { items: subs.map(toAlertItem) };
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/alerts/subscribe')
+  async subscribeAlert(
+    @Body() input: HealthAlertSubscribeDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<HealthAlertItem> {
+    const sub = await this.alerts.subscribe({
+      userId: user.id,
+      workspaceId: workspace.id,
+      spaceId: input.spaceId ?? null,
+      threshold: input.threshold,
+    });
+    return toAlertItem(sub);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/alerts/unsubscribe')
+  async unsubscribeAlert(
+    @Body() input: HealthAlertUnsubscribeDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<{ ok: true }> {
+    await this.alerts.unsubscribe({
+      userId: user.id,
+      workspaceId: workspace.id,
+      subscriptionId: input.subscriptionId,
+    });
+    return { ok: true };
+  }
+}
+
+function toAlertItem(sub: AlertSubscription): HealthAlertItem {
+  return {
+    id: sub.id,
+    spaceId: sub.spaceId,
+    threshold: sub.threshold,
+    lastFiredAt: sub.lastFiredAt ? sub.lastFiredAt.toISOString() : null,
+    createdAt: sub.createdAt.toISOString(),
+  };
 }

@@ -96,11 +96,14 @@ export class HealthSnapshotService {
 
   /**
    * Iterate every workspace and snapshot it. Errors on individual workspaces
-   * are logged but do not stop the run.
+   * are logged but do not stop the run. Returns the IDs of workspaces that
+   * were captured successfully so the caller can fan out follow-up work
+   * (e.g., evaluating doc-health alert subscriptions).
    */
   async captureAll(now: Date = new Date()): Promise<{
     captured: number;
     failed: number;
+    workspaceIds: string[];
   }> {
     const workspaces = await this.db
       .selectFrom('workspaces')
@@ -110,10 +113,12 @@ export class HealthSnapshotService {
 
     let captured = 0;
     let failed = 0;
+    const workspaceIds: string[] = [];
     for (const w of workspaces) {
       try {
         await this.captureWorkspace(w.id, now);
         captured += 1;
+        workspaceIds.push(w.id);
       } catch (err) {
         failed += 1;
         const message = err instanceof Error ? err.message : 'Unknown error';
@@ -122,7 +127,7 @@ export class HealthSnapshotService {
         );
       }
     }
-    return { captured, failed };
+    return { captured, failed, workspaceIds };
   }
 
   async getTrend(args: {

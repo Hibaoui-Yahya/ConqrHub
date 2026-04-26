@@ -52,6 +52,31 @@ export type HealthTrendResponse = {
   points: Array<{ capturedAt: string; score: number | null }>;
 };
 
+export class HealthAlertSubscribeDto {
+  @IsOptional()
+  @IsUUID()
+  spaceId?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  threshold: number;
+}
+
+export class HealthAlertUnsubscribeDto {
+  @IsUUID()
+  subscriptionId: string;
+}
+
+export type HealthAlertItem = {
+  id: string;
+  spaceId: string | null;
+  threshold: number;
+  lastFiredAt: string | null;
+  createdAt: string;
+};
+
 export type SignalBreakdown = {
   freshness: number;
   ownership: number;

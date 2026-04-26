@@ -17,6 +17,7 @@ import {
 import { InsertableWatcher } from '@docmost/db/types/entity.types';
 import { processBacklinks } from '../tasks/backlinks.task';
 import { HealthSnapshotService } from '../../../core/doc-health/services/snapshot.service';
+import { HealthAlertsService } from '../../../core/doc-health/services/alerts.service';
 
 @Processor(QueueName.GENERAL_QUEUE)
 export class GeneralQueueProcessor
@@ -70,10 +71,35 @@ export class GeneralQueueProcessor
             );
             return;
           }
-          const { captured, failed } = await snapshot.captureAll();
+          const { captured, failed, workspaceIds } = await snapshot.captureAll();
           this.logger.log(
             `Doc-health snapshot complete: ${captured} captured, ${failed} failed`,
           );
+
+          // Evaluate alert subscriptions against the freshly-captured snapshots.
+          // Alert failures are isolated per workspace and never bubble up to
+          // retry the snapshot job.
+          const alerts = this.moduleRef.get(HealthAlertsService, {
+            strict: false,
+          });
+          if (alerts) {
+            let totalFired = 0;
+            for (const workspaceId of workspaceIds) {
+              try {
+                const result = await alerts.evaluateForWorkspace(workspaceId);
+                totalFired += result.fired;
+              } catch (err) {
+                const message =
+                  err instanceof Error ? err.message : 'Unknown error';
+                this.logger.error(
+                  `Alert evaluation failed for ${workspaceId}: ${message}`,
+                );
+              }
+            }
+            if (totalFired > 0) {
+              this.logger.log(`Doc-health fired ${totalFired} alerts`);
+            }
+          }
           break;
         }
 
