@@ -10,7 +10,7 @@ const packageJson = require('./../../../package.json');
 
 @Injectable()
 export class TelemetryService {
-  private readonly ENDPOINT_URL = 'https://tel.docmost.com/api/event';
+  private readonly ENDPOINT_URL = ''; // Telemetry disabled for ConqrAI Wiki
 
   constructor(
     private readonly environmentService: EnvironmentService,

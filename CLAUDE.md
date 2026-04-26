@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Docmost (v0.80.0) — an open-source collaborative wiki and documentation platform. Monorepo with pnpm workspaces and Nx orchestration.
+ConqrAI Wiki (v0.80.0) — a collaborative wiki and documentation platform. Monorepo with pnpm workspaces and Nx orchestration.
 
 ## Commands
 

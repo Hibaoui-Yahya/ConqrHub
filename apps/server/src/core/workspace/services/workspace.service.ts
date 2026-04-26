@@ -803,7 +803,7 @@ export class WorkspaceService {
       await this.userRepo.updateUser(
         {
           name: 'Deleted user',
-          email: v4() + '@deleted.docmost.com',
+          email: v4() + '@deleted.conqrai.com',
           avatarUrl: null,
           settings: null,
           deletedAt: new Date(),

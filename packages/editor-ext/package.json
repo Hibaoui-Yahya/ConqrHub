@@ -1,6 +1,6 @@
 {
   "name": "@docmost/editor-ext",
-  "homepage": "https://docmost.com",
+  "homepage": "https://conqrai.com",
   "private": true,
   "scripts": {
     "build": "tsc --build",

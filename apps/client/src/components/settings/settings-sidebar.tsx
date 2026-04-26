@@ -301,9 +301,9 @@ export default function SettingsSidebar() {
             size="sm"
             c="dimmed"
             component="a"
-            href="mailto:help@docmost.com"
+            href="mailto:support@conqrai.com"
           >
-            help@docmost.com
+            support@conqrai.com
           </Text>
         </div>
       )}
