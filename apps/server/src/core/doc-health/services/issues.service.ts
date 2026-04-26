@@ -30,6 +30,7 @@ type IssueRow = {
   spaceIsCritical: boolean;
   verificationStatus: string | null;
   verificationExpiresAt: Date | null;
+  brokenLinkCount?: number | string;
 };
 
 @Injectable()
@@ -106,6 +107,13 @@ export class HealthIssuesService {
         const words = this.scoring.countWords(row.textContent);
         detail = `Only ${words} words`;
         severity = words === 0 ? 'high' : 'low';
+        break;
+      }
+      case HealthIssueCategory.BrokenLinks: {
+        const count = Number(row.brokenLinkCount ?? 0);
+        detail =
+          count === 1 ? '1 broken link' : `${count} broken links`;
+        severity = count >= 5 ? 'high' : count >= 2 ? 'medium' : 'low';
         break;
       }
     }
@@ -216,6 +224,31 @@ export class HealthIssuesService {
               sql<boolean>`coalesce(array_length(regexp_split_to_array(trim(${eb.ref('p.textContent')}), '\\s+'), 1), 0) < ${CONTENT_MIN_WORDS}`,
             ]),
           )
+          .orderBy('p.updatedAt', 'desc');
+        break;
+      }
+      case HealthIssueCategory.BrokenLinks: {
+        query = query
+          .innerJoin('pageBrokenLinks as bl', 'bl.pageId', 'p.id')
+          .select((eb) => eb.fn.count('bl.id').as('brokenLinkCount'))
+          .groupBy([
+            'p.id',
+            'p.slugId',
+            'p.title',
+            'p.spaceId',
+            's.name',
+            's.slug',
+            's.isCritical',
+            'p.updatedAt',
+            'p.textContent',
+            'pv.status',
+            'pv.expiresAt',
+            'p.ownerId',
+            'owner.deactivatedAt',
+            'owner.deletedAt',
+            'pv.id',
+          ])
+          .orderBy(sql`count(bl.id)`, 'desc')
           .orderBy('p.updatedAt', 'desc');
         break;
       }

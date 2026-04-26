@@ -43,6 +43,7 @@ function buildController() {
       createdAt: new Date('2026-04-26T00:00:00Z'),
     }),
     unsubscribe: jest.fn().mockResolvedValue(undefined),
+    evaluateForWorkspace: jest.fn().mockResolvedValue({ fired: 0 }),
   };
   const workspaceAbility: any = { createForUser: jest.fn() };
   const spaceAbility: any = { createForUser: jest.fn() };
@@ -334,9 +335,11 @@ describe('DocHealthController', () => {
   });
 
   describe('captureSnapshot', () => {
-    it('captures a snapshot for a workspace admin', async () => {
-      const { controller, workspaceAbility, snapshots } = buildController();
+    it('captures a snapshot and evaluates alerts for a workspace admin', async () => {
+      const { controller, workspaceAbility, snapshots, alerts } =
+        buildController();
       workspaceAbility.createForUser.mockReturnValue(adminAbility);
+      alerts.evaluateForWorkspace.mockResolvedValue({ fired: 2 });
 
       const result = await controller.captureSnapshot(
         mockAdminUser,
@@ -347,17 +350,24 @@ describe('DocHealthController', () => {
         mockWorkspace.id,
         expect.any(Date),
       );
+      expect(alerts.evaluateForWorkspace).toHaveBeenCalledWith(
+        mockWorkspace.id,
+        expect.any(Date),
+      );
       expect(result.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.alertsFired).toBe(2);
     });
 
     it('rejects a non-admin', async () => {
-      const { controller, workspaceAbility, snapshots } = buildController();
+      const { controller, workspaceAbility, snapshots, alerts } =
+        buildController();
       workspaceAbility.createForUser.mockReturnValue(memberAbility);
 
       await expect(
         controller.captureSnapshot(mockUser, mockWorkspace),
       ).rejects.toThrow(ForbiddenException);
       expect(snapshots.captureWorkspace).not.toHaveBeenCalled();
+      expect(alerts.evaluateForWorkspace).not.toHaveBeenCalled();
     });
   });
 

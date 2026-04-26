@@ -6,6 +6,7 @@ export enum HealthIssueCategory {
   MissingOwner = 'missing-owner',
   UnverifiedCritical = 'unverified-critical',
   WeakContent = 'weak-content',
+  BrokenLinks = 'broken-links',
 }
 
 export class SpaceHealthDto {

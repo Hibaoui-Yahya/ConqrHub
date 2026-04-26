@@ -5,11 +5,17 @@ import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 
 const SNAPSHOT_JOB_ID = 'doc-health-snapshot-cron';
 const PRUNE_JOB_ID = 'doc-health-prune-cron';
+const BROKEN_LINKS_JOB_ID = 'doc-health-broken-links-cron';
 
 // 02:00 UTC daily — outside the user-active window. Prune runs 30 minutes
 // later so it never races the snapshot insert on the same row.
 const SNAPSHOT_CRON = '0 2 * * *';
 const PRUNE_CRON = '30 2 * * *';
+
+// Weekly Sunday 03:00 UTC — broken-link scan is heavier than the daily
+// snapshot since it walks every page's content. Sunday avoids weekday
+// publishing patterns where workspaces are most active.
+const BROKEN_LINKS_CRON = '0 3 * * 0';
 
 @Injectable()
 export class DocHealthCronService implements OnModuleInit {
@@ -40,6 +46,17 @@ export class DocHealthCronService implements OnModuleInit {
           jobId: PRUNE_JOB_ID,
           removeOnComplete: { count: 30 },
           removeOnFail: { count: 30 },
+        },
+      );
+
+      await this.generalQueue.add(
+        QueueJob.BROKEN_LINKS_SCAN_ALL,
+        {},
+        {
+          repeat: { pattern: BROKEN_LINKS_CRON },
+          jobId: BROKEN_LINKS_JOB_ID,
+          removeOnComplete: { count: 10 },
+          removeOnFail: { count: 10 },
         },
       );
     } catch (err) {

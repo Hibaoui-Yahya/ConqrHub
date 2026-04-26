@@ -32,9 +32,9 @@ Non-critical pages are scored on the other three signals — verification doesn'
 
 Toggling a space's critical flag is recorded as a `space.updated` audit event with `before`/`after` showing the change.
 
-## Issue categories (MVP)
+## Issue categories
 
-The "Issues to fix" list filters pages by one of four categories:
+The "Issues to fix" list filters pages by one of five categories:
 
 | Category | What it means | Suggested action |
 |---|---|---|
@@ -42,6 +42,7 @@ The "Issues to fix" list filters pages by one of four categories:
 | Missing owner | No active owner assigned | Assign a knowledge owner |
 | Unverified critical | Critical page that isn't currently verified | Request verification |
 | Weak content | Fewer than 50 words | Flesh the page out or merge it |
+| Broken links | Page contains internal links pointing to deleted or missing pages | Edit the page and remove or repoint the links |
 
 ## Permissions
 
@@ -64,6 +65,14 @@ A daily cron (`0 2 * * *` UTC) snapshots every workspace's score (one workspace-
 
 The Documentation Health page renders a sparkline chart of the workspace-level score with selectable ranges (7d / 30d / 90d / 1y). Admins can hit **Snapshot now** to capture an extra point immediately — useful right after a bulk content fix, or for demos where waiting until 02:00 UTC isn't an option.
 
+## Broken-link detection (v1.2)
+
+A weekly cron (Sunday `0 3 * * *` UTC, registered alongside the snapshot/prune jobs) walks every page in every workspace, extracts every link mark from the ProseMirror content, and records anything that points to a missing internal page in `page_broken_links`. Each scan replaces that page's broken-link rows transactionally, so resolving a broken link clears it on the next scan.
+
+**v1.2 scans internal links only.** Internal classification is by URL shape (`/p/<slugId>` or `/s/<spaceSlug>/p/<slugId>`), so deployments with multiple hostnames or custom domains don't need any additional configuration. External-link checks (HTTP HEAD with timeouts, follow redirects, air-gapped opt-out) land in v1.3 — the schema, queue job, and processor wiring are already designed to accommodate them without a migration.
+
+A broken link surfaces as a row in the **Broken links** tab of the Issues to fix list, sorted by per-page broken-link count (highest first). Severity scales: 1 link = low, 2-4 = medium, 5+ = high.
+
 ## Drop alerts (v1.1)
 
 Any user (not just admins) can subscribe to a "tell me when the workspace score drops below X" alert from the Documentation Health page. Subscriptions live in `doc_health_alert_subscriptions` (one row per `user × workspace × space` scope) and are evaluated immediately after the daily snapshot job — so an alert fires at most once per day per subscription, with an additional 24-hour dedupe window guarding against repeat firings while a workspace stays under threshold.
@@ -83,9 +92,8 @@ A subscription is silent during "insufficient data" periods — if the workspace
 | Capability | Tracking |
 |---|---|
 | Email digest of alert events | v1.2 (in-app fires today) |
-| Broken external link detection | v1.2 |
-| Semantic duplicate detection | v1.2 |
-| Per-space alert thresholds via UI | v1.2 (API supports it; UI surfaces only the workspace-level subscription for now) |
+| Broken external link detection | v1.3 |
+| Semantic duplicate detection | v1.3 |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |
 | Knowledge gap detection | v2 (PRD 21.3) |

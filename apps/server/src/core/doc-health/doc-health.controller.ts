@@ -193,7 +193,7 @@ export class DocHealthController {
   async captureSnapshot(
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
-  ): Promise<{ capturedAt: string }> {
+  ): Promise<{ capturedAt: string; alertsFired: number }> {
     const ability = this.workspaceAbility.createForUser(user, workspace);
     if (
       ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
@@ -202,7 +202,8 @@ export class DocHealthController {
     }
     const now = new Date();
     await this.snapshots.captureWorkspace(workspace.id, now);
-    return { capturedAt: now.toISOString() };
+    const result = await this.alerts.evaluateForWorkspace(workspace.id, now);
+    return { capturedAt: now.toISOString(), alertsFired: result.fired };
   }
 
   @HttpCode(HttpStatus.OK)

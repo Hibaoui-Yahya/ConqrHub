@@ -269,6 +269,19 @@ export interface DocHealthSnapshots {
   workspaceId: string;
 }
 
+export interface PageBrokenLinks {
+  createdAt: Generated<Timestamp>;
+  httpStatus: number | null;
+  id: Generated<string>;
+  kind: string;
+  lastCheckedAt: Timestamp;
+  pageId: string;
+  reason: string;
+  spaceId: string;
+  targetUrl: string;
+  workspaceId: string;
+}
+
 export interface Notifications {
   actorId: string | null;
   archivedAt: Timestamp | null;
@@ -575,6 +588,7 @@ export interface DB {
   groupUsers: GroupUsers;
   notifications: Notifications;
   pageAccess: PageAccess;
+  pageBrokenLinks: PageBrokenLinks;
   pageHistory: PageHistory;
   pagePermissions: PagePermissions;
   pages: Pages;

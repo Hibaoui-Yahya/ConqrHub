@@ -18,6 +18,7 @@ import { InsertableWatcher } from '@docmost/db/types/entity.types';
 import { processBacklinks } from '../tasks/backlinks.task';
 import { HealthSnapshotService } from '../../../core/doc-health/services/snapshot.service';
 import { HealthAlertsService } from '../../../core/doc-health/services/alerts.service';
+import { BrokenLinksService } from '../../../core/doc-health/services/broken-links.service';
 
 @Processor(QueueName.GENERAL_QUEUE)
 export class GeneralQueueProcessor
@@ -112,6 +113,23 @@ export class GeneralQueueProcessor
           if (removed > 0) {
             this.logger.log(`Doc-health pruned ${removed} old snapshots`);
           }
+          break;
+        }
+
+        case QueueJob.BROKEN_LINKS_SCAN_ALL: {
+          const broken = this.moduleRef.get(BrokenLinksService, {
+            strict: false,
+          });
+          if (!broken) {
+            this.logger.warn(
+              'BROKEN_LINKS_SCAN_ALL fired but service not resolvable',
+            );
+            return;
+          }
+          const result = await broken.scanAll();
+          this.logger.log(
+            `Broken-links scan: ${result.workspaces} workspaces, ${result.pagesScanned} pages, ${result.pagesBroken} with broken links`,
+          );
           break;
         }
       }

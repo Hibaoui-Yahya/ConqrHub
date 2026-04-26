@@ -5,6 +5,7 @@ import { HealthIssuesService } from './services/issues.service';
 import { ScoringService } from './services/scoring.service';
 import { HealthSnapshotService } from './services/snapshot.service';
 import { HealthAlertsService } from './services/alerts.service';
+import { BrokenLinksService } from './services/broken-links.service';
 import { DocHealthCronService } from './services/doc-health-cron.service';
 import { CaslModule } from '../casl/casl.module';
 import { NotificationModule } from '../notification/notification.module';
@@ -18,6 +19,7 @@ import { NotificationModule } from '../notification/notification.module';
     HealthIssuesService,
     HealthSnapshotService,
     HealthAlertsService,
+    BrokenLinksService,
     DocHealthCronService,
   ],
   exports: [
@@ -26,6 +28,7 @@ import { NotificationModule } from '../notification/notification.module';
     HealthIssuesService,
     HealthSnapshotService,
     HealthAlertsService,
+    BrokenLinksService,
   ],
 })
 export class DocHealthModule {}

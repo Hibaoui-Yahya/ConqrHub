@@ -45,8 +45,11 @@ export async function getHealthTrend(
   return req.data;
 }
 
-export async function snapshotHealthNow(): Promise<{ capturedAt: string }> {
-  const req = await api.post<{ capturedAt: string }>(
+export async function snapshotHealthNow(): Promise<{
+  capturedAt: string;
+  alertsFired: number;
+}> {
+  const req = await api.post<{ capturedAt: string; alertsFired: number }>(
     "/workspace-health/snapshot",
   );
   return req.data;

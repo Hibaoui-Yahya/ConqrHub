@@ -72,10 +72,17 @@ export function useSnapshotHealthNowMutation() {
   const { t } = useTranslation();
   return useMutation({
     mutationFn: snapshotHealthNow,
-    onSuccess: () => {
-      notifications.show({ message: t("Snapshot captured") });
+    onSuccess: (data) => {
+      const fired = (data as { alertsFired?: number })?.alertsFired ?? 0;
+      notifications.show({
+        message:
+          fired > 0
+            ? t("Snapshot captured — {{count}} alert(s) fired", { count: fired })
+            : t("Snapshot captured"),
+      });
       queryClient.invalidateQueries({ queryKey: ["doc-health", "trend"] });
       queryClient.invalidateQueries({ queryKey: ["doc-health", "workspace"] });
+      queryClient.invalidateQueries({ queryKey: ["doc-health", "alerts"] });
     },
     onError: (error) => {
       const message = (error as any)?.response?.data?.message ?? t("Snapshot failed");

@@ -55,6 +55,7 @@ export default function IssueList({
     { label: t("No owner"), value: "missing-owner" },
     { label: t("Unverified"), value: "unverified-critical" },
     { label: t("Weak content"), value: "weak-content" },
+    { label: t("Broken links"), value: "broken-links" },
   ];
 
   return (
