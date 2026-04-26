@@ -65,11 +65,23 @@ A daily cron (`0 2 * * *` UTC) snapshots every workspace's score (one workspace-
 
 The Documentation Health page renders a sparkline chart of the workspace-level score with selectable ranges (7d / 30d / 90d / 1y). Admins can hit **Snapshot now** to capture an extra point immediately — useful right after a bulk content fix, or for demos where waiting until 02:00 UTC isn't an option.
 
-## Broken-link detection (v1.2)
+## Broken-link detection (v1.2 → v1.3)
 
-A weekly cron (Sunday `0 3 * * *` UTC, registered alongside the snapshot/prune jobs) walks every page in every workspace, extracts every link mark from the ProseMirror content, and records anything that points to a missing internal page in `page_broken_links`. Each scan replaces that page's broken-link rows transactionally, so resolving a broken link clears it on the next scan.
+A weekly cron (Sunday `0 3 * * *` UTC, registered alongside the snapshot/prune jobs) walks every page in every workspace, extracts every link mark from the ProseMirror content, and records anything that resolves as broken in `page_broken_links`. Each scan replaces that page's broken-link rows transactionally, so resolving a broken link clears it on the next scan.
 
-**v1.2 scans internal links only.** Internal classification is by URL shape (`/p/<slugId>` or `/s/<spaceSlug>/p/<slugId>`), so deployments with multiple hostnames or custom domains don't need any additional configuration. External-link checks (HTTP HEAD with timeouts, follow redirects, air-gapped opt-out) land in v1.3 — the schema, queue job, and processor wiring are already designed to accommodate them without a migration.
+**Internal links** (v1.2) are matched by URL shape (`/p/<slugId>` or `/s/<spaceSlug>/p/<slugId>`), then validated against the `pages` table. Multi-hostname deployments and custom domains work without extra configuration.
+
+**External links** (v1.3) use a HEAD request with a configurable timeout (default 5s), falling back to GET when the host returns 405 / 501. Redirects are followed (up to whatever the runtime's default is, typically 20). The scanner deduplicates external URLs across the workspace before checking, so 100 pages linking to the same URL produce one HEAD request, not 100. Concurrency is capped (default 5 parallel checks) to avoid hammering remote hosts.
+
+| HTTP outcome | Reason recorded |
+|---|---|
+| 4xx | `http_4xx` |
+| 5xx | `http_5xx` |
+| AbortError / timeout | `timeout` |
+| ENOTFOUND / ECONNREFUSED / EAI_AGAIN | `dns` |
+| Anything else (network error, malformed URL) | `unknown` |
+
+Air-gapped operators **disable external checks** with `DOC_HEALTH_EXTERNAL_CHECKS=false`. The internal-link scan remains active. See [Environment variables](../deployment/environment-variables.md).
 
 A broken link surfaces as a row in the **Broken links** tab of the Issues to fix list, sorted by per-page broken-link count (highest first). Severity scales: 1 link = low, 2-4 = medium, 5+ = high.
 

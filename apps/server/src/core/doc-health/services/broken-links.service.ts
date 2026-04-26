@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
+import {
+  LinkCheckerService,
+  LinkCheckResult,
+} from './link-checker.service';
 
 export type BrokenLinkKind = 'internal' | 'external';
 export type BrokenLinkReason =
@@ -28,7 +32,10 @@ type PageRow = {
 export class BrokenLinksService {
   private readonly logger = new Logger(BrokenLinksService.name);
 
-  constructor(@InjectKysely() private readonly db: KyselyDB) {}
+  constructor(
+    @InjectKysely() private readonly db: KyselyDB,
+    private readonly linkChecker: LinkCheckerService,
+  ) {}
 
   /**
    * Walk a ProseMirror document and return every link href, classified as
@@ -86,6 +93,12 @@ export class BrokenLinksService {
     spaceId: string;
     content: unknown;
     now?: Date;
+    /**
+     * Optional pre-computed external link check results, keyed by URL.
+     * Populated by `scanWorkspace` so we batch-check unique URLs once
+     * across the workspace instead of N times per page.
+     */
+    externalResults?: Map<string, LinkCheckResult>;
   }): Promise<{
     extracted: number;
     broken: number;
@@ -123,21 +136,42 @@ export class BrokenLinksService {
     }> = [];
 
     for (const link of links) {
-      if (link.kind !== 'internal') continue;
-      const slugId = extractSlugId(link.href);
-      if (!slugId) continue;
-      if (validSlugIds.has(slugId)) continue;
+      if (link.kind === 'internal') {
+        const slugId = extractSlugId(link.href);
+        if (!slugId) continue;
+        if (validSlugIds.has(slugId)) continue;
 
-      brokenRows.push({
-        pageId: args.pageId,
-        workspaceId: args.workspaceId,
-        spaceId: args.spaceId,
-        targetUrl: link.href,
-        kind: 'internal',
-        httpStatus: null,
-        reason: 'page_not_found',
-        lastCheckedAt: now,
-      });
+        brokenRows.push({
+          pageId: args.pageId,
+          workspaceId: args.workspaceId,
+          spaceId: args.spaceId,
+          targetUrl: link.href,
+          kind: 'internal',
+          httpStatus: null,
+          reason: 'page_not_found',
+          lastCheckedAt: now,
+        });
+      } else {
+        // External: only flagged when we actually checked it AND the check
+        // came back not-ok. Without externalResults (e.g., scanPage called
+        // directly outside a workspace scan, or external checks disabled),
+        // we silently skip — better than false-flagging links we couldn't
+        // verify.
+        const result = args.externalResults?.get(link.href);
+        if (!result) continue;
+        if (result.ok === true) continue;
+
+        brokenRows.push({
+          pageId: args.pageId,
+          workspaceId: args.workspaceId,
+          spaceId: args.spaceId,
+          targetUrl: link.href,
+          kind: 'external',
+          httpStatus: result.httpStatus,
+          reason: result.reason,
+          lastCheckedAt: now,
+        });
+      }
     }
 
     await this.db.transaction().execute(async (trx) => {
@@ -160,6 +194,7 @@ export class BrokenLinksService {
     pagesScanned: number;
     pagesBroken: number;
     failed: number;
+    externalsChecked: number;
   }> {
     const pages = (await this.db
       .selectFrom('pages')
@@ -168,6 +203,39 @@ export class BrokenLinksService {
       .where('deletedAt', 'is', null)
       .execute()) as unknown as PageRow[];
 
+    // Phase 1: collect all unique external URLs across the workspace so we
+    // can batch-check them once, even if 100 pages link to the same URL.
+    let externalResults: Map<string, LinkCheckResult> | undefined;
+    let externalsChecked = 0;
+
+    if (this.linkChecker.isEnabled()) {
+      const externalUrls = new Set<string>();
+      for (const p of pages) {
+        try {
+          const links = BrokenLinksService.extractLinks(p.content);
+          for (const l of links) {
+            if (l.kind === 'external') externalUrls.add(l.href);
+          }
+        } catch (err) {
+          // Don't let one malformed page block the whole batch.
+          const message =
+            err instanceof Error ? err.message : 'Unknown error';
+          this.logger.warn(
+            `Failed to extract links from page ${p.id}: ${message}`,
+          );
+        }
+      }
+
+      if (externalUrls.size > 0) {
+        externalResults = await this.linkChecker.checkBatch([
+          ...externalUrls,
+        ]);
+        externalsChecked = externalUrls.size;
+      }
+    }
+
+    // Phase 2: per-page, validate internal slugs and pair external links
+    // with the batch-check results. Per-page failures don't stop the run.
     let pagesScanned = 0;
     let pagesBroken = 0;
     let failed = 0;
@@ -178,6 +246,7 @@ export class BrokenLinksService {
           workspaceId: p.workspaceId,
           spaceId: p.spaceId,
           content: p.content,
+          externalResults,
         });
         pagesScanned += 1;
         if (result.broken > 0) pagesBroken += 1;
@@ -187,7 +256,7 @@ export class BrokenLinksService {
         this.logger.error(`Failed to scan page ${p.id}: ${message}`);
       }
     }
-    return { pagesScanned, pagesBroken, failed };
+    return { pagesScanned, pagesBroken, failed, externalsChecked };
   }
 
   async scanAll(): Promise<{

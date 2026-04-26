@@ -295,6 +295,31 @@ export class EnvironmentService {
     );
   }
 
+  getDocHealthExternalChecksEnabled(): boolean {
+    const raw = this.configService.get<string>('DOC_HEALTH_EXTERNAL_CHECKS');
+    if (raw == null) return true;
+    const normalized = String(raw).trim().toLowerCase();
+    return !['false', '0', 'no', 'off', ''].includes(normalized);
+  }
+
+  getDocHealthExternalCheckTimeoutMs(): number {
+    const raw = this.configService.get<string>(
+      'DOC_HEALTH_EXTERNAL_CHECK_TIMEOUT_MS',
+    );
+    const parsed = raw == null ? 5000 : Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 5000;
+    return Math.min(parsed, 30_000);
+  }
+
+  getDocHealthExternalCheckConcurrency(): number {
+    const raw = this.configService.get<string>(
+      'DOC_HEALTH_EXTERNAL_CHECK_CONCURRENCY',
+    );
+    const parsed = raw == null ? 5 : Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 1) return 5;
+    return Math.min(Math.floor(parsed), 32);
+  }
+
   getEventStoreDriver(): string {
     return this.configService
       .get<string>('EVENT_STORE_DRIVER', 'postgres')
