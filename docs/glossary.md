@@ -11,7 +11,9 @@ Terms that recur throughout the documentation. Defined once here so the rest of 
 | **Role** | A workspace-level role: Owner, Admin, Knowledge Manager, Space Admin, Editor, Commenter, Viewer, Guest. |
 | **Permission** | A specific action right (view / edit / comment / manage) at a level (workspace / space / page / feature). |
 | **Restriction (page)** | A page-level override that narrows access below the inherited space-level permissions. |
-| **Verification** | A formal "this page is approved / current" state, with two modes — *expiring* (re-verify periodically) and *QMS* (formal approval). |
+| **Verification** | The umbrella feature (`Feature.PAGE_VERIFICATION`) that records whether a page is currently trustworthy. Two modes, picked per page or workspace policy: *Expiring verification* and *QMS approval*. The terms "review" and "approve" appearing in the PRDs always map to one of these two modes. |
+| **Expiring verification** | Mode 1 of Verification. A verifier marks the page `verified`; verification expires on a cadence and forces re-review. Status flow: `verified → expiring → expired`. |
+| **QMS approval** | Mode 2 of Verification. Author submits a page for approval; a verifier approves or rejects with a comment. Approved pages enter the `verified` state. The two modes can be combined (a QMS-approved page can still expire). |
 | **Owner (page)** | The user accountable for a page's accuracy. Different from creator/editor. |
 | **Public share** | A page or space exposed to non-authenticated visitors via a public link. |
 | **Tier** | Free / Standard / Business / Enterprise — the subscription level that gates features. |
