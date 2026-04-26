@@ -22,6 +22,15 @@ function buildController() {
   const issues: any = {
     listIssues: jest.fn().mockResolvedValue({ items: [], hasMore: false }),
   };
+  const snapshots: any = {
+    getTrend: jest
+      .fn()
+      .mockResolvedValue([
+        { capturedAt: '2026-04-25T00:00:00.000Z', score: 80 },
+        { capturedAt: '2026-04-26T00:00:00.000Z', score: 82 },
+      ]),
+    captureWorkspace: jest.fn().mockResolvedValue(undefined),
+  };
   const workspaceAbility: any = { createForUser: jest.fn() };
   const spaceAbility: any = { createForUser: jest.fn() };
   const spaceRepo: any = { findById: jest.fn() };
@@ -29,12 +38,21 @@ function buildController() {
   const controller = new DocHealthController(
     docHealth,
     issues,
+    snapshots,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
   );
 
-  return { controller, docHealth, issues, workspaceAbility, spaceAbility, spaceRepo };
+  return {
+    controller,
+    docHealth,
+    issues,
+    snapshots,
+    workspaceAbility,
+    spaceAbility,
+    spaceRepo,
+  };
 }
 
 describe('DocHealthController', () => {
@@ -226,6 +244,105 @@ describe('DocHealthController', () => {
           mockWorkspace,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getTrend', () => {
+    it('returns trend points for a workspace admin', async () => {
+      const { controller, workspaceAbility, snapshots } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(adminAbility);
+
+      const result = await controller.getTrend(
+        { days: 30 },
+        mockAdminUser,
+        mockWorkspace,
+      );
+
+      expect(result.points).toHaveLength(2);
+      expect(snapshots.getTrend).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace.id,
+        spaceId: null,
+        days: 30,
+      });
+    });
+
+    it('rejects a non-admin requesting workspace-wide trend', async () => {
+      const { controller, workspaceAbility, snapshots } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+
+      await expect(
+        controller.getTrend({ days: 7 }, mockUser, mockWorkspace),
+      ).rejects.toThrow(ForbiddenException);
+      expect(snapshots.getTrend).not.toHaveBeenCalled();
+    });
+
+    it('allows a space admin to fetch trend for their space', async () => {
+      const {
+        controller,
+        spaceRepo,
+        workspaceAbility,
+        spaceAbility,
+        snapshots,
+      } = buildController();
+      spaceRepo.findById.mockResolvedValue(mockSpace);
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+      spaceAbility.createForUser.mockResolvedValue(adminAbility);
+
+      await controller.getTrend(
+        { spaceId: mockSpace.id, days: 30 },
+        mockUser,
+        mockWorkspace,
+      );
+
+      expect(snapshots.getTrend).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace.id,
+        spaceId: mockSpace.id,
+        days: 30,
+      });
+    });
+
+    it('rejects a non-space-admin scoped trend request', async () => {
+      const { controller, spaceRepo, workspaceAbility, spaceAbility } =
+        buildController();
+      spaceRepo.findById.mockResolvedValue(mockSpace);
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+      spaceAbility.createForUser.mockResolvedValue(memberAbility);
+
+      await expect(
+        controller.getTrend(
+          { spaceId: mockSpace.id, days: 30 },
+          mockUser,
+          mockWorkspace,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('captureSnapshot', () => {
+    it('captures a snapshot for a workspace admin', async () => {
+      const { controller, workspaceAbility, snapshots } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(adminAbility);
+
+      const result = await controller.captureSnapshot(
+        mockAdminUser,
+        mockWorkspace,
+      );
+
+      expect(snapshots.captureWorkspace).toHaveBeenCalledWith(
+        mockWorkspace.id,
+        expect.any(Date),
+      );
+      expect(result.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('rejects a non-admin', async () => {
+      const { controller, workspaceAbility, snapshots } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+
+      await expect(
+        controller.captureSnapshot(mockUser, mockWorkspace),
+      ).rejects.toThrow(ForbiddenException);
+      expect(snapshots.captureWorkspace).not.toHaveBeenCalled();
     });
   });
 });

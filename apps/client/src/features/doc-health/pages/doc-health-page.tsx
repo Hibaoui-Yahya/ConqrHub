@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Stack, Title } from "@mantine/core";
+import { Card, Stack, Title } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import SettingsTitle from "@/components/settings/settings-title";
 import { getAppName } from "@/lib/config";
 import useUserRole from "@/hooks/use-user-role";
 import HealthScoreCard from "@/features/doc-health/components/health-score-card";
+import HealthTrendChart from "@/features/doc-health/components/health-trend-chart";
 import SpaceScoresTable from "@/features/doc-health/components/space-scores-table";
 import IssueList from "@/features/doc-health/components/issue-list";
 import { useWorkspaceHealthQuery } from "@/features/doc-health/queries/doc-health-query";
@@ -19,6 +20,7 @@ export default function DocHealthPage() {
   const [category, setCategory] =
     useState<HealthIssueCategory>("outdated");
   const [page, setPage] = useState(1);
+  const [trendDays, setTrendDays] = useState(30);
 
   if (!isAdmin) {
     return null;
@@ -48,6 +50,10 @@ export default function DocHealthPage() {
               : undefined
           }
         />
+
+        <Card withBorder padding="lg" radius="md">
+          <HealthTrendChart days={trendDays} onDaysChange={setTrendDays} />
+        </Card>
 
         <Stack gap="xs">
           <Title order={4}>{t("Spaces")}</Title>

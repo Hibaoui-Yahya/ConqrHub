@@ -58,3 +58,17 @@ export interface IHealthIssuesQuery {
   page?: number;
   limit?: number;
 }
+
+export interface IHealthTrendPoint {
+  capturedAt: string;
+  score: number | null;
+}
+
+export interface IHealthTrendResponse {
+  points: IHealthTrendPoint[];
+}
+
+export interface IHealthTrendQuery {
+  spaceId?: string;
+  days?: number;
+}

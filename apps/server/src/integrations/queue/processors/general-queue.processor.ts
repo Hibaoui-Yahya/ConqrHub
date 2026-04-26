@@ -1,4 +1,5 @@
 import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { QueueJob, QueueName } from '../constants';
@@ -15,6 +16,7 @@ import {
 } from '@docmost/db/repos/watcher/watcher.repo';
 import { InsertableWatcher } from '@docmost/db/types/entity.types';
 import { processBacklinks } from '../tasks/backlinks.task';
+import { HealthSnapshotService } from '../../../core/doc-health/services/snapshot.service';
 
 @Processor(QueueName.GENERAL_QUEUE)
 export class GeneralQueueProcessor
@@ -26,6 +28,7 @@ export class GeneralQueueProcessor
     @InjectKysely() private readonly db: KyselyDB,
     private readonly backlinkRepo: BacklinkRepo,
     private readonly watcherRepo: WatcherRepo,
+    private readonly moduleRef: ModuleRef,
   ) {
     super();
   }
@@ -54,6 +57,35 @@ export class GeneralQueueProcessor
             this.backlinkRepo,
             job.data as IPageBacklinkJob,
           );
+          break;
+        }
+
+        case QueueJob.DOC_HEALTH_SNAPSHOT: {
+          const snapshot = this.moduleRef.get(HealthSnapshotService, {
+            strict: false,
+          });
+          if (!snapshot) {
+            this.logger.warn(
+              'DOC_HEALTH_SNAPSHOT fired but service not resolvable',
+            );
+            return;
+          }
+          const { captured, failed } = await snapshot.captureAll();
+          this.logger.log(
+            `Doc-health snapshot complete: ${captured} captured, ${failed} failed`,
+          );
+          break;
+        }
+
+        case QueueJob.DOC_HEALTH_PRUNE: {
+          const snapshot = this.moduleRef.get(HealthSnapshotService, {
+            strict: false,
+          });
+          if (!snapshot) return;
+          const removed = await snapshot.pruneOlderThan();
+          if (removed > 0) {
+            this.logger.log(`Doc-health pruned ${removed} old snapshots`);
+          }
           break;
         }
       }

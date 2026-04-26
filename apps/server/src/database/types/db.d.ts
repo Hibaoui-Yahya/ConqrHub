@@ -246,6 +246,18 @@ export interface GroupUsers {
   userId: string;
 }
 
+export interface DocHealthSnapshots {
+  capturedAt: Timestamp;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  pageCount: number;
+  score: number | null;
+  scoredPageCount: number;
+  signals: Json;
+  spaceId: string | null;
+  workspaceId: string;
+}
+
 export interface Notifications {
   actorId: string | null;
   archivedAt: Timestamp | null;
@@ -544,6 +556,7 @@ export interface DB {
   backlinks: Backlinks;
   billing: Billing;
   comments: Comments;
+  docHealthSnapshots: DocHealthSnapshots;
   favorites: Favorites;
   fileTasks: FileTasks;
   groups: Groups;

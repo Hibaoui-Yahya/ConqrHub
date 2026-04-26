@@ -35,6 +35,23 @@ export class HealthIssuesQueryDto {
   limit?: number = 25;
 }
 
+export class HealthTrendQueryDto {
+  @IsOptional()
+  @IsUUID()
+  spaceId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  days?: number = 30;
+}
+
+export type HealthTrendResponse = {
+  points: Array<{ capturedAt: string; score: number | null }>;
+};
+
 export type SignalBreakdown = {
   freshness: number;
   ownership: number;

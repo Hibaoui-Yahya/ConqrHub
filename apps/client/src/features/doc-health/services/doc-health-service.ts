@@ -3,6 +3,8 @@ import {
   IHealthIssuesPage,
   IHealthIssuesQuery,
   IHealthScore,
+  IHealthTrendQuery,
+  IHealthTrendResponse,
   IWorkspaceHealth,
 } from "@/features/doc-health/types/doc-health.types";
 
@@ -26,6 +28,23 @@ export async function getHealthIssues(
   const req = await api.post<IHealthIssuesPage>(
     "/workspace-health/issues",
     params,
+  );
+  return req.data;
+}
+
+export async function getHealthTrend(
+  params: IHealthTrendQuery,
+): Promise<IHealthTrendResponse> {
+  const req = await api.post<IHealthTrendResponse>(
+    "/workspace-health/trend",
+    params,
+  );
+  return req.data;
+}
+
+export async function snapshotHealthNow(): Promise<{ capturedAt: string }> {
+  const req = await api.post<{ capturedAt: string }>(
+    "/workspace-health/snapshot",
   );
   return req.data;
 }
