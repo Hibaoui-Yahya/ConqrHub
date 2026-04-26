@@ -1,8 +1,19 @@
-import { button as buttonStyle, container, footer, h1, logo, main } from '../css/styles';
+import {
+  button as buttonStyle,
+  container,
+  divider,
+  footer,
+  footerText,
+  header,
+  headerBrandAccent,
+  headerBrandRegular,
+  main,
+} from '../css/styles';
 import {
   Body,
   Container,
   Head,
+  Hr,
   Html,
   Row,
   Section,
@@ -17,11 +28,19 @@ interface MailBodyProps {
 export function MailBody({ children }: MailBodyProps) {
   return (
     <Html>
-      <Head />
+      <Head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,500&display=swap"
+          rel="stylesheet"
+        />
+      </Head>
       <Body style={main}>
-        <MailHeader />
-        <Container style={container}>{children}</Container>
-        <MailFooter />
+        <Container style={container}>
+          <MailHeader />
+          {children}
+          <Hr style={divider} />
+          <MailFooter />
+        </Container>
       </Body>
     </Html>
   );
@@ -29,8 +48,14 @@ export function MailBody({ children }: MailBodyProps) {
 
 export function MailHeader() {
   return (
-    <Section style={logo}>
-      {/* <Heading style={h1}>docmost</Heading> */}
+    <Section style={header}>
+      <Text style={{ margin: '0', textAlign: 'center' as const }}>
+        <span style={headerBrandRegular}>Conqr</span>
+        <span style={headerBrandAccent}>AI</span>
+        <span style={{ ...headerBrandRegular, fontSize: '16px', fontWeight: '400', marginLeft: '6px' }}>
+          {' '}Wiki
+        </span>
+      </Text>
     </Section>
   );
 }
@@ -46,7 +71,7 @@ export function EmailButton({ href, children }: EmailButtonProps) {
       role="presentation"
       cellPadding="0"
       cellSpacing="0"
-      style={{ margin: '0 0 15px 15px' }}
+      style={{ margin: '8px 0 24px 32px' }}
     >
       <tr>
         <td
@@ -63,9 +88,10 @@ export function EmailButton({ href, children }: EmailButtonProps) {
               color: buttonStyle.color,
               fontFamily: buttonStyle.fontFamily,
               fontSize: buttonStyle.fontSize,
+              fontWeight: buttonStyle.fontWeight,
               textDecoration: 'none',
               display: 'inline-block',
-              padding: '8px 16px',
+              padding: '12px 24px',
             }}
           >
             {children}
@@ -80,8 +106,8 @@ export function MailFooter() {
   return (
     <Section style={footer}>
       <Row>
-        <Text style={{ textAlign: 'center', color: '#706a7b' }}>
-          © {new Date().getFullYear()} Docmost, All Rights Reserved <br />
+        <Text style={footerText}>
+          © {new Date().getFullYear()} ConqrAI Wiki — All Rights Reserved
         </Text>
       </Row>
     </Section>

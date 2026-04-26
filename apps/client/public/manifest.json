@@ -1,10 +1,10 @@
 {
-  "name": "Docmost",
-  "short_name": "Docmost",
+  "name": "ConqrAI Wiki",
+  "short_name": "ConqrAI Wiki",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#222",
-  "theme_color": "#222",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
   "icons": [
     {
       "src": "icons/favicon-16x16.png",

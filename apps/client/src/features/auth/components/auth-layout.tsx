@@ -10,14 +10,19 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   return (
     <>
       <Group justify="center" gap={8} className={classes.logo}>
-        <img
-          src="/icons/favicon-32x32.png"
-          alt="Docmost"
-          width={22}
-          height={22}
-        />
-        <Text size="28px" fw={700} style={{ userSelect: "none" }}>
-          Docmost
+        <Text
+          size="32px"
+          fw={500}
+          style={{
+            userSelect: "none",
+            fontFamily: "'Playfair Display', 'Newsreader', serif",
+          }}
+        >
+          Conqr
+          <span style={{ color: "#3FC1F2", fontStyle: "italic" }}>AI</span>
+          <span style={{ fontSize: "20px", fontWeight: 400, marginLeft: "4px" }}>
+            {" "}Wiki
+          </span>
         </Text>
       </Group>
       {children}

@@ -6,16 +6,16 @@ import {
 } from "@mantine/core";
 
 const blue: MantineColorsTuple = [
-  "#e7f3ff",
-  "#d0e4ff",
-  "#a1c6fa",
-  "#6ea6f6",
-  "#458bf2",
-  "#2b7af1",
-  "#0b60d8",
-  "#1b72f2",
-  "#0056c1",
-  "#004aac",
+  "#e6f7fd",
+  "#cceffc",
+  "#99dff9",
+  "#66cff5",
+  "#3FC1F2",
+  "#33b0e0",
+  "#279ccc",
+  "#1d85b0",
+  "#146e94",
+  "#0c5878",
 ];
 
 const red: MantineColorsTuple = [

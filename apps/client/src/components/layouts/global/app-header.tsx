@@ -84,22 +84,23 @@ export function AppHeader() {
             />
           </Tooltip>
 
-          <Link to="/home" className={classes.brand} aria-label="Docmost">
+          <Link to="/home" className={classes.brand} aria-label="ConqrAI Wiki">
             <Box hiddenFrom="sm" className={classes.brandIcon}>
               <img
                 src="/icons/favicon-32x32.png"
-                alt="Docmost"
+                alt="ConqrAI Wiki"
                 width={22}
                 height={22}
               />
             </Box>
             <Text
               size="lg"
-              fw={600}
-              style={{ userSelect: "none" }}
+              fw={500}
+              style={{ userSelect: "none", fontFamily: "'Playfair Display', 'Newsreader', serif" }}
               visibleFrom="sm"
             >
-              Docmost
+              Conqr<span style={{ color: "#3FC1F2", fontStyle: "italic" }}>AI</span>
+              <span style={{ fontSize: "14px", fontWeight: 400, marginLeft: "4px" }}> Wiki</span>
             </Text>
           </Link>
 

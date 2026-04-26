@@ -23,7 +23,7 @@ export const CommentResolvedEmail = ({
           <strong>{pageTitle}</strong>.
         </Text>
       </Section>
-      <EmailButton href={pageUrl}>View</EmailButton>
+      <EmailButton href={pageUrl}>View Page</EmailButton>
     </MailBody>
   );
 };

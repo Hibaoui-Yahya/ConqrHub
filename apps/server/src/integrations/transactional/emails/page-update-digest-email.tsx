@@ -54,7 +54,7 @@ export const PageUpdateDigestEmail = ({
 };
 
 const pageCard = {
-  borderLeft: '3px solid #e8e5ef',
+  borderLeft: '3px solid #3FC1F2',
   paddingLeft: '12px',
   marginBottom: '12px',
 };

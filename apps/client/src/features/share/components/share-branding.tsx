@@ -7,9 +7,9 @@ export default function ShareBranding() {
         variant="default"
         component="a"
         target="_blank"
-        href="https://docmost.com?ref=public-share"
+        href="https://conqrai.com"
       >
-        Powered by Docmost
+        Powered by Conqr<i>AI</i> Wiki
       </Button>
     </Affix>
   );
