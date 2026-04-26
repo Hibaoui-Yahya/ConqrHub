@@ -16,7 +16,7 @@ Each page is scored on four signals:
 |---|---|---|
 | Freshness | 30% | Days since the page was last updated. 100 if ≤90 days, decays linearly to 0 at 365 days. |
 | Ownership | 25% | Whether `pages.owner_id` points to an active (non-deactivated, non-deleted) user. |
-| Verification | 25% | Only counted on **critical** pages. 100 if currently verified, 50 if expiring, 0 if expired or never verified. |
+| Verification | 25% | Only counted on **critical** pages. 100 if currently verified, 50 if expiring, 0 if expired or never verified. The signal is averaged across critical pages only — non-critical pages don't contribute. If a scope has no critical pages, the signal returns `null` (rendered as "Not applicable"). |
 | Content strength | 20% | Word count of the page body. 100 if ≥300 words, 0 if <50 words, linear scale between. |
 
 Per-page scores roll up to a per-space score (simple average) and a workspace score (average across all scored pages). A space needs ≥10 pages before a score is shown — smaller spaces display "Insufficient data".
@@ -47,9 +47,9 @@ The "Issues to fix" list filters pages by one of four categories:
 
 | Endpoint | Access |
 |---|---|
-| `POST /api/workspace/health` | Workspace admin or owner |
-| `POST /api/workspace/health/space` | Workspace admin/owner, **or** Space admin for that space |
-| `POST /api/workspace/health/issues` | Workspace admin/owner for workspace-wide queries; Space admin for queries scoped to their space |
+| `POST /api/workspace-health` | Workspace admin or owner |
+| `POST /api/workspace-health/space` | Workspace admin/owner, **or** Space admin for that space |
+| `POST /api/workspace-health/issues` | Workspace admin/owner for workspace-wide queries; Space admin for queries scoped to their space |
 
 The issue list is computed against `pages.deleted_at IS NULL` and joins to `spaces` and `users` so deactivated/deleted users surface as "missing owner".
 
