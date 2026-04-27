@@ -51,9 +51,10 @@ export class DuplicatesService {
     // directions so a per-page lookup is a single index hit. The GIN
     // trigram index installed by the migration makes this practical for
     // workspaces with thousands of pages.
+    // Aliases come back camelCased by Kysely's CamelCasePlugin: page_a → pageA.
     const rows = await sql<{
-      page_a: string;
-      page_b: string;
+      pageA: string;
+      pageB: string;
       sim: number;
     }>`
       WITH excerpt AS (
@@ -82,8 +83,8 @@ export class DuplicatesService {
     const pairsByPage = new Map<string, Pair[]>();
     for (const r of rows.rows) {
       const sim = Number(r.sim);
-      pushPair(pairsByPage, r.page_a, r.page_b, sim);
-      pushPair(pairsByPage, r.page_b, r.page_a, sim);
+      pushPair(pairsByPage, r.pageA, r.pageB, sim);
+      pushPair(pairsByPage, r.pageB, r.pageA, sim);
     }
 
     // Per-page cap: keep the top-N strongest matches. Avoids one pathological

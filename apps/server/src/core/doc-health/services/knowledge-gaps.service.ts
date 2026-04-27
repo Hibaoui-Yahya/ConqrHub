@@ -86,11 +86,14 @@ export class KnowledgeGapsService {
     // Group by a normalized hash of the message content so that re-phrasings
     // with different whitespace/case still cluster. Filter out trivially short
     // messages — they're noise (single-word follow-ups, "thanks", etc.).
+    // The Kysely CamelCasePlugin transforms snake_case column names from
+    // raw `sql\`...\`` queries into camelCase keys at runtime, so the
+    // SELECT alias `last_asked_at` lands on the row as `lastAskedAt`.
     const rows = await sql<{
       sample: string;
       occurrences: string;
-      last_asked_at: Date;
-      unique_askers: string;
+      lastAskedAt: Date;
+      uniqueAskers: string;
     }>`
       SELECT
         (array_agg(content ORDER BY created_at DESC))[1] AS sample,
@@ -125,10 +128,10 @@ export class KnowledgeGapsService {
       sampleQuestion: r.sample,
       occurrences: Number(r.occurrences),
       lastAskedAt:
-        r.last_asked_at instanceof Date
-          ? r.last_asked_at.toISOString()
-          : new Date(r.last_asked_at).toISOString(),
-      uniqueAskers: Number(r.unique_askers),
+        r.lastAskedAt instanceof Date
+          ? r.lastAskedAt.toISOString()
+          : new Date(r.lastAskedAt).toISOString(),
+      uniqueAskers: Number(r.uniqueAskers),
       recommendations: buildRecommendations(r.sample, topMatches[idx]),
     }));
 
@@ -149,15 +152,16 @@ export class KnowledgeGapsService {
     const trimmed = question.trim();
     if (trimmed.length < GAPS_MIN_CONTENT_LENGTH) return null;
 
+    // CamelCasePlugin again — aliases land on the row in camelCase.
     const rows = await sql<{
       id: string;
-      slug_id: string;
+      slugId: string;
       title: string | null;
-      owner_id: string | null;
-      owner_deactivated_at: Date | null;
-      owner_deleted_at: Date | null;
-      updated_at: Date;
-      space_slug: string;
+      ownerId: string | null;
+      ownerDeactivatedAt: Date | null;
+      ownerDeletedAt: Date | null;
+      updatedAt: Date;
+      spaceSlug: string;
     }>`
       SELECT
         p.id,
@@ -182,18 +186,18 @@ export class KnowledgeGapsService {
     if (!row) return null;
     return {
       id: row.id,
-      slugId: row.slug_id,
+      slugId: row.slugId,
       title: row.title,
-      ownerId: row.owner_id,
+      ownerId: row.ownerId,
       ownerActive:
-        row.owner_id !== null &&
-        row.owner_deactivated_at === null &&
-        row.owner_deleted_at === null,
+        row.ownerId !== null &&
+        row.ownerDeactivatedAt === null &&
+        row.ownerDeletedAt === null,
       updatedAt:
-        row.updated_at instanceof Date
-          ? row.updated_at
-          : new Date(row.updated_at),
-      spaceSlug: row.space_slug,
+        row.updatedAt instanceof Date
+          ? row.updatedAt
+          : new Date(row.updatedAt),
+      spaceSlug: row.spaceSlug,
     };
   }
 }
