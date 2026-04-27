@@ -7,6 +7,7 @@ export enum HealthIssueCategory {
   UnverifiedCritical = 'unverified-critical',
   WeakContent = 'weak-content',
   BrokenLinks = 'broken-links',
+  Duplicate = 'duplicate',
 }
 
 export class SpaceHealthDto {

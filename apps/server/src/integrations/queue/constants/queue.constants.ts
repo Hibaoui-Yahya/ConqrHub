@@ -88,4 +88,5 @@ export enum QueueJob {
   DOC_HEALTH_PRUNE = 'doc-health-prune',
 
   BROKEN_LINKS_SCAN_ALL = 'broken-links-scan-all',
+  DUPLICATES_SCAN_ALL = 'duplicates-scan-all',
 }

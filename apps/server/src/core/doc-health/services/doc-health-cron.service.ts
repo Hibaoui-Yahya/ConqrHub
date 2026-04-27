@@ -6,6 +6,7 @@ import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 const SNAPSHOT_JOB_ID = 'doc-health-snapshot-cron';
 const PRUNE_JOB_ID = 'doc-health-prune-cron';
 const BROKEN_LINKS_JOB_ID = 'doc-health-broken-links-cron';
+const DUPLICATES_JOB_ID = 'doc-health-duplicates-cron';
 
 // 02:00 UTC daily — outside the user-active window. Prune runs 30 minutes
 // later so it never races the snapshot insert on the same row.
@@ -16,6 +17,11 @@ const PRUNE_CRON = '30 2 * * *';
 // snapshot since it walks every page's content. Sunday avoids weekday
 // publishing patterns where workspaces are most active.
 const BROKEN_LINKS_CRON = '0 3 * * 0';
+
+// Weekly Sunday 04:00 UTC — duplicate detection runs an hour after the
+// broken-link scan so the two heavy weekly jobs never compete for the
+// same DB connection pool.
+const DUPLICATES_CRON = '0 4 * * 0';
 
 @Injectable()
 export class DocHealthCronService implements OnModuleInit {
@@ -55,6 +61,17 @@ export class DocHealthCronService implements OnModuleInit {
         {
           repeat: { pattern: BROKEN_LINKS_CRON },
           jobId: BROKEN_LINKS_JOB_ID,
+          removeOnComplete: { count: 10 },
+          removeOnFail: { count: 10 },
+        },
+      );
+
+      await this.generalQueue.add(
+        QueueJob.DUPLICATES_SCAN_ALL,
+        {},
+        {
+          repeat: { pattern: DUPLICATES_CRON },
+          jobId: DUPLICATES_JOB_ID,
           removeOnComplete: { count: 10 },
           removeOnFail: { count: 10 },
         },

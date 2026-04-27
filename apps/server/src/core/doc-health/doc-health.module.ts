@@ -9,6 +9,7 @@ import { BrokenLinksService } from './services/broken-links.service';
 import { LinkCheckerService } from './services/link-checker.service';
 import { DocHealthCronService } from './services/doc-health-cron.service';
 import { KnowledgeGapsService } from './services/knowledge-gaps.service';
+import { DuplicatesService } from './services/duplicates.service';
 import { CaslModule } from '../casl/casl.module';
 import { NotificationModule } from '../notification/notification.module';
 
@@ -24,6 +25,7 @@ import { NotificationModule } from '../notification/notification.module';
     BrokenLinksService,
     LinkCheckerService,
     KnowledgeGapsService,
+    DuplicatesService,
     DocHealthCronService,
   ],
   exports: [
@@ -35,6 +37,7 @@ import { NotificationModule } from '../notification/notification.module';
     BrokenLinksService,
     LinkCheckerService,
     KnowledgeGapsService,
+    DuplicatesService,
   ],
 })
 export class DocHealthModule {}

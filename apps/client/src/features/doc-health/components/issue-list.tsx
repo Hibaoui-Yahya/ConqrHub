@@ -61,6 +61,7 @@ export default function IssueList({
     { label: t("Unverified"), value: "unverified-critical" },
     { label: t("Weak content"), value: "weak-content" },
     { label: t("Broken links"), value: "broken-links" },
+    { label: t("Duplicate"), value: "duplicate" },
   ];
 
   const [exporting, setExporting] = useState(false);

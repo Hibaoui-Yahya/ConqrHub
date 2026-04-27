@@ -282,6 +282,16 @@ export interface PageBrokenLinks {
   workspaceId: string;
 }
 
+export interface PageDuplicates {
+  createdAt: Generated<Timestamp>;
+  detectedAt: Timestamp;
+  duplicateOfPageId: string;
+  id: Generated<string>;
+  pageId: string;
+  similarity: number;
+  workspaceId: string;
+}
+
 export interface Notifications {
   actorId: string | null;
   archivedAt: Timestamp | null;
@@ -589,6 +599,7 @@ export interface DB {
   notifications: Notifications;
   pageAccess: PageAccess;
   pageBrokenLinks: PageBrokenLinks;
+  pageDuplicates: PageDuplicates;
   pageHistory: PageHistory;
   pagePermissions: PagePermissions;
   pages: Pages;

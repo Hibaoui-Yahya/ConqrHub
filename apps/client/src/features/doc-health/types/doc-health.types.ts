@@ -3,7 +3,8 @@ export type HealthIssueCategory =
   | "missing-owner"
   | "unverified-critical"
   | "weak-content"
-  | "broken-links";
+  | "broken-links"
+  | "duplicate";
 
 export interface ISignalBreakdown {
   freshness: number;

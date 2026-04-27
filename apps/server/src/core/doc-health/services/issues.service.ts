@@ -31,6 +31,8 @@ type IssueRow = {
   verificationStatus: string | null;
   verificationExpiresAt: Date | null;
   brokenLinkCount?: number | string;
+  duplicateCount?: number | string;
+  topDuplicateSimilarity?: number | string | null;
 };
 
 @Injectable()
@@ -158,6 +160,19 @@ export class HealthIssuesService {
         detail =
           count === 1 ? '1 broken link' : `${count} broken links`;
         severity = count >= 5 ? 'high' : count >= 2 ? 'medium' : 'low';
+        break;
+      }
+      case HealthIssueCategory.Duplicate: {
+        const count = Number(row.duplicateCount ?? 0);
+        const top = Number(row.topDuplicateSimilarity ?? 0);
+        const pct = Math.round(top * 100);
+        detail =
+          count === 1
+            ? `Near-duplicate of 1 page (${pct}% similar)`
+            : `Near-duplicate of ${count} pages (top ${pct}% similar)`;
+        // Similarity drives severity, not raw count: a single 95%-similar
+        // pair is more actionable than five 65%-similar pairs.
+        severity = top >= 0.85 ? 'high' : top >= 0.7 ? 'medium' : 'low';
         break;
       }
     }
@@ -294,6 +309,32 @@ export class HealthIssuesService {
           ])
           .orderBy(sql`count(bl.id)`, 'desc')
           .orderBy('p.updatedAt', 'desc');
+        break;
+      }
+      case HealthIssueCategory.Duplicate: {
+        query = query
+          .innerJoin('pageDuplicates as pd', 'pd.pageId', 'p.id')
+          .select((eb) => eb.fn.count('pd.id').as('duplicateCount'))
+          .select((eb) => eb.fn.max('pd.similarity').as('topDuplicateSimilarity'))
+          .groupBy([
+            'p.id',
+            'p.slugId',
+            'p.title',
+            'p.spaceId',
+            's.name',
+            's.slug',
+            's.isCritical',
+            'p.updatedAt',
+            'p.textContent',
+            'pv.status',
+            'pv.expiresAt',
+            'p.ownerId',
+            'owner.deactivatedAt',
+            'owner.deletedAt',
+            'pv.id',
+          ])
+          .orderBy(sql`max(pd.similarity)`, 'desc')
+          .orderBy(sql`count(pd.id)`, 'desc');
         break;
       }
     }

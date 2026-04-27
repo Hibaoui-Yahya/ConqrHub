@@ -43,6 +43,7 @@ The "Issues to fix" list filters pages by one of five categories:
 | Unverified critical | Critical page that isn't currently verified | Request verification |
 | Weak content | Fewer than 50 words | Flesh the page out or merge it |
 | Broken links | Page contains internal links pointing to deleted or missing pages | Edit the page and remove or repoint the links |
+| Duplicate | Page closely overlaps with one or more other pages (lexical similarity ≥ threshold) | Merge into the canonical page or rewrite to differentiate |
 
 ## Permissions
 
@@ -99,6 +100,16 @@ A subscription is silent during "insufficient data" periods — if the workspace
 - The Health Center is **gated by Workspace Admin role**, not by an entitlement flag. To restrict it to a paid tier in the future, add a `Feature.DOC_HEALTH` flag and gate the sidebar entry plus controller.
 - Mobile layout is not optimised in this MVP — desktop-first per the broader product position (PRD 26.4).
 
+## Duplicate detection (v1.5)
+
+A weekly cron (Sunday `0 4 * * *` UTC, registered alongside the snapshot/prune/broken-link jobs) compares every page in every workspace against its peers and records near-duplicate pairs in `page_duplicates`. v1.5 uses **lexical similarity** (`pg_trgm.similarity()` on title + first 1500 chars of body), not semantic embeddings — pg_trgm is already installed and catches the common case of copy/paste pages or close paraphrases without pulling in any embedding model. Real semantic detection (paraphrases with different vocabulary) lands in v2 alongside the AI Search analytics work.
+
+The threshold defaults to **0.6** and is tunable via `DOC_HEALTH_DUPLICATE_THRESHOLD` (clamped to 0.3–0.95). Each scan replaces that workspace's rows transactionally, so resolving a duplicate (delete, merge, or substantive rewrite of either side) clears it on the next scan.
+
+A duplicate page surfaces as a row in the **Duplicate** tab of the Issues to fix list, sorted by top per-page similarity. Severity scales: similarity ≥ 0.85 = high, 0.70–0.84 = medium, below = low. The Detail column shows how many other pages it overlaps with and the strongest match's similarity percentage.
+
+The per-page result count is capped at 5 — a stub-template clone matching dozens of pages won't blow up the result table; the next scan picks up extras once the worst offenders are addressed.
+
 ## Knowledge gaps (v1.4)
 
 The Health page lists recurring questions users have asked the AI assistant in the last 7/30/90 days. A "gap" is two or more user messages that hash to the same normalized content (whitespace + case folded), grouped and ordered by frequency. The intent is to surface "things people keep asking that don't have a good page yet."
@@ -119,7 +130,7 @@ Each issue category exposes an "Export CSV" action that hits `POST /api/workspac
 
 | Capability | Tracking |
 |---|---|
-| Semantic duplicate detection | v1.5 |
+| True semantic duplicate detection (embedding-based) | v2 (today's v1.5 uses pg_trgm lexical similarity) |
 | Recommended actions per knowledge gap (Epic 21.3.2) | v1.5 |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |

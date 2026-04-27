@@ -19,6 +19,7 @@ import { processBacklinks } from '../tasks/backlinks.task';
 import { HealthSnapshotService } from '../../../core/doc-health/services/snapshot.service';
 import { HealthAlertsService } from '../../../core/doc-health/services/alerts.service';
 import { BrokenLinksService } from '../../../core/doc-health/services/broken-links.service';
+import { DuplicatesService } from '../../../core/doc-health/services/duplicates.service';
 
 @Processor(QueueName.GENERAL_QUEUE)
 export class GeneralQueueProcessor
@@ -129,6 +130,23 @@ export class GeneralQueueProcessor
           const result = await broken.scanAll();
           this.logger.log(
             `Broken-links scan: ${result.workspaces} workspaces, ${result.pagesScanned} pages, ${result.pagesBroken} with broken links`,
+          );
+          break;
+        }
+
+        case QueueJob.DUPLICATES_SCAN_ALL: {
+          const duplicates = this.moduleRef.get(DuplicatesService, {
+            strict: false,
+          });
+          if (!duplicates) {
+            this.logger.warn(
+              'DUPLICATES_SCAN_ALL fired but service not resolvable',
+            );
+            return;
+          }
+          const result = await duplicates.scanAll();
+          this.logger.log(
+            `Duplicates scan: ${result.workspaces} workspaces, ${result.pagesScanned} pages, ${result.pairsFound} duplicate pairs`,
           );
           break;
         }
