@@ -27,9 +27,11 @@ export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface AiChatMessages {
   chatId: string;
+  confidence: number | null;
   content: string | null;
   createdAt: Generated<Timestamp>;
   deletedAt: Timestamp | null;
+  groundedSourceCount: number | null;
   id: Generated<string>;
   metadata: Json | null;
   role: string;

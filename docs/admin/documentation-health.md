@@ -134,6 +134,17 @@ In addition to the in-app notification, drop alerts now queue a transactional em
 
 Each issue category exposes an "Export CSV" action that hits `POST /api/workspace-health/issues/export`. The endpoint streams a UTF-8 CSV with a stable header (`category,page_id,page_title,space_name,owner,last_updated_at,detail`). The download filename embeds the category and date, e.g. `doc-health-outdated-2026-04-27.csv`. Permission mirrors the issue list: workspace admin/owner for workspace-wide queries, space admin for queries scoped to their space.
 
+## Signals deferred to v2 (scaffolded)
+
+Two signals from the long-term PRD are scaffolded in code today but disabled at scoring time. They activate when (a) the data source starts populating and (b) someone flips the weight to nonzero in `scoring.service.ts` (and rebalances the existing four weights to keep the total at 1.0).
+
+| Signal | Source column | Weight today | What it will measure |
+|---|---|---|---|
+| AI confidence | `ai_chat_messages.confidence` | `AI_CONFIDENCE_WEIGHT = 0` | Average confidence of AI Search responses across the workspace. Higher = the assistant is finding grounded answers. |
+| Search success | (table TBD by PRD 20.2) | `SEARCH_SUCCESS_WEIGHT = 0` | Ratio of search queries that ended in a successful click-through to a wiki page. Floor at `SEARCH_SUCCESS_MIN_QUERIES = 5` to avoid noise on quiet workspaces. |
+
+The migration `20260427T180000-ai-confidence-columns.ts` already adds `confidence` (real, nullable) and `grounded_source_count` (int, nullable) on `ai_chat_messages` so the AI Search code can start writing to them ahead of the doc-health work without a coordinated schema change. Until both flags flip, `scoreAiConfidence()` and `scoreSearchSuccess()` always return `null`, the existing `SignalBreakdown` shape stays unchanged, and the score math is byte-identical to v1.5.
+
 ## Out of scope (next iterations)
 
 | Capability | Tracking |

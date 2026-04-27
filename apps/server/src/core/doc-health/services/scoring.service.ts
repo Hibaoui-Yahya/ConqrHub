@@ -8,6 +8,17 @@ export const SIGNAL_WEIGHTS = {
   contentStrength: 0.2,
 } as const;
 
+// v2 signals — scaffolded today, weight stays at 0 until the AI Search
+// analytics infrastructure (PRD 20.2 + AI Search analytics) starts
+// populating the source columns. The v2 work flips these to nonzero,
+// rebalances the existing weights, and wires the signals into scorePage.
+// See docs/admin/documentation-health.md → "Signals deferred to v2".
+export const AI_CONFIDENCE_WEIGHT = 0;
+export const SEARCH_SUCCESS_WEIGHT = 0;
+export const AI_CONFIDENCE_FLOOR = 0.5;
+export const AI_CONFIDENCE_CEILING = 0.9;
+export const SEARCH_SUCCESS_MIN_QUERIES = 5;
+
 export const FRESHNESS_FRESH_DAYS = 90;
 export const FRESHNESS_STALE_DAYS = 365;
 export const CONTENT_FULL_WORDS = 300;
@@ -171,5 +182,45 @@ export class ScoringService {
     const trimmed = text.trim();
     if (trimmed.length === 0) return 0;
     return trimmed.split(/\s+/).length;
+  }
+
+  /**
+   * v2 signal scaffold: maps an AI assistant message's confidence value
+   * (0–1, currently always null) onto the 0–100 health-signal scale.
+   * Returns null today because no message carries a confidence value yet
+   * — the AI Search code path needs to start writing
+   * `ai_chat_messages.confidence` first.
+   *
+   * When activated: confidence below AI_CONFIDENCE_FLOOR scores 0,
+   * confidence above AI_CONFIDENCE_CEILING scores 100, linear in between.
+   */
+  scoreAiConfidence(confidence: number | null): number | null {
+    if (confidence === null || !Number.isFinite(confidence)) return null;
+    if (AI_CONFIDENCE_WEIGHT === 0) return null;
+    if (confidence <= AI_CONFIDENCE_FLOOR) return 0;
+    if (confidence >= AI_CONFIDENCE_CEILING) return 100;
+    const range = AI_CONFIDENCE_CEILING - AI_CONFIDENCE_FLOOR;
+    return Math.round(((confidence - AI_CONFIDENCE_FLOOR) / range) * 100);
+  }
+
+  /**
+   * v2 signal scaffold: ratio of search queries that resolved into a
+   * successful click-through to a wiki page. Requires the search analytics
+   * pipeline (PRD 20.2) which does not yet exist. Returns null until both
+   * (a) the analytics table is wired and (b) SEARCH_SUCCESS_WEIGHT > 0.
+   *
+   * The MIN_QUERIES guard prevents a single failed search on a quiet
+   * workspace from tanking the score.
+   */
+  scoreSearchSuccess(input: {
+    successfulQueries: number;
+    totalQueries: number;
+  }): number | null {
+    if (SEARCH_SUCCESS_WEIGHT === 0) return null;
+    if (!Number.isFinite(input.totalQueries)) return null;
+    if (input.totalQueries < SEARCH_SUCCESS_MIN_QUERIES) return null;
+    if (input.totalQueries === 0) return null;
+    const ratio = input.successfulQueries / input.totalQueries;
+    return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
   }
 }

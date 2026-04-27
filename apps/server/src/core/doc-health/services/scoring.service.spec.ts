@@ -295,4 +295,46 @@ describe('ScoringService', () => {
       expect(service.countWords('multi\nline\ttext here')).toBe(4);
     });
   });
+
+  describe('v2 signal scaffolding (zero-weight)', () => {
+    it('scoreAiConfidence returns null while AI_CONFIDENCE_WEIGHT is 0', () => {
+      // The scaffold MUST stay inert until v2 flips the weight on. If
+      // someone bumps AI_CONFIDENCE_WEIGHT without rebalancing the
+      // existing weights, this test will start failing — that's the
+      // signal to update scorePage and SignalBreakdown together.
+      expect(service.scoreAiConfidence(0.95)).toBeNull();
+      expect(service.scoreAiConfidence(0.1)).toBeNull();
+      expect(service.scoreAiConfidence(null)).toBeNull();
+      expect(service.scoreAiConfidence(Number.NaN)).toBeNull();
+    });
+
+    it('scoreSearchSuccess returns null while SEARCH_SUCCESS_WEIGHT is 0', () => {
+      expect(
+        service.scoreSearchSuccess({ successfulQueries: 9, totalQueries: 10 }),
+      ).toBeNull();
+      expect(
+        service.scoreSearchSuccess({ successfulQueries: 0, totalQueries: 0 }),
+      ).toBeNull();
+    });
+
+    it('scorePage signals shape is unaffected by the v2 scaffold', () => {
+      // Sanity check that adding the new methods didn't change the
+      // SignalBreakdown shape or the existing scoring math.
+      const scored = service.scorePage({
+        updatedAt: new Date(NOW),
+        hasActiveOwner: true,
+        isCritical: false,
+        hasVerificationRecord: false,
+        verificationStatus: null,
+        verificationExpiresAt: null,
+        wordCount: 500,
+      });
+      expect(Object.keys(scored.signals).sort()).toEqual([
+        'contentStrength',
+        'freshness',
+        'ownership',
+        'verification',
+      ]);
+    });
+  });
 });
