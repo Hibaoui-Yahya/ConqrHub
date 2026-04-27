@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Badge,
+  Button,
   Card,
   Center,
   Group,
@@ -11,9 +12,19 @@ import {
   Title,
   Tooltip,
 } from "@mantine/core";
-import { IconBulb } from "@tabler/icons-react";
+import {
+  IconBulb,
+  IconClockHour4,
+  IconFilePlus,
+  IconUserPlus,
+} from "@tabler/icons-react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useKnowledgeGapsQuery } from "@/features/doc-health/queries/doc-health-query";
+import {
+  GapRecommendationKind,
+  IGapRecommendation,
+} from "@/features/doc-health/types/doc-health.types";
 
 const RANGES: { value: string; label: string }[] = [
   { value: "7", label: "7d" },
@@ -29,6 +40,50 @@ function formatRelative(iso: string): string {
   if (days < 30) return `${days} days ago`;
   const months = Math.floor(days / 30);
   return months === 1 ? "1 month ago" : `${months} months ago`;
+}
+
+const RECOMMENDATION_ICON: Record<GapRecommendationKind, typeof IconFilePlus> = {
+  create_page: IconFilePlus,
+  update_outdated: IconClockHour4,
+  assign_owner: IconUserPlus,
+};
+
+function recommendationHref(rec: IGapRecommendation): string | null {
+  switch (rec.kind) {
+    case "update_outdated":
+    case "assign_owner":
+      return rec.spaceSlug && rec.pageSlugId
+        ? `/s/${rec.spaceSlug}/p/${rec.pageSlugId}`
+        : null;
+    case "create_page":
+      // No first-class "new page with title" route in this app; the user
+      // hits the create-page action from the space sidebar. Until that
+      // exists, the chip stays informational.
+      return null;
+  }
+}
+
+function RecommendationChip({ rec }: { rec: IGapRecommendation }) {
+  const Icon = RECOMMENDATION_ICON[rec.kind];
+  const href = recommendationHref(rec);
+  const buttonProps = {
+    size: "compact-xs" as const,
+    variant: "light" as const,
+    leftSection: <Icon size={12} />,
+  };
+  return href ? (
+    <Tooltip label={rec.detail} withArrow>
+      <Button component={Link} to={href} {...buttonProps}>
+        {rec.detail}
+      </Button>
+    </Tooltip>
+  ) : (
+    <Tooltip label={rec.detail} withArrow>
+      <Badge variant="light" leftSection={<Icon size={12} />} size="sm">
+        {rec.detail}
+      </Badge>
+    </Tooltip>
+  );
 }
 
 export default function KnowledgeGapsCard() {
@@ -90,9 +145,10 @@ export default function KnowledgeGapsCard() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t("Question")}</Table.Th>
-                <Table.Th style={{ width: 90 }}>{t("Asked")}</Table.Th>
-                <Table.Th style={{ width: 90 }}>{t("Askers")}</Table.Th>
+                <Table.Th style={{ width: 80 }}>{t("Asked")}</Table.Th>
+                <Table.Th style={{ width: 80 }}>{t("Askers")}</Table.Th>
                 <Table.Th style={{ width: 110 }}>{t("Last asked")}</Table.Th>
+                <Table.Th>{t("Suggested actions")}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -117,6 +173,13 @@ export default function KnowledgeGapsCard() {
                     <Text size="sm" c="dimmed">
                       {formatRelative(gap.lastAskedAt)}
                     </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={4} wrap="wrap">
+                      {gap.recommendations.map((rec, i) => (
+                        <RecommendationChip key={i} rec={rec} />
+                      ))}
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}

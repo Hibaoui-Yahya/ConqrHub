@@ -92,11 +92,26 @@ export interface IHealthAlertSubscribeInput {
   threshold: number;
 }
 
+export type GapRecommendationKind =
+  | "create_page"
+  | "update_outdated"
+  | "assign_owner";
+
+export interface IGapRecommendation {
+  kind: GapRecommendationKind;
+  pageId?: string;
+  pageSlugId?: string;
+  pageTitle?: string | null;
+  spaceSlug?: string;
+  detail: string;
+}
+
 export interface IKnowledgeGap {
   sampleQuestion: string;
   occurrences: number;
   lastAskedAt: string;
   uniqueAskers: number;
+  recommendations: IGapRecommendation[];
 }
 
 export interface IKnowledgeGapsResponse {

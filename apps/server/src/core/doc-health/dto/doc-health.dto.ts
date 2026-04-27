@@ -149,11 +149,26 @@ export class KnowledgeGapsQueryDto {
   limit?: number = 25;
 }
 
+export type GapRecommendationKind =
+  | 'create_page'
+  | 'update_outdated'
+  | 'assign_owner';
+
+export type GapRecommendationItem = {
+  kind: GapRecommendationKind;
+  pageId?: string;
+  pageSlugId?: string;
+  pageTitle?: string | null;
+  spaceSlug?: string;
+  detail: string;
+};
+
 export type KnowledgeGapItem = {
   sampleQuestion: string;
   occurrences: number;
   lastAskedAt: string;
   uniqueAskers: number;
+  recommendations: GapRecommendationItem[];
 };
 
 export type KnowledgeGapsResponse = {

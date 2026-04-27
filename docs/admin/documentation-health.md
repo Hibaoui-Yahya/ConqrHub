@@ -110,11 +110,19 @@ A duplicate page surfaces as a row in the **Duplicate** tab of the Issues to fix
 
 The per-page result count is capped at 5 — a stub-template clone matching dozens of pages won't blow up the result table; the next scan picks up extras once the worst offenders are addressed.
 
-## Knowledge gaps (v1.4)
+## Knowledge gaps (v1.4 → v1.5 enrichment)
 
 The Health page lists recurring questions users have asked the AI assistant in the last 7/30/90 days. A "gap" is two or more user messages that hash to the same normalized content (whitespace + case folded), grouped and ordered by frequency. The intent is to surface "things people keep asking that don't have a good page yet."
 
 The signal is computed on demand from `ai_chat_messages` (no cron, no extra table) — admin opens the page, the controller calls `KnowledgeGapsService.findGaps`, returns top N. Trivially short messages (<6 chars after trim) and assistant/system messages are excluded.
+
+**v1.5 enrichment:** each gap now carries a list of suggested actions. The service runs a Postgres full-text search of the question against `pages.tsv` and emits up to three recommendations:
+
+- **Create page** — always present, with a derived title (sample question with trailing punctuation stripped, capitalized, capped at 80 chars).
+- **Update outdated** — if the top FTS match exists and was last updated >180 days ago. Carries the page slug + space slug so the chip is a one-click deep-link to the editor.
+- **Assign owner** — if the top FTS match exists and has no active owner.
+
+A gap with no FTS match (very short question, stop words only, fresh workspace) shows just "Create page". Recommendation chips are click-through to the relevant page; "Create page" is informational today and will become a one-click "new page with title pre-filled" in a follow-up once the create-page route accepts a title query param.
 
 Permission: `POST /api/workspace-health/gaps` is workspace admin/owner only.
 
@@ -131,7 +139,7 @@ Each issue category exposes an "Export CSV" action that hits `POST /api/workspac
 | Capability | Tracking |
 |---|---|
 | True semantic duplicate detection (embedding-based) | v2 (today's v1.5 uses pg_trgm lexical similarity) |
-| Recommended actions per knowledge gap (Epic 21.3.2) | v1.5 |
+| One-click "new page with title pre-filled" from a gap recommendation | v1.6 (today's v1.5 chips deep-link to existing pages only) |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |
 
