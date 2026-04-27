@@ -160,6 +160,9 @@ export type GapRecommendationItem = {
   pageSlugId?: string;
   pageTitle?: string | null;
   spaceSlug?: string;
+  suggestedSpaceId?: string;
+  suggestedSpaceSlug?: string;
+  suggestedTitle?: string;
   detail: string;
 };
 

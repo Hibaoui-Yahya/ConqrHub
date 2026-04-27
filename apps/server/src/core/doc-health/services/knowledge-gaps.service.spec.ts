@@ -44,6 +44,7 @@ describe('buildRecommendations', () => {
       ownerId: 'u-1',
       ownerActive: true,
       updatedAt: oldDate,
+      spaceId: 's-1',
       spaceSlug: 'engineering',
     });
     const kinds = recs.map((r) => r.kind).sort();
@@ -62,6 +63,7 @@ describe('buildRecommendations', () => {
       ownerId: null,
       ownerActive: false,
       updatedAt: recent,
+      spaceId: 's-1',
       spaceSlug: 'engineering',
     });
     const kinds = recs.map((r) => r.kind).sort();
@@ -77,6 +79,7 @@ describe('buildRecommendations', () => {
       ownerId: null,
       ownerActive: false,
       updatedAt: oldDate,
+      spaceId: 's-1',
       spaceSlug: 'engineering',
     });
     expect(recs).toHaveLength(3);
@@ -93,9 +96,42 @@ describe('buildRecommendations', () => {
       ownerId: 'u-1',
       ownerActive: true,
       updatedAt: recent,
+      spaceId: 's-1',
       spaceSlug: 'engineering',
     });
     expect(recs).toHaveLength(1);
     expect(recs[0].kind).toBe('create_page');
+  });
+
+  describe('create_page suggestions', () => {
+    it('always carries a suggestedTitle derived from the question', () => {
+      const recs = buildRecommendations('how do I rotate keys?', null);
+      const create = recs.find((r) => r.kind === 'create_page')!;
+      expect(create.suggestedTitle).toBe('How do I rotate keys');
+    });
+
+    it('inherits the top match space when one exists', () => {
+      const recent = new Date(Date.now() - 5 * 86_400_000);
+      const recs = buildRecommendations('how do I deploy?', {
+        id: 'p-1',
+        slugId: 'slug001',
+        title: 'Deployment guide',
+        ownerId: 'u-1',
+        ownerActive: true,
+        updatedAt: recent,
+        spaceId: 's-eng',
+        spaceSlug: 'engineering',
+      });
+      const create = recs.find((r) => r.kind === 'create_page')!;
+      expect(create.suggestedSpaceId).toBe('s-eng');
+      expect(create.suggestedSpaceSlug).toBe('engineering');
+    });
+
+    it('omits suggested space when there is no top match', () => {
+      const recs = buildRecommendations('how do I rotate keys?', null);
+      const create = recs.find((r) => r.kind === 'create_page')!;
+      expect(create.suggestedSpaceId).toBeUndefined();
+      expect(create.suggestedSpaceSlug).toBeUndefined();
+    });
   });
 });

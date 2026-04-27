@@ -5,6 +5,7 @@ import {
   Card,
   Center,
   Group,
+  Modal,
   SegmentedControl,
   Stack,
   Table,
@@ -18,13 +19,17 @@ import {
   IconFilePlus,
   IconUserPlus,
 } from "@tabler/icons-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useKnowledgeGapsQuery } from "@/features/doc-health/queries/doc-health-query";
 import {
   GapRecommendationKind,
   IGapRecommendation,
 } from "@/features/doc-health/types/doc-health.types";
+import { useCreatePageMutation } from "@/features/page/queries/page-query";
+import { buildPageUrl } from "@/features/page/page.utils";
+import { SpaceSelect } from "@/features/space/components/sidebar/space-select";
+import { ISpace } from "@/features/space/types/space.types";
 
 const RANGES: { value: string; label: string }[] = [
   { value: "7", label: "7d" },
@@ -48,32 +53,31 @@ const RECOMMENDATION_ICON: Record<GapRecommendationKind, typeof IconFilePlus> = 
   assign_owner: IconUserPlus,
 };
 
-function recommendationHref(rec: IGapRecommendation): string | null {
-  switch (rec.kind) {
-    case "update_outdated":
-    case "assign_owner":
-      return rec.spaceSlug && rec.pageSlugId
-        ? `/s/${rec.spaceSlug}/p/${rec.pageSlugId}`
-        : null;
-    case "create_page":
-      // No first-class "new page with title" route in this app; the user
-      // hits the create-page action from the space sidebar. Until that
-      // exists, the chip stays informational.
-      return null;
+function navHref(rec: IGapRecommendation): string | null {
+  if (rec.kind === "update_outdated" || rec.kind === "assign_owner") {
+    return rec.spaceSlug && rec.pageSlugId
+      ? `/s/${rec.spaceSlug}/p/${rec.pageSlugId}`
+      : null;
   }
+  return null;
 }
 
 function RecommendationChip({ rec }: { rec: IGapRecommendation }) {
+  if (rec.kind === "create_page") {
+    return <CreatePageChip rec={rec} />;
+  }
+
   const Icon = RECOMMENDATION_ICON[rec.kind];
-  const href = recommendationHref(rec);
-  const buttonProps = {
-    size: "compact-xs" as const,
-    variant: "light" as const,
-    leftSection: <Icon size={12} />,
-  };
+  const href = navHref(rec);
   return href ? (
     <Tooltip label={rec.detail} withArrow>
-      <Button component={Link} to={href} {...buttonProps}>
+      <Button
+        component={Link}
+        to={href}
+        size="compact-xs"
+        variant="light"
+        leftSection={<Icon size={12} />}
+      >
         {rec.detail}
       </Button>
     </Tooltip>
@@ -83,6 +87,103 @@ function RecommendationChip({ rec }: { rec: IGapRecommendation }) {
         {rec.detail}
       </Badge>
     </Tooltip>
+  );
+}
+
+function CreatePageChip({ rec }: { rec: IGapRecommendation }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const createPageMutation = useCreatePageMutation();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickedSpace, setPickedSpace] = useState<ISpace | null>(null);
+
+  const title = rec.suggestedTitle ?? "";
+  const hasSuggestedSpace =
+    Boolean(rec.suggestedSpaceId) && Boolean(rec.suggestedSpaceSlug);
+
+  const create = async (spaceId: string, spaceSlug: string) => {
+    // `spaceId` isn't on `IPageInput` but the server's CreatePageDto accepts
+    // it, and the existing tree-create flow uses the same pattern: build a
+    // typed local payload so TypeScript skips excess-property checks.
+    const payload: { spaceId: string; title: string } = { spaceId, title };
+    const page = await createPageMutation.mutateAsync(payload);
+    navigate(buildPageUrl(spaceSlug, page.slugId, page.title));
+  };
+
+  const handleClick = async () => {
+    if (hasSuggestedSpace) {
+      await create(rec.suggestedSpaceId!, rec.suggestedSpaceSlug!);
+      return;
+    }
+    setPickerOpen(true);
+  };
+
+  const handleConfirmPick = async () => {
+    if (!pickedSpace) return;
+    setPickerOpen(false);
+    await create(pickedSpace.id, pickedSpace.slug);
+    setPickedSpace(null);
+  };
+
+  const handleCancelPick = () => {
+    setPickerOpen(false);
+    setPickedSpace(null);
+  };
+
+  return (
+    <>
+      <Tooltip label={rec.detail} withArrow>
+        <Button
+          onClick={handleClick}
+          loading={createPageMutation.isPending}
+          size="compact-xs"
+          variant="light"
+          leftSection={<IconFilePlus size={12} />}
+        >
+          {rec.detail}
+        </Button>
+      </Tooltip>
+
+      <Modal.Root
+        opened={pickerOpen}
+        onClose={handleCancelPick}
+        size={500}
+        padding="xl"
+        yOffset="10vh"
+        xOffset={0}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Modal.Overlay />
+        <Modal.Content>
+          <Modal.Header py={0}>
+            <Modal.Title fw={500}>{t("Create page")}</Modal.Title>
+            <Modal.CloseButton />
+          </Modal.Header>
+          <Modal.Body>
+            <Text mb="xs" c="dimmed" size="sm">
+              {t('Pick a space for the new page titled "{{title}}".', {
+                title,
+              })}
+            </Text>
+
+            <SpaceSelect clearable={false} onChange={setPickedSpace} />
+
+            <Group justify="end" mt="md">
+              <Button onClick={handleCancelPick} variant="default">
+                {t("Cancel")}
+              </Button>
+              <Button
+                onClick={handleConfirmPick}
+                disabled={!pickedSpace}
+                loading={createPageMutation.isPending}
+              >
+                {t("Create")}
+              </Button>
+            </Group>
+          </Modal.Body>
+        </Modal.Content>
+      </Modal.Root>
+    </>
   );
 }
 

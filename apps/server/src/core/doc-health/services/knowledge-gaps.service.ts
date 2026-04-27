@@ -25,6 +25,14 @@ export type GapRecommendation = {
   pageSlugId?: string;
   pageTitle?: string | null;
   spaceSlug?: string;
+  // Populated only on `create_page` recommendations: the title and (when
+  // available) target space the UI should default to when the user clicks
+  // the chip. The space comes from the FTS top-matched page's space —
+  // the most semantically related space in the workspace. Absent when no
+  // top match was found, in which case the UI prompts for a space.
+  suggestedSpaceId?: string;
+  suggestedSpaceSlug?: string;
+  suggestedTitle?: string;
   detail: string;
 };
 
@@ -49,6 +57,7 @@ type TopMatch = {
   ownerId: string | null;
   ownerActive: boolean;
   updatedAt: Date;
+  spaceId: string;
   spaceSlug: string;
 };
 
@@ -161,6 +170,7 @@ export class KnowledgeGapsService {
       ownerDeactivatedAt: Date | null;
       ownerDeletedAt: Date | null;
       updatedAt: Date;
+      spaceId: string;
       spaceSlug: string;
     }>`
       SELECT
@@ -171,6 +181,7 @@ export class KnowledgeGapsService {
         u.deactivated_at AS owner_deactivated_at,
         u.deleted_at AS owner_deleted_at,
         p.updated_at,
+        s.id AS space_id,
         s.slug AS space_slug
       FROM pages p
       INNER JOIN spaces s ON s.id = p.space_id
@@ -197,6 +208,7 @@ export class KnowledgeGapsService {
         row.updatedAt instanceof Date
           ? row.updatedAt
           : new Date(row.updatedAt),
+      spaceId: row.spaceId,
       spaceSlug: row.spaceSlug,
     };
   }
@@ -210,9 +222,16 @@ export function buildRecommendations(
 
   // Always offer "create a page" — even when a top match exists, the
   // canonical answer for a recurring question may be a new dedicated page.
+  // When we have a top match, default the new page into that match's space:
+  // it's the most semantically related space we know about for this topic.
+  // Without a top match the UI prompts for a space.
+  const suggestedTitle = deriveTitle(question);
   out.push({
     kind: 'create_page',
-    detail: `Create a page titled "${deriveTitle(question)}"`,
+    suggestedTitle,
+    suggestedSpaceId: topMatch?.spaceId,
+    suggestedSpaceSlug: topMatch?.spaceSlug,
+    detail: `Create a page titled "${suggestedTitle}"`,
   });
 
   if (!topMatch) return out;

@@ -122,7 +122,9 @@ The signal is computed on demand from `ai_chat_messages` (no cron, no extra tabl
 - **Update outdated** — if the top FTS match exists and was last updated >180 days ago. Carries the page slug + space slug so the chip is a one-click deep-link to the editor.
 - **Assign owner** — if the top FTS match exists and has no active owner.
 
-A gap with no FTS match (very short question, stop words only, fresh workspace) shows just "Create page". Recommendation chips are click-through to the relevant page; "Create page" is informational today and will become a one-click "new page with title pre-filled" in a follow-up once the create-page route accepts a title query param.
+A gap with no FTS match (very short question, stop words only, fresh workspace) shows just "Create page". `update_outdated` and `assign_owner` chips deep-link to the matched page in the editor.
+
+**v1.6 — one-click create page.** Clicking the "Create page" chip creates a draft page with the suggested title pre-filled and opens it in the editor. When the gap has an FTS top match, the new page lands in that match's space (the most semantically related space we know about for this topic). When there's no top match, a small modal prompts for a target space.
 
 Permission: `POST /api/workspace-health/gaps` is workspace admin/owner only.
 
@@ -150,7 +152,6 @@ The migration `20260427T180000-ai-confidence-columns.ts` already adds `confidenc
 | Capability | Tracking |
 |---|---|
 | True semantic duplicate detection (embedding-based) | v2 (today's v1.5 uses pg_trgm lexical similarity) |
-| One-click "new page with title pre-filled" from a gap recommendation | v1.6 (today's v1.5 chips deep-link to existing pages only) |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |
 
