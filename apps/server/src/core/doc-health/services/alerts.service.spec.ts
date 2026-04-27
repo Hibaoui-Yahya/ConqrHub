@@ -45,7 +45,7 @@ function buildHarness(opts: {
     return b;
   };
 
-  let latestRows: Array<{ spaceId: string | null; score: number | null }> =
+  const latestRows: Array<{ spaceId: string | null; score: number | null }> =
     Object.entries(opts.latestByScope ?? { __workspace__: null }).map(
       ([scope, score]) => ({
         spaceId: scope === '__workspace__' ? null : scope,
@@ -87,9 +87,14 @@ function buildHarness(opts: {
       fired.push(data);
       return { id: 'notif-1' };
     }),
+    queueEmail: jest.fn().mockResolvedValue(undefined),
   };
 
-  const service = new HealthAlertsService(db, notification);
+  const domain: any = {
+    getUrl: jest.fn().mockReturnValue('http://localhost:3000'),
+  };
+
+  const service = new HealthAlertsService(db, notification, domain);
   return { service, fired, updates, notification };
 }
 
@@ -143,7 +148,7 @@ describe('HealthAlertsService', () => {
     };
 
     it('fires when score is below threshold', async () => {
-      const { service, fired } = buildHarness({
+      const { service, fired, notification } = buildHarness({
         subs: [baseSub],
         latestByScope: { __workspace__: 50 },
       });
@@ -151,6 +156,10 @@ describe('HealthAlertsService', () => {
       expect(result.fired).toBe(1);
       expect(fired).toHaveLength(1);
       expect(fired[0].type).toBe('doc_health.dropped');
+      // The drop email is queued alongside the in-app notification.
+      expect(notification.queueEmail).toHaveBeenCalledTimes(1);
+      const [, , subject] = (notification.queueEmail as jest.Mock).mock.calls[0];
+      expect(subject).toContain('50');
     });
 
     it('does not fire when score is at or above threshold', async () => {
@@ -199,6 +208,23 @@ describe('HealthAlertsService', () => {
       const result = await service.evaluateForWorkspace('w1', NOW);
       expect(result.fired).toBe(1);
       expect(fired).toHaveLength(1);
+    });
+
+    it('does not stamp lastFiredAt when notification creation is suppressed', async () => {
+      const { service, notification, updates } = buildHarness({
+        subs: [baseSub],
+        latestByScope: { __workspace__: 30 },
+      });
+      // Simulate a deactivated/deleted user — notification.create returns null
+      // and queueEmail must NOT be called.
+      (notification.create as jest.Mock).mockResolvedValueOnce(null);
+
+      const result = await service.evaluateForWorkspace('w1', NOW);
+      expect(result.fired).toBe(0);
+      expect(notification.queueEmail).not.toHaveBeenCalled();
+      // Critically, the subscription's lastFiredAt is NOT stamped, so the
+      // user reactivating within 24h still gets the alert on the next pass.
+      expect(updates).toHaveLength(0);
     });
   });
 });

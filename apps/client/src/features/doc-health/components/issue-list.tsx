@@ -1,6 +1,8 @@
+import { useState } from "react";
 import {
   ActionIcon,
   Badge,
+  Button,
   Card,
   Center,
   Group,
@@ -10,10 +12,13 @@ import {
   Table,
   Text,
 } from "@mantine/core";
-import { IconExternalLink } from "@tabler/icons-react";
+import { IconDownload, IconExternalLink } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { notifications } from "@mantine/notifications";
+import { saveAs } from "file-saver";
 import Paginate from "@/components/common/paginate";
+import { exportHealthIssues } from "@/features/doc-health/services/doc-health-service";
 import { useHealthIssuesQuery } from "@/features/doc-health/queries/doc-health-query";
 import {
   HealthIssueCategory,
@@ -58,16 +63,46 @@ export default function IssueList({
     { label: t("Broken links"), value: "broken-links" },
   ];
 
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const { blob, filename } = await exportHealthIssues({
+        category,
+        spaceId,
+      });
+      saveAs(blob, filename);
+    } catch (err) {
+      const message =
+        (err as any)?.response?.data?.message ?? t("Export failed");
+      notifications.show({ message, color: "red" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <Stack gap="md">
-      <SegmentedControl
-        value={category}
-        onChange={(value) => {
-          onCategoryChange(value as HealthIssueCategory);
-          onPageChange(1);
-        }}
-        data={segmentData}
-      />
+      <Group justify="space-between" wrap="wrap" gap="sm">
+        <SegmentedControl
+          value={category}
+          onChange={(value) => {
+            onCategoryChange(value as HealthIssueCategory);
+            onPageChange(1);
+          }}
+          data={segmentData}
+        />
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<IconDownload size={14} />}
+          loading={exporting}
+          onClick={handleExport}
+          disabled={!data || data.items.length === 0}
+        >
+          {t("Export CSV")}
+        </Button>
+      </Group>
 
       <Card withBorder padding={0} radius="md">
         {isLoading ? (

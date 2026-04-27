@@ -41,7 +41,7 @@ describe('LinkCheckerService', () => {
 
     it('falls back to GET when HEAD returns 405', async () => {
       const { service } = buildHarness();
-      let calls: string[] = [];
+      const calls: string[] = [];
       service.setFetcher(async (_url, init) => {
         calls.push(init.method);
         if (init.method === 'HEAD')
@@ -55,7 +55,7 @@ describe('LinkCheckerService', () => {
 
     it('falls back to GET when HEAD returns 501', async () => {
       const { service } = buildHarness();
-      let calls: string[] = [];
+      const calls: string[] = [];
       service.setFetcher(async (_url, init) => {
         calls.push(init.method);
         if (init.method === 'HEAD')

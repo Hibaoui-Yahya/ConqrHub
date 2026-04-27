@@ -6,8 +6,10 @@ import {
   HttpStatus,
   NotFoundException,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { FastifyReply } from 'fastify';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
@@ -30,6 +32,7 @@ import {
   AlertSubscription,
   HealthAlertsService,
 } from './services/alerts.service';
+import { KnowledgeGapsService } from './services/knowledge-gaps.service';
 import {
   HealthAlertItem,
   HealthAlertSubscribeDto,
@@ -37,6 +40,8 @@ import {
   HealthIssuesQueryDto,
   HealthTrendQueryDto,
   HealthTrendResponse,
+  KnowledgeGapsQueryDto,
+  KnowledgeGapsResponse,
   SpaceHealthDto,
 } from './dto/doc-health.dto';
 
@@ -48,6 +53,7 @@ export class DocHealthController {
     private readonly issues: HealthIssuesService,
     private readonly snapshots: HealthSnapshotService,
     private readonly alerts: HealthAlertsService,
+    private readonly gaps: KnowledgeGapsService,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly spaceRepo: SpaceRepo,
@@ -186,6 +192,75 @@ export class DocHealthController {
     });
 
     return { points };
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/issues/export')
+  async exportIssues(
+    @Body() input: HealthIssuesQueryDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+    @Res() reply: FastifyReply,
+  ) {
+    const ability = this.workspaceAbility.createForUser(user, workspace);
+    const isWorkspaceAdmin = ability.can(
+      WorkspaceCaslAction.Manage,
+      WorkspaceCaslSubject.Settings,
+    );
+
+    if (input.spaceId) {
+      const space = await this.spaceRepo.findById(input.spaceId, workspace.id);
+      if (!space) {
+        throw new NotFoundException('Space not found');
+      }
+      if (!isWorkspaceAdmin) {
+        const spaceAbility = await this.spaceAbility.createForUser(
+          user,
+          space.id,
+        );
+        if (
+          spaceAbility.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)
+        ) {
+          throw new ForbiddenException();
+        }
+      }
+    } else if (!isWorkspaceAdmin) {
+      throw new ForbiddenException();
+    }
+
+    const csv = await this.issues.exportCsv({
+      workspaceId: workspace.id,
+      category: input.category,
+      spaceId: input.spaceId,
+    });
+
+    const ts = new Date().toISOString().slice(0, 10);
+    const filename = `doc-health-${input.category}-${ts}.csv`;
+    reply
+      .header('content-type', 'text/csv; charset=utf-8')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .send(csv);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/gaps')
+  async getKnowledgeGaps(
+    @Body() input: KnowledgeGapsQueryDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<KnowledgeGapsResponse> {
+    const ability = this.workspaceAbility.createForUser(user, workspace);
+    if (
+      ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
+    ) {
+      throw new ForbiddenException();
+    }
+    return this.gaps.findGaps({
+      workspaceId: workspace.id,
+      days: input.days,
+      minOccurrences: input.minOccurrences,
+      limit: input.limit,
+    });
   }
 
   @HttpCode(HttpStatus.OK)

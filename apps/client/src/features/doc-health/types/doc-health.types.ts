@@ -90,3 +90,22 @@ export interface IHealthAlertSubscribeInput {
   spaceId?: string;
   threshold: number;
 }
+
+export interface IKnowledgeGap {
+  sampleQuestion: string;
+  occurrences: number;
+  lastAskedAt: string;
+  uniqueAskers: number;
+}
+
+export interface IKnowledgeGapsResponse {
+  items: IKnowledgeGap[];
+  rangeDays: number;
+  scannedMessages: number;
+}
+
+export interface IKnowledgeGapsQuery {
+  days?: number;
+  minOccurrences?: number;
+  limit?: number;
+}

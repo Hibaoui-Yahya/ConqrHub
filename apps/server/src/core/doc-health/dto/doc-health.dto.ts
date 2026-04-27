@@ -125,3 +125,38 @@ export type HealthIssuesResponse = {
   limit: number;
   hasMore: boolean;
 };
+
+export class KnowledgeGapsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  days?: number = 30;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2)
+  minOccurrences?: number = 2;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 25;
+}
+
+export type KnowledgeGapItem = {
+  sampleQuestion: string;
+  occurrences: number;
+  lastAskedAt: string;
+  uniqueAskers: number;
+};
+
+export type KnowledgeGapsResponse = {
+  items: KnowledgeGapItem[];
+  rangeDays: number;
+  scannedMessages: number;
+};

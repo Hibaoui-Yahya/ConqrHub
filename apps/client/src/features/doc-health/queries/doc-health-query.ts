@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import {
   getHealthIssues,
   getHealthTrend,
+  getKnowledgeGaps,
   getSpaceHealth,
   getWorkspaceHealth,
   listHealthAlerts,
@@ -24,6 +25,8 @@ import {
   IHealthScore,
   IHealthTrendQuery,
   IHealthTrendResponse,
+  IKnowledgeGapsQuery,
+  IKnowledgeGapsResponse,
   IWorkspaceHealth,
 } from "@/features/doc-health/types/doc-health.types";
 
@@ -115,6 +118,16 @@ export function useSubscribeHealthAlertMutation() {
         (error as any)?.response?.data?.message ?? t("Could not save alert");
       notifications.show({ message, color: "red" });
     },
+  });
+}
+
+export function useKnowledgeGapsQuery(
+  params: IKnowledgeGapsQuery,
+): UseQueryResult<IKnowledgeGapsResponse, Error> {
+  return useQuery({
+    queryKey: ["doc-health", "gaps", params],
+    queryFn: () => getKnowledgeGaps(params),
+    placeholderData: keepPreviousData,
   });
 }
 

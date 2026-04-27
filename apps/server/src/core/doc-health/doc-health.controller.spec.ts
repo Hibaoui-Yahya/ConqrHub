@@ -45,6 +45,13 @@ function buildController() {
     unsubscribe: jest.fn().mockResolvedValue(undefined),
     evaluateForWorkspace: jest.fn().mockResolvedValue({ fired: 0 }),
   };
+  const gaps: any = {
+    findGaps: jest.fn().mockResolvedValue({
+      items: [],
+      rangeDays: 30,
+      scannedMessages: 0,
+    }),
+  };
   const workspaceAbility: any = { createForUser: jest.fn() };
   const spaceAbility: any = { createForUser: jest.fn() };
   const spaceRepo: any = { findById: jest.fn() };
@@ -54,6 +61,7 @@ function buildController() {
     issues,
     snapshots,
     alerts,
+    gaps,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -65,6 +73,7 @@ function buildController() {
     issues,
     snapshots,
     alerts,
+    gaps,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -410,6 +419,54 @@ describe('DocHealthController', () => {
         workspaceId: mockWorkspace.id,
         subscriptionId: 'sub-1',
       });
+    });
+  });
+
+  describe('getKnowledgeGaps', () => {
+    it('returns gaps for a workspace admin', async () => {
+      const { controller, workspaceAbility, gaps } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(adminAbility);
+      gaps.findGaps.mockResolvedValue({
+        items: [
+          {
+            sampleQuestion: 'How do I reset MFA?',
+            occurrences: 5,
+            lastAskedAt: '2026-04-26T00:00:00.000Z',
+            uniqueAskers: 3,
+          },
+        ],
+        rangeDays: 30,
+        scannedMessages: 42,
+      });
+
+      const result = await controller.getKnowledgeGaps(
+        { days: 30, minOccurrences: 2, limit: 25 },
+        mockAdminUser,
+        mockWorkspace,
+      );
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].occurrences).toBe(5);
+      expect(gaps.findGaps).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace.id,
+        days: 30,
+        minOccurrences: 2,
+        limit: 25,
+      });
+    });
+
+    it('rejects a non-admin', async () => {
+      const { controller, workspaceAbility, gaps } = buildController();
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+
+      await expect(
+        controller.getKnowledgeGaps(
+          { days: 30, minOccurrences: 2, limit: 25 },
+          mockUser,
+          mockWorkspace,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(gaps.findGaps).not.toHaveBeenCalled();
     });
   });
 });

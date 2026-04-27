@@ -10,6 +10,8 @@ import { sql } from 'kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/notification.constants';
+import { DomainService } from '../../../integrations/environment/domain.service';
+import { DocHealthDroppedEmail } from '@docmost/transactional/emails/doc-health-dropped-email';
 
 const ALERT_DEDUPE_MS = 24 * 60 * 60 * 1000; // 24h
 const MIN_THRESHOLD = 0;
@@ -32,6 +34,7 @@ export class HealthAlertsService {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly notificationService: NotificationService,
+    private readonly domainService: DomainService,
   ) {}
 
   async listForUser(
@@ -197,13 +200,15 @@ export class HealthAlertsService {
       if (lastFired && lastFired >= dedupeFloor) continue;
 
       try {
-        await this.fire({
+        const delivered = await this.fire({
           userId: sub.userId,
           workspaceId: sub.workspaceId,
           spaceId: sub.spaceId,
           score: latest.score,
           threshold: sub.threshold,
         });
+        if (!delivered) continue;
+
         await this.db
           .updateTable('docHealthAlertSubscriptions')
           .set({ lastFiredAt: now, updatedAt: now })
@@ -227,8 +232,8 @@ export class HealthAlertsService {
     spaceId: string | null;
     score: number;
     threshold: number;
-  }) {
-    await this.notificationService.create({
+  }): Promise<boolean> {
+    const notification = await this.notificationService.create({
       userId: args.userId,
       workspaceId: args.workspaceId,
       type: NotificationType.DOC_HEALTH_DROPPED,
@@ -239,6 +244,58 @@ export class HealthAlertsService {
         scope: args.spaceId ? 'space' : 'workspace',
       },
     });
+    if (!notification) return false;
+
+    const scopeLabel = await this.resolveScopeLabel(
+      args.workspaceId,
+      args.spaceId,
+    );
+    const dashboardUrl = await this.resolveDashboardUrl(args.workspaceId);
+    const subject = `Documentation health for ${scopeLabel} dropped to ${args.score}`;
+
+    await this.notificationService.queueEmail(
+      args.userId,
+      notification.id,
+      subject,
+      DocHealthDroppedEmail({
+        scopeLabel,
+        score: args.score,
+        threshold: args.threshold,
+        dashboardUrl,
+      }),
+      NotificationType.DOC_HEALTH_DROPPED,
+    );
+    return true;
+  }
+
+  private async resolveScopeLabel(
+    workspaceId: string,
+    spaceId: string | null,
+  ): Promise<string> {
+    if (!spaceId) {
+      const ws = await this.db
+        .selectFrom('workspaces')
+        .select('name')
+        .where('id', '=', workspaceId)
+        .executeTakeFirst();
+      return ws?.name ?? 'your workspace';
+    }
+    const space = await this.db
+      .selectFrom('spaces')
+      .select(['name', 'slug'])
+      .where('id', '=', spaceId)
+      .executeTakeFirst();
+    return space?.name ?? space?.slug ?? 'a space';
+  }
+
+  private async resolveDashboardUrl(workspaceId: string): Promise<string> {
+    const ws = await this.db
+      .selectFrom('workspaces')
+      .select('hostname')
+      .where('id', '=', workspaceId)
+      .executeTakeFirst();
+    const base = this.domainService.getUrl(ws?.hostname ?? undefined);
+    return `${base.replace(/\/+$/, '')}/settings/health`;
   }
 
   private async findBy(args: {

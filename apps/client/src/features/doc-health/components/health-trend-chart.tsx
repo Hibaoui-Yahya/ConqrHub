@@ -4,6 +4,7 @@ import {
   Center,
   Group,
   SegmentedControl,
+  Select,
   Stack,
   Text,
 } from "@mantine/core";
@@ -12,8 +13,11 @@ import { useTranslation } from "react-i18next";
 import {
   useHealthTrendQuery,
   useSnapshotHealthNowMutation,
+  useWorkspaceHealthQuery,
 } from "@/features/doc-health/queries/doc-health-query";
 import { IHealthTrendPoint } from "@/features/doc-health/types/doc-health.types";
+
+const WORKSPACE_SCOPE = "__workspace__";
 
 const RANGES: { value: string; days: number; label: string }[] = [
   { value: "7", days: 7, label: "7d" },
@@ -23,27 +27,52 @@ const RANGES: { value: string; days: number; label: string }[] = [
 ];
 
 interface Props {
-  spaceId?: string;
+  scope: string;
+  onScopeChange: (scope: string) => void;
   days: number;
   onDaysChange: (days: number) => void;
 }
 
 export default function HealthTrendChart({
-  spaceId,
+  scope,
+  onScopeChange,
   days,
   onDaysChange,
 }: Props) {
   const { t } = useTranslation();
+  const { data: workspaceHealth } = useWorkspaceHealthQuery();
+  const spaceId = scope === WORKSPACE_SCOPE ? undefined : scope;
   const { data, isLoading } = useHealthTrendQuery({ spaceId, days });
   const snapshotNow = useSnapshotHealthNowMutation();
   const points = data?.points ?? [];
 
+  const scopeOptions = useMemo(
+    () => [
+      { value: WORKSPACE_SCOPE, label: t("Workspace") },
+      ...(workspaceHealth?.spaces ?? []).map((s) => ({
+        value: s.spaceId,
+        label: s.spaceName ?? s.spaceSlug,
+      })),
+    ],
+    [workspaceHealth, t],
+  );
+
   return (
     <Stack gap="xs">
       <Group justify="space-between" wrap="wrap">
-        <Text fw={500} size="sm">
-          {t("Score over time")}
-        </Text>
+        <Group gap="sm" wrap="nowrap">
+          <Text fw={500} size="sm">
+            {t("Score over time")}
+          </Text>
+          <Select
+            size="xs"
+            value={scope}
+            onChange={(v) => v && onScopeChange(v)}
+            data={scopeOptions}
+            comboboxProps={{ withinPortal: false }}
+            w={180}
+          />
+        </Group>
         <Group gap="xs" wrap="nowrap">
           <SegmentedControl
             size="xs"

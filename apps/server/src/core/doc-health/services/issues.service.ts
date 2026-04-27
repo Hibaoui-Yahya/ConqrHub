@@ -69,6 +69,50 @@ export class HealthIssuesService {
     };
   }
 
+  async exportCsv(args: {
+    workspaceId: string;
+    category: HealthIssueCategory;
+    spaceId?: string;
+  }): Promise<string> {
+    const rows = await this.queryByCategory({
+      workspaceId: args.workspaceId,
+      category: args.category,
+      spaceId: args.spaceId,
+      limit: 5000,
+      offset: 0,
+    });
+    const items = rows.map((row) => this.toItem(row, args.category));
+
+    const header = [
+      'category',
+      'severity',
+      'pageId',
+      'pageSlugId',
+      'pageTitle',
+      'spaceSlug',
+      'spaceName',
+      'detail',
+    ];
+    const lines: string[] = [header.join(',')];
+    for (const i of items) {
+      lines.push(
+        [
+          i.category,
+          i.severity,
+          i.pageId,
+          i.pageSlugId,
+          i.pageTitle ?? '',
+          i.spaceSlug,
+          i.spaceName ?? '',
+          i.detail,
+        ]
+          .map(csvEscape)
+          .join(','),
+      );
+    }
+    return lines.join('\n') + '\n';
+  }
+
   private toItem(row: IssueRow, category: HealthIssueCategory): HealthIssueItem {
     let detail = '';
     let severity: 'low' | 'medium' | 'high' = 'medium';
@@ -259,4 +303,12 @@ export class HealthIssuesService {
       .offset(args.offset)
       .execute()) as IssueRow[];
   }
+}
+
+function csvEscape(value: string | number): string {
+  const str = String(value ?? '');
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }

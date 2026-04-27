@@ -99,16 +99,30 @@ A subscription is silent during "insufficient data" periods — if the workspace
 - The Health Center is **gated by Workspace Admin role**, not by an entitlement flag. To restrict it to a paid tier in the future, add a `Feature.DOC_HEALTH` flag and gate the sidebar entry plus controller.
 - Mobile layout is not optimised in this MVP — desktop-first per the broader product position (PRD 26.4).
 
+## Knowledge gaps (v1.4)
+
+The Health page lists recurring questions users have asked the AI assistant in the last 7/30/90 days. A "gap" is two or more user messages that hash to the same normalized content (whitespace + case folded), grouped and ordered by frequency. The intent is to surface "things people keep asking that don't have a good page yet."
+
+The signal is computed on demand from `ai_chat_messages` (no cron, no extra table) — admin opens the page, the controller calls `KnowledgeGapsService.findGaps`, returns top N. Trivially short messages (<6 chars after trim) and assistant/system messages are excluded.
+
+Permission: `POST /api/workspace-health/gaps` is workspace admin/owner only.
+
+## Drop-alert emails (v1.4)
+
+In addition to the in-app notification, drop alerts now queue a transactional email rendered from `DocHealthDroppedEmail`. The email carries the score, threshold, scope label (workspace name or space name), and a one-click link back to `/settings/health`. If the in-app notification is suppressed (deactivated user, missing notification preference), the email is also suppressed and `lastFiredAt` is **not** stamped — so the user gets the next alert on reactivation.
+
+## CSV export of issues (v1.4)
+
+Each issue category exposes an "Export CSV" action that hits `POST /api/workspace-health/issues/export`. The endpoint streams a UTF-8 CSV with a stable header (`category,page_id,page_title,space_name,owner,last_updated_at,detail`). The download filename embeds the category and date, e.g. `doc-health-outdated-2026-04-27.csv`. Permission mirrors the issue list: workspace admin/owner for workspace-wide queries, space admin for queries scoped to their space.
+
 ## Out of scope (next iterations)
 
 | Capability | Tracking |
 |---|---|
-| Email digest of alert events | v1.2 (in-app fires today) |
-| Broken external link detection | v1.3 |
-| Semantic duplicate detection | v1.3 |
+| Semantic duplicate detection | v1.5 |
+| Recommended actions per knowledge gap (Epic 21.3.2) | v1.5 |
 | AI-confidence signal | v2 (depends on AI Search analytics) |
 | Search-success signal | v2 (depends on PRD 20.2 analytics) |
-| Knowledge gap detection | v2 (PRD 21.3) |
 
 ## Required manual steps after pulling this code
 

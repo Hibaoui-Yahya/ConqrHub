@@ -8,6 +8,7 @@ import useUserRole from "@/hooks/use-user-role";
 import HealthAlertCard from "@/features/doc-health/components/health-alert-card";
 import HealthScoreCard from "@/features/doc-health/components/health-score-card";
 import HealthTrendChart from "@/features/doc-health/components/health-trend-chart";
+import KnowledgeGapsCard from "@/features/doc-health/components/knowledge-gaps-card";
 import SpaceScoresTable from "@/features/doc-health/components/space-scores-table";
 import IssueList from "@/features/doc-health/components/issue-list";
 import { useWorkspaceHealthQuery } from "@/features/doc-health/queries/doc-health-query";
@@ -22,6 +23,7 @@ export default function DocHealthPage() {
     useState<HealthIssueCategory>("outdated");
   const [page, setPage] = useState(1);
   const [trendDays, setTrendDays] = useState(30);
+  const [trendScope, setTrendScope] = useState<string>("__workspace__");
 
   if (!isAdmin) {
     return null;
@@ -53,10 +55,17 @@ export default function DocHealthPage() {
         />
 
         <Card withBorder padding="lg" radius="md">
-          <HealthTrendChart days={trendDays} onDaysChange={setTrendDays} />
+          <HealthTrendChart
+            scope={trendScope}
+            onScopeChange={setTrendScope}
+            days={trendDays}
+            onDaysChange={setTrendDays}
+          />
         </Card>
 
         <HealthAlertCard />
+
+        <KnowledgeGapsCard />
 
         <Stack gap="xs">
           <Title order={4}>{t("Spaces")}</Title>

@@ -8,6 +8,8 @@ import {
   IHealthScore,
   IHealthTrendQuery,
   IHealthTrendResponse,
+  IKnowledgeGapsQuery,
+  IKnowledgeGapsResponse,
   IWorkspaceHealth,
 } from "@/features/doc-health/types/doc-health.types";
 
@@ -76,4 +78,27 @@ export async function unsubscribeHealthAlert(
   subscriptionId: string,
 ): Promise<void> {
   await api.post("/workspace-health/alerts/unsubscribe", { subscriptionId });
+}
+
+export async function getKnowledgeGaps(
+  params: IKnowledgeGapsQuery,
+): Promise<IKnowledgeGapsResponse> {
+  const req = await api.post<IKnowledgeGapsResponse>(
+    "/workspace-health/gaps",
+    params,
+  );
+  return req.data;
+}
+
+export async function exportHealthIssues(params: IHealthIssuesQuery): Promise<{
+  blob: Blob;
+  filename: string;
+}> {
+  const res = await api.post("/workspace-health/issues/export", params, {
+    responseType: "blob",
+  });
+  const disposition = (res?.headers?.["content-disposition"] ?? "") as string;
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] ?? `doc-health-${params.category}.csv`;
+  return { blob: res.data as Blob, filename };
 }
