@@ -42,7 +42,7 @@ function retentionToDays(amount: number, unit: RetentionUnit): number {
 export default function TrashRetention() {
   const { t } = useTranslation();
   const hasRetention = useHasFeature(Feature.RETENTION);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
 
   const currentDays = workspace?.trashRetentionDays ?? DEFAULT_RETENTION_DAYS;

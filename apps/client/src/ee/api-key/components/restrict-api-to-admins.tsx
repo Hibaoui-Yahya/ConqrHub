@@ -21,7 +21,7 @@ export default function RestrictApiToAdmins() {
     workspace?.settings?.api?.restrictToAdmins === true,
   );
   const hasAccess = useHasFeature(Feature.API_KEYS);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.checked;

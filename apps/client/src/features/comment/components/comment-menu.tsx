@@ -31,7 +31,7 @@ function CommentMenu({
 }: CommentMenuProps) {
   const { t } = useTranslation();
   const canResolve = useHasFeature(Feature.COMMENT_RESOLUTION);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(2);
 
   //@ts-ignore
   const openDeleteModal = () =>

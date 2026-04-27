@@ -35,7 +35,7 @@ function AllowMemberTemplatesToggle() {
     workspace?.settings?.templates?.allowMemberTemplates === true,
   );
   const hasSecuritySettings = useHasFeature(Feature.SECURITY_SETTINGS);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(2);
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.checked;

@@ -28,7 +28,7 @@ export default function McpSettings() {
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
   const [checked, setChecked] = useState(workspace?.settings?.ai?.mcp);
   const hasAccess = useHasFeature(Feature.MCP);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(4);
 
   const mcpUrl = `${getAppUrl()}/mcp`;
 

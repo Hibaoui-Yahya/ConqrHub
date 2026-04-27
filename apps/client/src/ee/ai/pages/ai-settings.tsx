@@ -20,7 +20,7 @@ export default function AiSettings() {
   const { t } = useTranslation();
   const { isAdmin } = useUserRole();
   const hasAccess = useHasFeature(Feature.AI);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(4);
   const location = useLocation();
   const navigate = useNavigate();
 

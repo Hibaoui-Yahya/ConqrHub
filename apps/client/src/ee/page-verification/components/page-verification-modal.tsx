@@ -86,7 +86,7 @@ export function PageVerificationBadge({
   const { data: verificationInfo, isLoading } = usePageVerificationInfoQuery(
     hasVerificationFeature ? pageId : undefined,
   );
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(6);
 
   if (!pageId) return null;
   if (!hasVerificationFeature) {
@@ -152,7 +152,7 @@ export function PageVerificationMenuItem({
 }: PageVerificationMenuItemProps) {
   const { t } = useTranslation();
   const hasVerificationFeature = useHasFeature(Feature.PAGE_VERIFICATION);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(6);
 
   const { data: verificationInfo } = usePageVerificationInfoQuery(
     hasVerificationFeature ? pageId : undefined,

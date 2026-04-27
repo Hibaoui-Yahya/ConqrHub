@@ -19,7 +19,7 @@ export function MfaSettings() {
   const [disableModalOpen, setDisableModalOpen] = useState(false);
   const [backupCodesModalOpen, setBackupCodesModalOpen] = useState(false);
   const canUseMfa = useHasFeature(Feature.MFA);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
 
   const { data: mfaStatus, isLoading } = useQuery({
     queryKey: ["mfa-status"],

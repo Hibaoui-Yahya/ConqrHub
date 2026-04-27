@@ -37,7 +37,7 @@ export function EnforceSsoToggle({ size, label }: EnforceSsoToggleProps) {
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
   const [checked, setChecked] = useState(workspace?.enforceSso);
   const hasAccess = useHasFeature(Feature.SSO_CUSTOM);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.checked;

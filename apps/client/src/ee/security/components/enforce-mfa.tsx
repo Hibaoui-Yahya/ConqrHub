@@ -44,7 +44,7 @@ export function EnforceMfaToggle({ size, label }: EnforceMfaToggleProps) {
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
   const [checked, setChecked] = useState(workspace?.enforceMfa);
   const hasAccess = useHasFeature(Feature.MFA);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.checked;

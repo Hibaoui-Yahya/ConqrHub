@@ -21,7 +21,7 @@ export default function SpacePublicSharingToggle({
   const [workspace] = useAtom(workspaceAtom);
   const workspaceDisabled = workspace?.settings?.sharing?.disabled === true;
   const hasSharingControls = useHasFeature(Feature.SHARING_CONTROLS);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(7);
   const isDisabled = !hasSharingControls || workspaceDisabled;
   const [checked, setChecked] = useState(
     space.settings?.sharing?.disabled === true,

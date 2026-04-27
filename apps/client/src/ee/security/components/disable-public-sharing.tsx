@@ -34,7 +34,7 @@ function DisablePublicSharingToggle() {
     workspace?.settings?.sharing?.disabled === true,
   );
   const hasSharingControls = useHasFeature(Feature.SHARING_CONTROLS);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(3);
 
   const applyChange = async (value: boolean) => {
     try {

@@ -96,7 +96,7 @@ function ImportFormatSelection({ spaceId, onClose }: ImportFormatSelection) {
 
   const canUseConfluence = useHasFeature(Feature.CONFLUENCE_IMPORT);
   const canUseDocx = useHasFeature(Feature.DOCX_IMPORT);
-  const upgradeLabel = useUpgradeLabel();
+  const upgradeLabel = useUpgradeLabel(5);
 
   const handleZipUpload = async (selectedFile: File, source: string) => {
     if (!selectedFile) {
