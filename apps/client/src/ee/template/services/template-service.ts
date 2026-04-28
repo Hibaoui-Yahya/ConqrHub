@@ -36,7 +36,7 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   await api.post<void>("/templates/delete", { templateId });
 }
 
-export async function useTemplate(data: {
+export async function applyTemplate(data: {
   templateId: string;
   spaceId: string;
   parentPageId?: string;

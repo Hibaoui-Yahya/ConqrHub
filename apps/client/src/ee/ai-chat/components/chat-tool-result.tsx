@@ -1,3 +1,6 @@
+// File exports a small constant alongside the component — splitting it into
+// a separate constants file would be more churn than the Fast Refresh hit is worth.
+/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { IconChevronRight, IconChevronDown } from "@tabler/icons-react";
 import type { AiChatToolCall } from "../types/ai-chat.types";

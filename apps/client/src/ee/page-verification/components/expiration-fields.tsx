@@ -1,3 +1,6 @@
+// File co-locates a few period helpers with the component that uses them.
+// The helpers are exported because two sibling forms also need them.
+/* eslint-disable react-refresh/only-export-components */
 import { Group, NumberInput, Select, Text } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useTranslation } from "react-i18next";

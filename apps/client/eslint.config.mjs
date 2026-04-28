@@ -21,6 +21,15 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // React Compiler / React 19 rules shipped in eslint-plugin-react-hooks v7.
+      // The project is on React 18.3 without the compiler, so these flag patterns
+      // that are correct under React 18. Re-enable when migrating to React 19 +
+      // the compiler; treat that as its own focused cleanup PR.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/purity": "off",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
