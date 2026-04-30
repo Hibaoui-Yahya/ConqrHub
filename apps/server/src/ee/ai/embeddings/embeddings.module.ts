@@ -5,6 +5,7 @@ import { QueueName } from '../../../integrations/queue/constants';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingRepository } from './embedding.repository';
 import { EmbeddingIndexerService } from './embedding-indexer.service';
+import { InsightIndexerService } from './insight-indexer.service';
 import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
 import { EmbeddingsAdminController } from './embeddings-admin.controller';
 import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
@@ -19,9 +20,15 @@ import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-abil
     ChunkingService,
     EmbeddingRepository,
     EmbeddingIndexerService,
+    InsightIndexerService,
     AiEmbeddingQueueProcessor,
     WorkspaceAbilityFactory,
   ],
-  exports: [EmbeddingRepository, EmbeddingIndexerService, ChunkingService],
+  exports: [
+    EmbeddingRepository,
+    EmbeddingIndexerService,
+    InsightIndexerService,
+    ChunkingService,
+  ],
 })
 export class EmbeddingsModule {}

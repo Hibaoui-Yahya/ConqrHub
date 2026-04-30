@@ -1,5 +1,6 @@
 import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
 import { EmbeddingIndexerService } from './embedding-indexer.service';
+import { InsightIndexerService } from './insight-indexer.service';
 import { EmbeddingRepository } from './embedding.repository';
 import { QueueJob } from '../../../integrations/queue/constants';
 import { Job } from 'bullmq';
@@ -42,16 +43,25 @@ function makeRepo(): jest.Mocked<EmbeddingRepository> {
   } as any;
 }
 
+function makeInsightIndexer(): jest.Mocked<InsightIndexerService> {
+  return {
+    indexInsight: jest.fn().mockResolvedValue({ insightId: 'i1', status: 'indexed', chunksIndexed: 1 }),
+    deleteInsightEmbeddings: jest.fn().mockResolvedValue(undefined),
+  } as any;
+}
+
 function makeProcessor(
   overrides: {
     pages?: { id: string }[];
     indexer?: jest.Mocked<EmbeddingIndexerService>;
+    insightIndexer?: jest.Mocked<InsightIndexerService>;
     repo?: jest.Mocked<EmbeddingRepository>;
   } = {},
 ) {
   return new AiEmbeddingQueueProcessor(
     makeDb(overrides.pages),
     overrides.indexer ?? makeIndexer(),
+    overrides.insightIndexer ?? makeInsightIndexer(),
     overrides.repo ?? makeRepo(),
   );
 }
@@ -214,6 +224,44 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
 
       // p2 never reached because p1 threw and we rethrew immediately
       expect(indexer.indexPage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Expert insight jobs ───────────────────────────────────────────────────
+
+  describe('GENERATE_INSIGHT_EMBEDDINGS', () => {
+    it('calls insightIndexer.indexInsight with correct args', async () => {
+      const insightIndexer = makeInsightIndexer();
+      const proc = makeProcessor({ insightIndexer });
+
+      await proc.process(makeJob(QueueJob.GENERATE_INSIGHT_EMBEDDINGS, {
+        insightId: 'i1', workspaceId: 'ws', spaceId: 'sp',
+      }));
+
+      expect(insightIndexer.indexInsight).toHaveBeenCalledWith('i1', 'ws', 'sp');
+    });
+
+    it('re-throws when indexInsight fails (allows queue retry)', async () => {
+      const insightIndexer = makeInsightIndexer();
+      insightIndexer.indexInsight.mockRejectedValue(new Error('AI down'));
+      const proc = makeProcessor({ insightIndexer });
+
+      await expect(
+        proc.process(makeJob(QueueJob.GENERATE_INSIGHT_EMBEDDINGS, {
+          insightId: 'i1', workspaceId: 'ws', spaceId: 'sp',
+        })),
+      ).rejects.toThrow('AI down');
+    });
+  });
+
+  describe('DELETE_INSIGHT_EMBEDDINGS', () => {
+    it('calls insightIndexer.deleteInsightEmbeddings with the insightId', async () => {
+      const insightIndexer = makeInsightIndexer();
+      const proc = makeProcessor({ insightIndexer });
+
+      await proc.process(makeJob(QueueJob.DELETE_INSIGHT_EMBEDDINGS, { insightId: 'i99' }));
+
+      expect(insightIndexer.deleteInsightEmbeddings).toHaveBeenCalledWith('i99');
     });
   });
 

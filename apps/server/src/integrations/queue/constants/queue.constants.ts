@@ -64,6 +64,9 @@ export enum QueueJob {
   GENERATE_PAGE_EMBEDDINGS = 'generate-page-embeddings',
   DELETE_PAGE_EMBEDDINGS = 'delete-page-embeddings',
 
+  GENERATE_INSIGHT_EMBEDDINGS = 'generate-insight-embeddings',
+  DELETE_INSIGHT_EMBEDDINGS = 'delete-insight-embeddings',
+
   PAGE_HISTORY = 'page-history',
 
   COMMENT_NOTIFICATION = 'comment-notification',

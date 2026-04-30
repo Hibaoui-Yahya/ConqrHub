@@ -23,6 +23,7 @@ import { WatcherModule } from './watcher/watcher.module';
 import { FavoriteModule } from './favorite/favorite.module';
 import { SessionModule } from './session/session.module';
 import { DocHealthModule } from './doc-health/doc-health.module';
+import { ExpertInsightsModule } from './expert-insights/expert-insights.module';
 import { ClsMiddleware } from 'nestjs-cls';
 
 @Module({
@@ -44,6 +45,7 @@ import { ClsMiddleware } from 'nestjs-cls';
     WatcherModule,
     SessionModule,
     DocHealthModule,
+    ExpertInsightsModule,
   ],
 })
 export class CoreModule implements NestModule {

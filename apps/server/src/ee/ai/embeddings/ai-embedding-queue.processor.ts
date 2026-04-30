@@ -3,6 +3,7 @@ import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { EmbeddingIndexerService } from './embedding-indexer.service';
+import { InsightIndexerService } from './insight-indexer.service';
 import { EmbeddingRepository } from './embedding.repository';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
@@ -20,6 +21,12 @@ interface SpaceJobPayload {
   spaceId: string;
 }
 
+interface InsightJobPayload {
+  insightId: string;
+  workspaceId: string;
+  spaceId: string;
+}
+
 @Processor(QueueName.AI_QUEUE)
 export class AiEmbeddingQueueProcessor
   extends WorkerHost
@@ -30,6 +37,7 @@ export class AiEmbeddingQueueProcessor
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly indexer: EmbeddingIndexerService,
+    private readonly insightIndexer: InsightIndexerService,
     private readonly repo: EmbeddingRepository,
   ) {
     super();
@@ -87,6 +95,35 @@ export class AiEmbeddingQueueProcessor
         const { spaceId } = job.data as SpaceJobPayload;
         await this.repo.deleteBySpace(spaceId);
         this.logger.debug(`Deleted embeddings for space ${spaceId}`);
+        break;
+      }
+
+      case QueueJob.GENERATE_INSIGHT_EMBEDDINGS: {
+        const { insightId, workspaceId, spaceId } =
+          job.data as InsightJobPayload;
+        try {
+          const result = await this.insightIndexer.indexInsight(
+            insightId,
+            workspaceId,
+            spaceId,
+          );
+          if (result.status === 'indexed') {
+            this.logger.debug(
+              `Indexed insight ${insightId}: ${result.chunksIndexed} chunk(s)`,
+            );
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Failed to index insight ${insightId}: ${msg}`);
+          throw err;
+        }
+        break;
+      }
+
+      case QueueJob.DELETE_INSIGHT_EMBEDDINGS: {
+        const { insightId } = job.data as Pick<InsightJobPayload, 'insightId'>;
+        await this.insightIndexer.deleteInsightEmbeddings(insightId);
+        this.logger.debug(`Deleted embeddings for insight ${insightId}`);
         break;
       }
 

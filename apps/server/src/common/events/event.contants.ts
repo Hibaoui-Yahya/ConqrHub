@@ -15,4 +15,10 @@ export enum EventName {
   WORKSPACE_CREATED = 'workspace.created',
   WORKSPACE_UPDATED = 'workspace.updated',
   WORKSPACE_DELETED = 'workspace.deleted',
+
+  INSIGHT_CREATED = 'insight.created',
+  INSIGHT_UPDATED = 'insight.updated',
+  INSIGHT_PUBLISHED = 'insight.published',
+  INSIGHT_RETIRED = 'insight.retired',
+  INSIGHT_DELETED = 'insight.deleted',
 }

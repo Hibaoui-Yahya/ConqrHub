@@ -25,6 +25,7 @@ import { WatcherRepo } from '@docmost/db/repos/watcher/watcher.repo';
 import { FavoriteRepo } from '@docmost/db/repos/favorite/favorite.repo';
 import { TemplateRepo } from '@docmost/db/repos/template/template.repo';
 import { PageListener } from '@docmost/db/listeners/page.listener';
+import { ExpertInsightsListener } from '@docmost/db/listeners/expert-insights.listener';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { normalizePostgresUrl } from '../common/helpers';
@@ -87,6 +88,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     WatcherRepo,
     TemplateRepo,
     PageListener,
+    ExpertInsightsListener,
   ],
   exports: [
     WorkspaceRepo,

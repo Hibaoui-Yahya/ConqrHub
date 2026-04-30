@@ -7,6 +7,7 @@ export enum UserRole {
 export enum SpaceRole {
   ADMIN = 'admin', // can manage space settings, members, and delete space
   WRITER = 'writer', // can read and write pages in space
+  EXPERT = 'expert', // can read pages + create/publish/retire expert insights
   READER = 'reader', // can only read pages in space
 }
 
