@@ -4,6 +4,15 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { sql } from 'kysely';
 import { AiSourceKind } from '@docmost/db/types/embeddings.types';
 
+export interface SimilarityResult {
+  sourceKind: AiSourceKind;
+  sourceId: string;
+  chunkIndex: number;
+  chunkText: string;
+  metadata: Record<string, unknown> | null;
+  score: number;
+}
+
 export interface EmbeddingChunkInsert {
   chunkIndex: number;
   chunkText: string;
@@ -151,6 +160,60 @@ export class EmbeddingRepository {
       .deleteFrom('aiEmbeddings')
       .where('spaceId', '=', spaceId)
       .execute();
+  }
+
+  /**
+   * Cosine similarity search using pgvector's <=> operator.
+   * Returns top-K chunks ordered from most to least relevant (score: 0–1).
+   */
+  async similaritySearch(opts: {
+    workspaceId: string;
+    queryEmbedding: number[];
+    spaceId?: string;
+    sourceKind?: AiSourceKind;
+    sourceId?: string;
+    topK?: number;
+  }): Promise<SimilarityResult[]> {
+    const { workspaceId, queryEmbedding, spaceId, sourceKind, sourceId } = opts;
+    const topK = opts.topK ?? 8;
+    const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+
+    const rows: Array<{
+      sourceKind: string;
+      sourceId: string;
+      chunkIndex: number;
+      chunkText: string;
+      metadata: unknown;
+      score: number;
+    }> = await (this.db as any)
+      .selectFrom('aiEmbeddings')
+      .select([
+        'sourceKind',
+        'sourceId',
+        'chunkIndex',
+        'chunkText',
+        'metadata',
+        sql`1 - (embedding <=> ${sql.raw(`'${vectorLiteral}'`)}::vector)`.as('score'),
+      ])
+      .where('workspaceId', '=', workspaceId)
+      .$if(!!spaceId, (qb: any) => qb.where('spaceId', '=', spaceId))
+      .$if(!!sourceKind, (qb: any) => qb.where('sourceKind', '=', sourceKind))
+      .$if(!!sourceId, (qb: any) => qb.where('sourceId', '=', sourceId))
+      .orderBy(
+        sql`embedding <=> ${sql.raw(`'${vectorLiteral}'`)}::vector`,
+        'asc',
+      )
+      .limit(topK)
+      .execute();
+
+    return rows.map((r) => ({
+      sourceKind: r.sourceKind as AiSourceKind,
+      sourceId: r.sourceId,
+      chunkIndex: r.chunkIndex,
+      chunkText: r.chunkText,
+      metadata: r.metadata as Record<string, unknown> | null,
+      score: Number(r.score),
+    }));
   }
 
   /**
