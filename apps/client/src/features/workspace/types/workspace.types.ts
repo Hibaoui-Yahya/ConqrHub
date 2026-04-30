@@ -91,9 +91,3 @@ export interface IPublicWorkspace {
   enforceSso: boolean;
   authProviders: IAuthProvider[];
 }
-
-export interface IVersion {
-  currentVersion: string;
-  latestVersion: string;
-  releaseUrl: string;
-}

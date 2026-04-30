@@ -7,7 +7,6 @@ import {
   IAcceptInvite,
   IPublicWorkspace,
   IInvitationLink,
-  IVersion,
 } from "../types/workspace.types";
 import { IPagination, QueryParams } from "@/lib/types.ts";
 import { ISetupWorkspace } from "@/features/auth/types/auth.types.ts";
@@ -118,7 +117,3 @@ export async function createWorkspace(
   return req.data;
 }
 
-export async function getAppVersion(): Promise<IVersion> {
-  const req = await api.post("/version");
-  return req.data;
-}

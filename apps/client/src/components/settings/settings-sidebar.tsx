@@ -31,7 +31,6 @@ import {
   prefetchApiKeys,
   prefetchBilling,
   prefetchGroups,
-  prefetchLicense,
   prefetchShares,
   prefetchSpaces,
   prefetchSsoProviders,
@@ -39,7 +38,6 @@ import {
   prefetchAuditLogs,
   prefetchVerifiedPages,
 } from "@/components/settings/settings-queries.tsx";
-import AppVersion from "@/components/settings/app-version.tsx";
 import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
@@ -133,16 +131,6 @@ const groupedData: DataGroup[] = [
       },
     ],
   },
-  {
-    heading: "System",
-    items: [
-      {
-        label: "License & Edition",
-        icon: IconKey,
-        path: "/settings/license",
-      },
-    ],
-  },
 ];
 
 export default function SettingsSidebar() {
@@ -177,10 +165,6 @@ export default function SettingsSidebar() {
   };
 
   const menuItems = groupedData.map((group) => {
-    if (group.heading === "System" && (!isAdmin || isCloud())) {
-      return null;
-    }
-
     return (
       <div key={group.heading}>
         <Text c="dimmed" className={classes.linkHeader}>
@@ -204,11 +188,6 @@ export default function SettingsSidebar() {
               break;
             case "Billing":
               prefetchHandler = prefetchBilling;
-              break;
-            case "License & Edition":
-              if (entitlements?.tier !== "free") {
-                prefetchHandler = prefetchLicense;
-              }
               break;
             case "Security & SSO":
               prefetchHandler = prefetchSsoProviders;
@@ -299,8 +278,6 @@ export default function SettingsSidebar() {
       </Group>
 
       <ScrollArea w="100%">{menuItems}</ScrollArea>
-
-      {!isCloud() && <AppVersion />}
 
       {isCloud() && (
         <div className={classes.text}>
