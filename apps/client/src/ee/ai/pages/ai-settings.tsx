@@ -64,7 +64,7 @@ export default function AiSettings() {
               mb="lg"
             >
               {t(
-                "AI is only available in the ConqrAI Wiki enterprise edition. Contact support@conqrai.com.",
+                "AI is only available in the ConqrHub enterprise edition. Contact support@conqrai.com.",
               )}
             </Alert>
           )}

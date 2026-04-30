@@ -19,10 +19,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           }}
         >
           Conqr
-          <span style={{ color: "#3FC1F2", fontStyle: "italic" }}>AI</span>
-          <span style={{ fontSize: "20px", fontWeight: 400, marginLeft: "4px" }}>
-            {" "}Wiki
-          </span>
+          <span style={{ color: "#3FC1F2", fontStyle: "italic" }}>Hub</span>
         </Text>
       </Group>
       {children}

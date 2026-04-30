@@ -35,10 +35,6 @@ import {
 import { NotificationPopover } from "@/features/notification/components/notification-popover.tsx";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 
-const links = [
-  { link: APP_ROUTE.HOME, label: "Home" },
-];
-
 export function AppHeader() {
   const { t } = useTranslation();
   const [mobileOpened] = useAtom(mobileSidebarAtom);
@@ -53,12 +49,6 @@ export function AppHeader() {
   const aiChatEnabled = workspace?.settings?.ai?.chat === true;
 
   const isPageRoute = location.pathname.includes("/p/");
-
-  const items = links.map((link) => (
-    <Link key={link.label} to={link.link} className={classes.link}>
-      {t(link.label)}
-    </Link>
-  ));
 
   return (
     <>
@@ -84,11 +74,11 @@ export function AppHeader() {
             />
           </Tooltip>
 
-          <Link to="/home" className={classes.brand} aria-label="ConqrAI Wiki">
+          <Link to="/home" className={classes.brand} aria-label="ConqrHub">
             <Box hiddenFrom="sm" className={classes.brandIcon}>
               <img
                 src="/icons/favicon-32x32.png"
-                alt="ConqrAI Wiki"
+                alt="ConqrHub"
                 width={22}
                 height={22}
               />
@@ -99,14 +89,9 @@ export function AppHeader() {
               style={{ userSelect: "none", fontFamily: "'Playfair Display', 'Newsreader', serif" }}
               visibleFrom="sm"
             >
-              Conqr<span style={{ color: "#3FC1F2", fontStyle: "italic" }}>AI</span>
-              <span style={{ fontSize: "14px", fontWeight: 400, marginLeft: "4px" }}> Wiki</span>
+              Conqr<span style={{ color: "#3FC1F2", fontStyle: "italic" }}>Hub</span>
             </Text>
           </Link>
-
-          <Group ml={50} gap={5} className={classes.links} visibleFrom="sm">
-            {items}
-          </Group>
         </Group>
 
         <div>

@@ -51,7 +51,7 @@ export default function McpSettings() {
       {!hasAccess && (
         <Alert icon={<IconInfoCircle />} title={upgradeLabel} color="blue">
           {t(
-            "MCP is only available in the ConqrAI Wiki enterprise edition. Contact support@conqrai.com.",
+            "MCP is only available in the ConqrHub enterprise edition. Contact support@conqrai.com.",
           )}
         </Alert>
       )}
