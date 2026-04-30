@@ -19,7 +19,7 @@ Constraints driving the decision:
 
 ## Decision
 
-**Use pgvector as the v1 vector store.** All embeddings live in `ai_page_embeddings` (later `ai_embeddings` once Branch 7 generalizes the schema) in the same Postgres instance as the rest of the application data.
+**Use pgvector as the v1 vector store.** All embeddings live in `ai_embeddings` in the same Postgres instance as the rest of the application data. The table is source-agnostic from inception (Branch 2): a `source_kind` enum (`page` | `expert_insight` | `external_document`) plus a `source_id` uuid lets pages, Expert Insights (Branch 3), and external integration documents (Branch 11) share one index without a later rename or column-add.
 
 - Indexing strategy: **HNSW** with cosine distance. IVFFlat considered and rejected — HNSW gives better recall/latency on the workspace-size distribution we expect, and pgvector ≥ 0.5 ships HNSW by default.
 - Embedding dimension: **1024** (mistral-embed default; see ADR 0002).
