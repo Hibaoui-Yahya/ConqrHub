@@ -1,11 +1,13 @@
 # ConqrHub — Master Implementation Plan
 
-> **Status:** Draft v2 — proposal for review
+> **Status:** Draft v3 — proposal for review
 > **Last updated:** 2026-04-30
 > **Owner:** Yahya Hibaoui
 > **Audience:** Engineering, product, AI workstream reviewers
 >
-> **v2 changes (2026-04-30):** Expert Insights repositioned as a core differentiator (P0). Insights Core moved up to Branch 3 — before Hybrid Retrieval and Answers. AI Answers v1 cites both pages and insights from day one; the previously separate "insights-rag-boost" branch dissolves into Answers. Vector table renamed `ai_embeddings` with `source_kind` (`page` | `expert_insight` | `external_document`) + `source_id` from inception. v1 insight scope simplified: text only, four types (warning / correction / notice / recommendation), draft / published / retired status, page or span anchor, Expert/Admin permissions. Multimedia insights deferred to Branch 12 (multimodal).
+> **v3 changes (2026-04-30):** Added a first-class **Migration & Import Hub** (Branch 4) for one-time bulk migration from external platforms (Notion / Confluence / Markdown / HTML / DOCX / Drive / SharePoint) into ConqrHub. Sharpens the distinction between **Migration** (one-time, file-based, B4) and **Integration** (continuous sync, B12). New branch slots between Expert Insights Core (B3) and Hybrid Retrieval (B5, was B4). Existing `file_tasks` scaffolding extended rather than replaced. Subsequent branches renumbered.
+>
+> **v2 changes (2026-04-30):** Expert Insights repositioned as a core differentiator (P0). Insights Core moved up to Branch 3 — before Hybrid Retrieval and Answers. AI Answers v1 cites both pages and insights from day one; the previously separate "insights-rag-boost" branch dissolves into Answers. Vector table renamed `ai_embeddings` with `source_kind` (`page` | `expert_insight` | `external_document`) + `source_id` from inception. v1 insight scope simplified: text only, four types (warning / correction / notice / recommendation), draft / published / retired status, page or span anchor, Expert/Admin permissions. Multimedia insights deferred to Branch 13 (multimodal).
 
 This document is the source-of-truth roadmap for evolving ConqrHub from a wiki into a permission-safe, citation-grounded enterprise knowledge intelligence platform. It defines the target architecture, the branch-by-branch delivery plan, and the acceptance criteria each PR must hit.
 
@@ -40,7 +42,7 @@ This document is the source-of-truth roadmap for evolving ConqrHub from a wiki i
 
 **ConqrHub is an enterprise knowledge intelligence platform** — a permission-safe, citation-grounded knowledge brain that serves humans, AI agents, and external apps from a single source of truth. The wiki layer is the substrate; the differentiating value is the **trusted-answer layer** built on top: hybrid retrieval, expert-verified insights, hallucination control, traceable citations, and agent-safe APIs.
 
-**Strategic direction.** v1 ships a high-accuracy RAG over text pages **and Expert Insights** with Mistral, hybrid retrieval (vector + Postgres FTS), MMR + reranking, dual-source citations (pages + insights), refusal logic, and full audit. Expert Insights are the differentiator — verified human knowledge that overrides stale pages. v2 layers AI Chat (UI already scaffolded), Agent Gateway, and MCP. v3 expands to multimodal ingestion (PDF → audio/video, including multimedia insights) and external integrations (Confluence/Jira/Drive/SharePoint).
+**Strategic direction.** v1 ships a high-accuracy RAG over text pages **and Expert Insights** with Mistral, hybrid retrieval (vector + Postgres FTS), MMR + reranking, dual-source citations (pages + insights), refusal logic, and full audit. Expert Insights are the differentiator — verified human knowledge that overrides stale pages. A **Migration & Import Hub** lets customers move from Notion / Confluence / Markdown / HTML / DOCX into ConqrHub before they evaluate the AI surface, so trials don't start empty. v2 layers AI Chat (UI already scaffolded), Agent Gateway, and MCP. v3 expands to **continuous integrations** (different from migration — Confluence/Jira/Drive/SharePoint with live sync) and multimodal ingestion (PDF → audio/video, including multimedia insights).
 
 **Main technical goal.** Ship a production-grade, permission-enforcing RAG pipeline that doc-health can trust (so `AI_CONFIDENCE_WEIGHT` flips from 0 → 0.10) without overbuilding — and where Experts can already correct AI behavior on day one. Every branch is independently mergeable, gated by env, and revertable.
 
@@ -73,15 +75,16 @@ This document is the source-of-truth roadmap for evolving ConqrHub from a wiki i
 
 1. No vector store, no embeddings indexed — Branch 2.
 2. No retrieval pipeline (hybrid, MMR, rerank) — Branches 3–4.
-3. No grounded-answer endpoint — Branch 5.
+3. No grounded-answer endpoint — Branch 7.
 4. No Expert Insight model — Branches 6–7.
 5. AI Chat backend has no RAG grounding despite confidence columns existing — Branch 9.
 6. `api_keys` table is dead — no service, no scoped retrieval endpoint, no audit — Branch 10.
 7. No MCP server, no agent gateway — Branch 11.
 8. No external integrations (Confluence/Jira/Drive…) — Branch 12.
-9. No multimodal ingestion — Branch 12.
-10. No retrieval evaluation framework or golden dataset — Branch 8.
-11. Mistral is not a first-class driver (works via openai-compatible but no defaults / docs) — Branch 1.
+9. No multimodal ingestion — Branch 13.
+10. **No migration / import hub for moving in from Notion / Confluence / Markdown / etc. — Branch 4.**
+11. No retrieval evaluation framework or golden dataset — Branch 8.
+12. Mistral is not a first-class driver (works via openai-compatible but no defaults / docs) — Branch 1.
 
 ---
 
@@ -98,7 +101,8 @@ This document is the source-of-truth roadmap for evolving ConqrHub from a wiki i
 | AI Chat | Multi-turn grounded chat | All | UI scaffolded; backend stub | RAG-grounded backend | Branch 9 | **P1** |
 | RAG Engine | Retrieval orchestration | Internal | Missing | Full pipeline | Branches 2–4 | **P0** |
 | Embeddings | Vector index of content | Internal | Missing | pgvector + indexer | Branch 2 | **P0** |
-| Integrations Hub | External knowledge ingest | Admin | Missing | Connectors framework | Branch 12 | P2 |
+| **Migration & Import Hub** | **One-time bulk move from another platform — adoption-critical** | **Admin, Knowledge Owner** | **Scaffolding (`file_tasks` table; Markdown + HTML processors; attachment service)** | **Wizard UI; dry-run; conflict/duplicate detection; link rewriting; reports; retry; Notion + Confluence + DOCX adapters; audit; post-import indexing** | **Branch 4** | **P0** |
+| Integrations Hub (continuous sync) | External knowledge ingest with live updates | Admin | Missing | Connectors framework | Branch 13 | P2 |
 | API Layer | External REST | Apps, Agents | `api_keys` table only | Service/controller/scopes | Branch 10 | **P1** |
 | MCP Server | Agent-native protocol | Agents | Missing | Full server | Branch 11 | **P1** |
 | Agent Gateway | Scoped service accounts | Apps, Agents | Missing | Auth + rate limits + audit | Branch 10 | **P1** |
@@ -155,12 +159,21 @@ flowchart TB
     VER[Verifier + citations + confidence]
   end
 
+  subgraph MIGRATE[Migration & Import Hub — one-time]
+    UPLOAD[Admin uploads export ZIP]
+    ADAPT[Format adapter: MD/HTML/Notion/Confluence/DOCX]
+    NORM[Normalizer to ProseMirror]
+    HIER[Hierarchy + link resolver]
+    DRYRUN[Dry-run report]
+    APPLY[Apply pages + attachments]
+  end
+
   subgraph INGEST[Ingestion + Indexing]
     HOOK[Page save hook]
     EXTR[Text extractor]
     CHK[Chunker]
     EMB[Mistral embed]
-    CONNECT[Integration connectors]
+    CONNECT[Integration connectors — continuous]
   end
 
   subgraph OBS[Observability]
@@ -180,6 +193,9 @@ flowchart TB
   PAGE --> HOOK --> EXTR --> CHK --> EMB --> SEARCH_VEC
   INSIGHT --> EMB
   CONNECT --> EXTR
+  UPLOAD --> ADAPT --> NORM --> HIER --> DRYRUN --> APPLY --> PAGE
+  APPLY -. triggers .-> HOOK
+  APPLY --> AUDIT
   RAG --> GEN --> VER --> OBS
   RAG --> AUDIT
   DOC_HEALTH -. consumes confidence .-> VER
@@ -257,7 +273,7 @@ Retrieved chunks carry their `source_kind` (`page` | `expert_insight` | `externa
 - **System prompt invariant.** "Answer ONLY using the provided sources. If insufficient, say you don't know."
 - **Verifier.** Runs after generation, scores per-claim faithfulness, drops or flags claims unsupported by cited chunks.
 - **Citation enforcement.** Every assertive sentence must carry at least one `[n]` marker tied to a retrieved chunk; un-cited sentences are stripped or trigger refusal.
-- **Refusal-first design.** Better to say "I don't know" than to bluff. Refusal correctness is a tracked metric (Branch 7).
+- **Refusal-first design.** Better to say "I don't know" than to bluff. Refusal correctness is a tracked metric (Branch 8).
 
 ### Citation strategy
 
@@ -290,7 +306,7 @@ flowchart LR
 
 | Aspect | v1 | Deferred |
 |--------|----|----------|
-| Content | Text only (title + body) | Images, video, audio, file attachments — Branch 12 |
+| Content | Text only (title + body) | Images, video, audio, file attachments — Branch 13 |
 | Insight types | `warning`, `correction`, `notice`, `recommendation` | `explanation`, `clarification`, `best_practice`, `risk`, `compliance`, `operational` — v2 |
 | Anchor | Page (`page_id`) or page + text span (`{page_id, span: [start,end]}`) | Chunk anchor, AI-answer anchor — v2 |
 | Status | `draft` / `published` / `retired` | Multi-stage review queue — v2 |
@@ -304,7 +320,7 @@ flowchart LR
 
 Indexes: `(workspace_id, page_id)`, `(workspace_id, status)`, GIN on `tsv`.
 
-**Out of v1.** No `expert_insight_media` table; no `expert_insight_links` table. Both arrive in Branch 12 (multimodal) along with the broader anchor model. Keeping the v1 schema lean avoids prematurely committing to a generalized link model.
+**Out of v1.** No `expert_insight_media` table; no `expert_insight_links` table. Both arrive in Branch 13 (multimodal) along with the broader anchor model. Keeping the v1 schema lean avoids prematurely committing to a generalized link model.
 
 ### Lifecycle
 
@@ -318,10 +334,10 @@ Indexes: `(workspace_id, page_id)`, `(workspace_id, status)`, GIN on `tsv`.
 
 - Branch 3 indexes insights into `ai_embeddings` with `source_kind='expert_insight'`. No separate "boost" branch.
 - Branch 4 (Hybrid retrieval) retrieves over **all** `source_kind` values; `ai_embeddings` is source-agnostic.
-- Branch 5 (MMR + rerank) is source-kind-aware: chunk headers include the source kind so the reranker can upweight insights, and MMR diversifies across kinds.
-- Branch 6 (AI Answers) prompt template explicitly instructs: "Where an expert insight contradicts a page, prefer the insight and cite it." Confidence scorer treats insights as higher-quality sources. UI shows insights in a dedicated "Expert says:" block above sources.
+- Branch 6 (MMR + rerank) is source-kind-aware: chunk headers include the source kind so the reranker can upweight insights, and MMR diversifies across kinds.
+- Branch 7 (AI Answers) prompt template explicitly instructs: "Where an expert insight contradicts a page, prefer the insight and cite it." Confidence scorer treats insights as higher-quality sources. UI shows insights in a dedicated "Expert says:" block above sources.
 
-### Why insights ship before retrieval (Branch 3, not Branch 6+)
+### Why insights ship before retrieval (Branch 3, not Branch 7+)
 
 - Insights are part of the trust story, not a v1.5 boost. The first answer the system ever produces should be allowed to cite an insight.
 - The schema (`source_kind` + `source_id`) is the same whether or not insights exist, but committing to it before retrieval ships means no migration churn later.
@@ -373,6 +389,22 @@ type PermissionScope = {
 ---
 
 ## 8. Integration architecture
+
+> **Migration vs Integration — the distinction matters.**
+>
+> | | Migration (Branch 4) | Integration (Branch 13) |
+> |---|----------------------|--------------------------|
+> | **Mode** | One-time bulk move | Continuous sync |
+> | **Trigger** | Admin uploads export file (ZIP / archive) | Connector watches source via OAuth + webhooks/polling |
+> | **Source of truth** | ConqrHub becomes the source of truth — original platform may go cold | External platform stays the source of truth — ConqrHub mirrors |
+> | **Data shape** | Imported pages become native `pages` rows owned by a ConqrHub space | Indexed content stays as `integration_documents` (read-only mirror) and `source_kind='external_document'` |
+> | **User intent** | "Move us off Notion onto ConqrHub" | "Let our team use Confluence and ConqrHub side-by-side; we want our AI to know both" |
+> | **ACL** | Pages adopt ConqrHub permissions at import time | Per-record ACL mapper preserves source-side ACL on every sync |
+> | **Idempotency** | Re-running creates new pages (or fails on duplicate detection) | Re-running syncs deltas |
+>
+> Both paths feed the same `ai_embeddings` index, but they create fundamentally different rows: migration produces editable native pages; integration produces mirrored documents. Branch 4 (Migration Hub) and Branch 13 (Integrations) are independent workstreams that share the indexing pipeline but nothing else.
+
+### Continuous integrations (Branch 13)
 
 Connectors push content into a unified `integration_documents` staging table → text extractor → chunker → embedder → `ai_embeddings` (with `source_kind='external_document'`).
 
@@ -459,7 +491,9 @@ Every API/MCP call writes to `rag_audit_events` (or sibling `api_audit_events` f
 
 > **Branch base policy.** Each branch builds on the previous unmerged branch (stacked PRs) until merged. Once merged to `main`, subsequent branches rebase off `main`. Document the parent in the PR description.
 >
-> **v2 reorder.** Expert Insights Core (formerly B6) moves up to **B3**, before Hybrid Retrieval. The previously separate "insights-rag-boost" branch dissolves: every retrieval branch (B4 hybrid, B5 MMR/rerank, B6 Answers) is insight-aware from day one because the schema uses `source_kind` from inception. Total branches: 13 (was 14).
+> **v3 reorder (this revision).** Inserted **Branch 4 — `feat/migration-import-hub`** between Insights Core (B3) and Hybrid Retrieval. Migration is a one-time, file-based, adoption-critical workflow distinct from continuous integrations (Branch 12, was B11). Subsequent branches renumbered. Total branches: **14** (was 13). Existing `file_tasks` scaffolding is extended, not replaced.
+>
+> **v2 reorder.** Expert Insights Core (formerly B6) moves up to **B3**, before Hybrid Retrieval. The previously separate "insights-rag-boost" branch dissolves: every retrieval branch (B5 hybrid, B6 MMR/rerank, B7 Answers) is insight-aware from day one because the schema uses `source_kind` from inception.
 
 ### Branch 0 — `docs/conqrhub-master-plan` ✅ Done
 
@@ -515,7 +549,22 @@ Every API/MCP call writes to `rag_audit_events` (or sibling `api_audit_events` f
 | AC | Expert can create a `warning` insight on a page and publish it; non-expert receives 403; published insight produces a row in `ai_embeddings` with `source_kind='expert_insight'`; retiring the insight removes it from `ai_embeddings` |
 | Manual | Create warning insight on test page; publish; verify appears in side panel; verify embedding row exists; retire; verify embedding row removed |
 
-### Branch 4 — `feat/rag-hybrid-retrieval`
+### Branch 4 — `feat/migration-import-hub` 🆕 (one-time bulk migration)
+
+| | |
+|---|---|
+| Why now | Migration is adoption-critical: customers must move existing knowledge in before they evaluate the AI surface. Trials starting empty don't convert. The branch sits before Hybrid Retrieval (B5) so that by the time RAG ships in B7, customers can already point at a populated workspace. |
+| Goal | One-time, file-based bulk migration from Notion / Confluence / Markdown / HTML / DOCX exports into ConqrHub with: wizard UI for Admin/Knowledge Owner, dry-run preview, hierarchy preservation, metadata preservation, attachment upload, internal-link rewriting, conflict/duplicate detection, progress tracking, per-item retry, full audit, and post-import search + embedding indexing. **Distinct from** continuous integrations (Branch 12, see §8). |
+| Scope | **Backend** in `core/migration-import/`: format adapter interface (`ImportAdapter`); concrete adapters — `markdown-zip`, `html-zip` (extending existing `import.service.ts`), `notion-zip`, `confluence-zip`, `docx` (via `mammoth`). Normalizer (adapter output → ProseMirror JSON via existing `markdownToHtml` and `htmlToProseMirror`). Hierarchy resolver (folder/page tree → spaces + pages). Link resolver (two-pass: collect external IDs, rewrite to internal page slugs). Conflict detector (slug collision, title duplicates with fuzzy match, capped). Job runner extending existing `file_tasks` (BullMQ, dry-run vs live mode). Reporter (per-item status, warnings, unsupported blocks, unresolved links). Retry (re-runs only `failed` items, preserves successful). Permission gate: `Migration` CASL subject; only Admin and Knowledge Owner roles can launch. Post-import hooks: enqueue search FTS index + AI_QUEUE embedding jobs for each new page. **Frontend** `apps/client/src/features/migration/`: wizard (4 steps — choose source, upload, dry-run review, apply); progress page; report page with retry buttons. **Migrations** extend `file_tasks` (add `mode`, `target_space_id`, `summary jsonb`); new tables `import_job_items`, `import_link_mappings`, `import_errors`. **Audit** every job to `rag_audit_events` (or sibling `migration_audit_events` if separation desired). **Env** `MIGRATION_MAX_FILE_SIZE_MB` (default 1000), `MIGRATION_MAX_PAGES_PER_JOB` (default 5000), `MIGRATION_MAX_ATTACHMENTS_PER_JOB` (default 5000). |
+| Out | Continuous sync (Branch 12). Importing **into a new workspace** (admin must select an existing workspace + space). Comments / page history / Yjs collaboration history (only final-state content). Audio / video / image OCR import (Branch 13 multimodal). Direct API-based pull from Notion / Confluence — v1 is export-file-based; API-pull is v2. Migrating Expert Insights from external platforms (no source platforms have an analogous concept yet). |
+| Deps | Branch 2 (post-import indexing reuses the embedding pipeline). Logically independent of B3 — branch may stack on B3 for sequential PRs but has no code dependency on insights. |
+| Migrations | `20260503T100000-import-jobs-extend-file-tasks.ts` (alter `file_tasks`: add `mode varchar('dry_run','live')`, `target_space_id uuid`, `summary jsonb`); `20260503T110000-import-job-items.ts` (`import_job_items`); `20260503T120000-import-link-mappings.ts` (`import_link_mappings`); `20260503T130000-import-errors.ts` (`import_errors`). |
+| APIs | `POST /api/v1/admin/imports` (create job from upload); `POST /api/v1/admin/imports/:id/dry-run`; `POST /api/v1/admin/imports/:id/apply`; `POST /api/v1/admin/imports/:id/retry`; `POST /api/v1/admin/imports/:id/cancel`; `GET /api/v1/admin/imports`; `GET /api/v1/admin/imports/:id`; `GET /api/v1/admin/imports/:id/items`; `GET /api/v1/admin/imports/:id/report`. |
+| Tests | (1) Format adapters: round-trip MD/HTML/Notion/Confluence/DOCX fixtures → ProseMirror; unsupported blocks emit warnings, not throws. (2) Hierarchy preservation: nested-folder Notion export reproduces parent-child page tree. (3) Metadata: title/created_at/updated_at/source_url preserved on imported pages. (4) Attachments: image inside MD becomes `attachments` row; link rewritten. (5) Internal link resolution: page-A links to page-B in same export → ConqrHub slug after import. (6) External links preserved as-is and reported in `unresolved_links`. (7) Duplicate detection: importing same MD twice produces conflicts; chosen strategy (skip / rename / fail) honored. (8) Dry-run vs apply: dry-run produces report identical to apply's diff, no DB writes outside `file_tasks` and child tables. (9) Retry: only `failed` items re-run; successful items unchanged. (10) Permissions: non-Admin gets 403; imported pages adopt target space's default permissions. (11) Post-import: each new page produces a search-FTS row and is queued for embedding (AI_QUEUE). (12) Audit: every state transition logged. (13) Workspace isolation: jobs in workspace A cannot affect workspace B. |
+| AC | 1. Admin can import a Markdown ZIP or HTML ZIP into a selected workspace + space. 2. Imported pages keep hierarchy and titles. 3. Internal links are resolved when both source and target are in the same export. 4. Unsupported blocks generate warnings, not crashes. 5. Import report is visible after completion (imported / skipped / failed / warnings / unresolved links / unsupported blocks). 6. Failed items can be retried; successful items are not re-run. 7. Imported pages are indexed for FTS and queued for embedding. 8. Permissions are not bypassed — non-Admins get 403; imported pages adopt target-space defaults. 9. Audit log written for every job and every state transition. 10. Notion ZIP and Confluence space-export ZIP also work end-to-end (with documented unsupported-block list). 11. DOCX support is "best-effort" via mammoth; unsupported features land in warnings. |
+| Manual | Drag-drop a 50-page Notion export ZIP; admin runs dry-run, sees report; clicks Apply; observes progress; verifies pages appear in target space; one page should have an unresolved external link, surfaced in the report; retry a synthetically-failed item. |
+
+### Branch 5 — `feat/rag-hybrid-retrieval`
 
 | | |
 |---|---|
@@ -525,101 +574,101 @@ Every API/MCP call writes to `rag_audit_events` (or sibling `api_audit_events` f
 | Deps | Branches 2, 3 |
 | Migrations | None |
 | APIs | `POST /api/v1/search` |
-| Tests | Workspace isolation; user with access to 2/3 spaces only retrieves from 2; soft-deleted pages excluded; page-level deny respected; vector-only / FTS-only / hybrid each tested; **insight retrieval works** (published insight appears in results); **draft/retired insights never surface**; results include `source_kind` discriminator |
-| AC | All permission tests green; recall@10 ≥ 0.8 on small fixture set covering pages + insights |
+| Tests | Workspace isolation; user with access to 2/3 spaces only retrieves from 2; soft-deleted pages excluded; page-level deny respected; vector-only / FTS-only / hybrid each tested; **insight retrieval works** (published insight appears in results); **draft/retired insights never surface**; results include `source_kind` discriminator; **migrated pages from B4 are retrievable** (smoke for indexing pipeline) |
+| AC | All permission tests green; recall@10 ≥ 0.8 on small fixture set covering pages + insights + migrated content |
 | Manual | curl with two test users in different spaces; assert no cross-space leak; query that should hit an insight returns it with `source_kind='expert_insight'` |
 
-### Branch 5 — `feat/rag-mmr-reranking`
+### Branch 6 — `feat/rag-mmr-reranking`
 
 | | |
 |---|---|
 | Goal | MMR diversity selector + Mistral cross-encoder reranker; tunable budgets; **source-kind aware** ranking |
 | Scope | `ee/ai/retrieval/mmr.ts` + spec (diversifies across source kinds, not just text similarity), `reranker.service.ts` (Mistral rerank API; chunk headers include source-kind marker so reranker can upweight insights; fallback no-op if API unavailable), wire into `hybrid-retriever`. Env: `AI_RAG_MMR_LAMBDA`, `AI_RAG_FINAL_TOP_K`, `AI_RAG_ENABLE_MMR`, `AI_RAG_ENABLE_RERANKING`, `AI_INSIGHT_RAG_BOOST` (default 1.5×). Endpoint `POST /api/v1/search` gains `mode=hybrid|mmr|reranked`. |
 | Out | Generation |
-| Deps | Branch 4 |
+| Deps | Branch 5 |
 | Migrations | None |
 | APIs | extends `/api/v1/search` |
 | Tests | MMR property-based: identical chunks deduped, lambda=1 → pure relevance, mixed source kinds diversified; reranker smoke; permission tests still green; insight boost effective on contradictory fixture |
-| AC | precision@5 improvement vs B4 baseline ≥ 10% on fixture; latency P95 with rerank ≤ 800ms (excluding LLM); insights with the boost rank above stale pages |
+| AC | precision@5 improvement vs B5 baseline ≥ 10% on fixture; latency P95 with rerank ≤ 800ms (excluding LLM); insights with the boost rank above stale pages |
 | Manual | Side-by-side compare hybrid vs reranked on 5 fixture queries — at least one query has a contradicting insight, verify insight wins |
 
-### Branch 6 — `feat/ai-answers-citations`
+### Branch 7 — `feat/ai-answers-citations`
 
 | | |
 |---|---|
 | Goal | Grounded Q&A endpoint with Mistral generation, **inline citations covering both pages AND Expert Insights**, verifier, confidence, refusal logic, audit. **Insights override stale pages from v1.** |
 | Scope | `ee/ai/answers/`: `prompt-builder.ts` (renders chunks with source headers — e.g. `[Source 3 — Expert Insight (warning), published 2026-03-12]` — and includes the invariant "When an Expert Insight contradicts a page, prefer and cite the Expert Insight"), `verifier.service.ts` (faithfulness pass with Mistral-small; aware of source kind), `citation-extractor.ts` (regex + chunk-id resolution; emits `source_kind` per citation), `confidence.ts` (insights weighted higher in source-quality factor), `ai-answer.service.ts`, `ai-answer.controller.ts` (`POST /api/v1/answer`, `/answer/stream`). Migrations: `ai_rag_queries`, `ai_rag_retrieved_chunks`, `ai_answers`, `ai_answer_citations` (citation row carries `source_kind` + `source_id`). Doc-health: flip `AI_CONFIDENCE_WEIGHT` from 0 to 0.10 in scoring service (config-driven, behind env). Frontend: AI Answer card renders inline `[n]` markers + collapsible Sources block with separate "Expert says:" section for insight citations. Env: `AI_RAG_MAX_CONTEXT_TOKENS`, `AI_RAG_ENABLE_VERIFICATION`, `AI_RAG_ENABLE_QUERY_REWRITE`. |
-| Out | Chat (multi-turn) — Branch 8 |
-| Deps | Branch 5 |
+| Out | Chat (multi-turn) — Branch 9 |
+| Deps | Branch 6 |
 | Migrations | `ai_rag_queries`, `ai_rag_retrieved_chunks`, `ai_answers`, `ai_answer_citations` |
 | APIs | `/api/v1/answer`, `/api/v1/answer/stream` |
 | Tests | Refusal when zero retrieval; citation extraction unit (covering both source kinds); verifier strips unsupported claim (mocked); confidence ranges; permission enforced; audit row written every call; **insight overrides stale page** fixture: page says "use API v1", published insight says "DEPRECATED, use v2" → answer says v2 and cites insight; expired insight ignored in answer; retired insight ignored in answer |
 | AC | (1) Answer can cite normal pages with correct chunk-level spans. (2) Answer can cite Expert Insights with correct insight-level reference. (3) When a published Expert Insight contradicts an older page, the answer **prefers the Expert Insight and clearly cites it**, surfaced under "Expert says:" in the UI. (4) 10 fixture Q/A: ≥ 8 grounded with correct citations; 1 refusal where expected; 0 hallucinated citations. (5) Doc-health AI_CONFIDENCE_WEIGHT flip on canary workspace: no score regression. |
 | Manual | Demo against personal workspace; verify clickable citations across both source kinds; verify the contradiction fixture |
 
-### Branch 7 — `feat/rag-observability-evaluation`
+### Branch 8 — `feat/rag-observability-evaluation`
 
 | | |
 |---|---|
 | Goal | OpenTelemetry traces per pipeline stage; rag audit events; eval harness with golden dataset; feedback endpoint |
-| Scope | OpenTelemetry instrumentation around retrieval/generation/verifier (per-stage spans). `rag_audit_events` migration. `ee/ai/eval/`: harness running stored Q/A set (golden cases include insight-citation fixtures), computing recall@k, precision@k, MRR, faithfulness, refusal correctness, **expert insight usage rate**; CLI + admin endpoint. Feedback: `ai_answer_feedback` table; `POST /api/v1/feedback`. Frontend: thumbs ± and comment under every answer. |
+| Scope | OpenTelemetry instrumentation around retrieval/generation/verifier (per-stage spans). `rag_audit_events` migration. `ee/ai/eval/`: harness running stored Q/A set (golden cases include insight-citation fixtures **and migrated-content fixtures**), computing recall@k, precision@k, MRR, faithfulness, refusal correctness, **expert insight usage rate**; CLI + admin endpoint. Feedback: `ai_answer_feedback` table; `POST /api/v1/feedback`. Frontend: thumbs ± and comment under every answer. |
 | Out | Live dashboards |
-| Deps | Branch 6 |
+| Deps | Branch 7 |
 | Migrations | `rag_audit_events`, `ai_answer_feedback` |
 | APIs | `/api/v1/feedback`, `/api/v1/admin/rag/eval` |
 | Tests | Eval harness end-to-end on fixture; metrics computed correctly; feedback writes; insight-usage metric correct |
 | AC | Eval suite produces a JSON report; running it after a config change shows a numeric delta |
 | Manual | Inspect a Honeycomb/Tempo trace for one query |
 
-### Branch 8 — `feat/ai-chat-rag`
+### Branch 9 — `feat/ai-chat-rag`
 
 | | |
 |---|---|
 | Goal | Connect existing AI chat UI to grounded RAG; multi-turn with conversation memory + retrieval per turn; both source kinds cited |
 | Scope | `ee/ai/chat/`: chat service, controller, conversation memory (last N turns + summary), per-turn retrieval (same insight-aware pipeline), persistence to `ai_chats`/`ai_chat_messages` (already exist). Confidence + grounded_source_count populated (columns already exist). Streaming SSE. Frontend wiring of existing chat UI. |
 | Out | Tool use, agent behaviors |
-| Deps | Branch 6 |
+| Deps | Branch 7 |
 | Migrations | None (tables exist); maybe add `parent_message_id` if multi-turn threading needs it |
 | APIs | `/api/v1/chat` (POST + stream) |
 | Tests | Conversation maintains coherence; retrieval re-runs per question; permission enforced per turn; refusal works mid-conversation; chat answers cite insights when relevant |
 | AC | UI works end-to-end with citations + confidence badges; insight citations render in chat |
 | Manual | 5-turn conversation with topic shift; one turn should hit an insight |
 
-### Branch 9 — `feat/agent-gateway-api`
+### Branch 10 — `feat/agent-gateway-api`
 
 | | |
 |---|---|
 | Goal | Activate `api_keys` table: service + controller + scopes table + auth strategy + audit |
 | Scope | Migration `api_key_scopes`. `core/api-keys/` service + controller (CRUD, revoke, last_used tracking). New Passport strategy `api-key.strategy.ts`. Guard supporting JWT OR API key. Rate limit by `api_key_id`. Audit every call. Admin UI: list + create + revoke + scope picker. |
 | Out | OAuth2 client_credentials |
-| Deps | Branch 6 (so RAG endpoints exist to scope to) |
+| Deps | Branch 7 (so RAG endpoints exist to scope to) |
 | Migrations | `api_key_scopes`, columns on `api_keys` (`hash`, `prefix`, `scopes_json`) |
 | APIs | `/api/v1/admin/api-keys/*`; all `/api/v1/*` endpoints accept API key |
 | Tests | Scope enforcement; key revocation; rate limit; expired key; key for other workspace denied |
 | AC | Issue key with `rag_query` scope on workspace W; calls succeed; calls without scope 403 |
 | Manual | curl sequence with key |
 
-### Branch 10 — `feat/mcp-server`
+### Branch 11 — `feat/mcp-server`
 
 | | |
 |---|---|
 | Goal | MCP server exposing 7 read-only tools backed by the same scope-resolution + audit |
 | Scope | `ee/ai/mcp/`: MCP transport (stdio + HTTP+SSE), tool registry mapping to existing services. Use `@modelcontextprotocol/sdk` server lib. Auth: API key in handshake. Tools listed in §9 (including `get_expert_insights`). |
 | Out | Write tools |
-| Deps | Branches 6, 9 |
+| Deps | Branches 7, 10 |
 | Migrations | None |
 | APIs | MCP endpoint `POST /api/v1/mcp` (HTTP+SSE) and CLI for stdio |
 | Tests | Tool catalog matches; each tool enforces scope; rate-limited |
 | AC | Claude Desktop / Cursor can connect with API key and call tools, including expert-insight retrieval |
 | Manual | Connect with an MCP client and ask a grounded question |
 
-### Branch 11 — `feat/integrations-confluence-jira`
+### Branch 12 — `feat/integrations-confluence-jira` (continuous sync — distinct from Branch 4 migration)
 
 | | |
 |---|---|
-| Goal | First two connectors with the integration framework; introduces `source_kind='external_document'` end-to-end |
+| Goal | First two **continuous** connectors with the integration framework; introduces `source_kind='external_document'` end-to-end. (For one-time bulk migration of Confluence/Notion content, see Branch 4.) |
 | Scope | Migrations: `integration_sources`, `integration_sync_jobs`, `integration_documents`. Framework `ee/integrations/`: `connector.interface.ts`, registry, scheduler. Confluence connector (OAuth, REST, mapper). Jira connector (OAuth, REST + webhook). External-document indexer (writes rows with `source_kind='external_document'` into the same `ai_embeddings`). |
-| Out | Other sources |
+| Out | Other sources; bulk-pull workflows (those live in Branch 4) |
 | Deps | Branch 2 (indexer reuse) |
 | Migrations | 3 |
 | APIs | `/api/v1/admin/integrations/*` |
@@ -627,17 +676,17 @@ Every API/MCP call writes to `rag_audit_events` (or sibling `api_audit_events` f
 | AC | Connect a Confluence space, reindex, ask a question, get a Confluence-cited answer with `source_kind='external_document'` |
 | Manual | Real Confluence connection in dev |
 
-### Branch 12 — `feat/multimodal-ingestion`
+### Branch 13 — `feat/multimodal-ingestion`
 
 | | |
 |---|---|
 | Goal | PDF / Office / image OCR / audio + video transcript ingestion into the same embedding store **and** multimedia for Expert Insights |
-| Scope | New `ee/ingestion/`: PDF (`unpdf` or pdfjs), Office (`mammoth` / `exceljs` / `pptxjs`), images (Tesseract.js or cloud OCR), audio/video (Whisper API or Mistral Voxtral when available). Attachment hook + reindex queue. **Multimedia for insights:** new `expert_insight_media` table (id, insight_id, kind, url, mime, transcript, position) — transcripts indexed under the parent insight's embedding row stream. Storage uses existing S3/local storage. |
+| Scope | New `ee/ingestion/`: PDF (`unpdf` or pdfjs), Office (`mammoth` / `exceljs` / `pptxjs`), images (Tesseract.js or cloud OCR), audio/video (Whisper API or Mistral Voxtral when available). Attachment hook + reindex queue. **Multimedia for insights:** new `expert_insight_media` table (id, insight_id, kind, url, mime, transcript, position) — transcripts indexed under the parent insight's embedding row stream. Storage uses existing S3/local storage. **Migration extension:** Branch 4's adapters can now ingest PDF/DOCX-with-images via this pipeline. |
 | Out | Diagrams as native types |
-| Deps | Branches 2, 3 |
+| Deps | Branches 2, 3, 4 |
 | Migrations | Columns on `attachments` for processing status; possibly `attachment_chunks` table; `expert_insight_media` table |
 | APIs | None new (auto-process on upload); admin "reprocess"; insight media CRUD under `/api/v1/insights/:id/media` |
-| Tests | Each format extracts text; large PDF chunked; OCR error handling; transcript length; insight with audio attachment becomes searchable via transcript |
+| Tests | Each format extracts text; large PDF chunked; OCR error handling; transcript length; insight with audio attachment becomes searchable via transcript; migration of an attachment-heavy DOCX produces searchable transcripts |
 | AC | Upload a PDF → ~30s later searchable in RAG with citations; an Expert can attach a recorded warning to an insight and the transcript is retrievable |
 | Manual | 5 file types end-to-end + 1 audio-attached insight |
 
@@ -650,25 +699,31 @@ Every API/MCP call writes to `rag_audit_events` (or sibling `api_audit_events` f
 
 ## 11. Database schema plan
 
-> **v2 change.** The vector table is named **`ai_embeddings`** (not `ai_page_embeddings`) and carries `source_kind` (`page` | `expert_insight` | `external_document`) + `source_id` from Branch 2. No rename or column-add later. The `expert_insights` table simplified for v1 (no `severity`, no `chunk_anchor`, four insight types only). `expert_insight_media` deferred to Branch 12. `expert_insight_links` removed entirely from v1 — the cross-reference between insights and AI answers lives in `rag_audit_events` until v2 demands a dedicated table.
+> **v3 change.** Added migration tables (Branch 4) — extend the existing `file_tasks` scaffolding rather than create parallel `import_jobs`. Three new child tables (`import_job_items`, `import_link_mappings`, `import_errors`) hang off `file_tasks` rows of `type='import'`.
+>
+> **v2 change.** The vector table is named **`ai_embeddings`** (not `ai_page_embeddings`) and carries `source_kind` (`page` | `expert_insight` | `external_document`) + `source_id` from Branch 2. No rename or column-add later. The `expert_insights` table simplified for v1 (no `severity`, no `chunk_anchor`, four insight types only). `expert_insight_media` deferred to Branch 13. `expert_insight_links` removed entirely from v1 — the cross-reference between insights and AI answers lives in `rag_audit_events` until v2 demands a dedicated table.
 
 | Table | Branch | Purpose | Key columns | Indexes | Tenant isolation | Notes |
 |------|--------|---------|-------------|---------|-----------------|-------|
 | `ai_embeddings` | 2 | Source-agnostic chunk vector store | id, workspace_id, space_id, **source_kind enum (`page` \| `expert_insight` \| `external_document`)**, **source_id uuid**, chunk_index, chunk_text, embedding vector(1024), model, dim, content_hash, created_at, updated_at | HNSW (vector, cosine), btree (workspace_id, source_kind, source_id), unique(source_kind, source_id, chunk_index, model) | workspace_id mandatory in WHERE | One table for pages (B2), insights (B3), externals (B11). No later rename. |
 | `expert_insights` | 3 | Verified human knowledge — text only in v1 | id, workspace_id, space_id, page_id (NOT NULL), span_anchor jsonb (nullable: `{start,end}`), insight_type enum (`warning`\|`correction`\|`notice`\|`recommendation`), title, body, status enum (`draft`\|`published`\|`retired`), creator_id, reviewed_by_id (nullable), reviewed_at, expires_at (nullable), tsv tsvector, created_at, updated_at, deleted_at | (workspace_id, page_id), (workspace_id, status), GIN(tsv) | workspace_id | v1 always anchors to a page. No `severity`, no `chunk_anchor`, no media links — all deferred. tsv populated by trigger. |
-| `ai_rag_queries` | 6 | Audit of every RAG question | id, workspace_id, principal_kind, principal_id, normalized_query, language, intent, tokens_in, tokens_out, latency_ms_per_stage jsonb, cost_usd, created_at | (workspace_id, created_at DESC) | workspace_id | Source of truth for analytics |
-| `ai_rag_retrieved_chunks` | 6 | Which chunks fed into which answer | rag_query_id, embedding_id, source_kind, source_id, rank, vector_score, fts_score, rrf_score, mmr_score, rerank_score, used_in_answer (bool) | (rag_query_id) | inherited via FK | source_kind denormalised for fast per-kind analytics |
-| `ai_answers` | 6 | Generated answers | id, rag_query_id, answer_text, model, refused (bool), refusal_reason, confidence, faithfulness, completeness, created_at | unique(rag_query_id) | inherited | |
-| `ai_answer_citations` | 6 | Citation links | id, answer_id, citation_index, embedding_id, **source_kind, source_id**, span_start, span_end, marker | (answer_id, citation_index) | inherited | source_kind/id let UI render "Expert says:" sections without joining back to embeddings |
-| `ai_answer_feedback` | 7 | User feedback | id, answer_id, principal_id, vote (`+`/`-`/null), comment, created_at | (answer_id) | inherited | |
-| `rag_audit_events` | 7 | Compliance audit | id, workspace_id, principal_kind, principal_id, action, resource_kind, resource_id, scope_snapshot jsonb, created_at | (workspace_id, created_at DESC), (principal_id) | workspace_id | Append-only. Also doubles as the v1 cross-reference between insights and AI answers (until v2 link table). |
-| `api_keys` _(existing)_ | 9 | API tokens | (existing migration `20250912T101500-api-keys`) + new columns hash, prefix, scopes_json | existing | workspace_id | Service + controller activated in B9 |
-| `api_key_scopes` | 9 | API key capabilities | id, api_key_id, scope_kind, target_id (nullable) | (api_key_id), (scope_kind, target_id) | inherited via api_keys.workspace_id | |
-| `integration_sources` | 11 | Connected external sources | id, workspace_id, kind, config jsonb, credentials_encrypted, status, created_at | (workspace_id, kind) | workspace_id | |
-| `integration_sync_jobs` | 11 | Sync run history | id, source_id, started_at, ended_at, status, doc_count, error | (source_id, started_at DESC) | inherited | |
-| `integration_documents` | 11 | External doc staging | id, source_id, external_id, title, body, acl jsonb, last_synced_at | unique(source_id, external_id) | inherited | Feeds `ai_embeddings` with `source_kind='external_document'` |
-| `expert_insight_media` | 12 | Multimedia attachments on insights | id, insight_id, kind (image/video/audio/file/link), url, mime, transcript, position | (insight_id) | inherited | Deferred to multimodal branch. Transcripts indexed under the parent insight. |
-| `attachments` _(existing)_ | 12 | Add processing status columns for ingestion pipeline | (existing) + processing_status, extracted_text_ref | existing | workspace_id | Multimodal ingestion targets this |
+| `file_tasks` _(extended)_ | 4 | Existing job-tracking table for import/export — extended for migration | (existing) + `mode varchar('dry_run'\|'live')`, `target_space_id uuid`, `summary jsonb` (counts, warnings, unresolved_links, unsupported_blocks) | existing + (mode, status) | workspace_id | Parent of `import_job_items`/`import_link_mappings`/`import_errors`. `type='import'`, `source` ∈ `'markdown'\|'html'\|'notion'\|'confluence'\|'docx'\|'generic'`. |
+| `import_job_items` | 4 | Per-page/per-attachment item status under one import job | id, file_task_id (FK CASCADE), source_path, target_kind enum (`page`\|`attachment`), target_id uuid (nullable until applied), status enum (`pending`\|`imported`\|`skipped`\|`failed`), warnings jsonb, error_message text, created_at, updated_at | (file_task_id), (file_task_id, status) | inherited via file_tasks.workspace_id | Drives the per-item retry path |
+| `import_link_mappings` | 4 | Internal-link resolution map for two-pass link rewriting | id, file_task_id (FK CASCADE), source_link text, source_external_id text (nullable — Notion block id, Confluence page id), resolved_to_kind enum (`page`\|`external`\|`unresolved`), resolved_to_id uuid (nullable), resolved_at | (file_task_id, source_link), (file_task_id, resolved_to_kind) | inherited | |
+| `import_errors` | 4 | Detailed error log for migration failures | id, file_task_id (FK CASCADE), item_id (nullable FK to import_job_items), error_type varchar (`adapter_parse`\|`unsupported_block`\|`storage_upload`\|`db_insert`\|`permission`\|`other`), message text, raw_payload jsonb, created_at | (file_task_id, error_type), (item_id) | inherited | Append-only |
+| `ai_rag_queries` | 7 | Audit of every RAG question | id, workspace_id, principal_kind, principal_id, normalized_query, language, intent, tokens_in, tokens_out, latency_ms_per_stage jsonb, cost_usd, created_at | (workspace_id, created_at DESC) | workspace_id | Source of truth for analytics |
+| `ai_rag_retrieved_chunks` | 7 | Which chunks fed into which answer | rag_query_id, embedding_id, source_kind, source_id, rank, vector_score, fts_score, rrf_score, mmr_score, rerank_score, used_in_answer (bool) | (rag_query_id) | inherited via FK | source_kind denormalised for fast per-kind analytics |
+| `ai_answers` | 7 | Generated answers | id, rag_query_id, answer_text, model, refused (bool), refusal_reason, confidence, faithfulness, completeness, created_at | unique(rag_query_id) | inherited | |
+| `ai_answer_citations` | 7 | Citation links | id, answer_id, citation_index, embedding_id, **source_kind, source_id**, span_start, span_end, marker | (answer_id, citation_index) | inherited | source_kind/id let UI render "Expert says:" sections without joining back to embeddings |
+| `ai_answer_feedback` | 8 | User feedback | id, answer_id, principal_id, vote (`+`/`-`/null), comment, created_at | (answer_id) | inherited | |
+| `rag_audit_events` | 8 | Compliance audit | id, workspace_id, principal_kind, principal_id, action, resource_kind, resource_id, scope_snapshot jsonb, created_at | (workspace_id, created_at DESC), (principal_id) | workspace_id | Append-only. Also doubles as the v1 cross-reference between insights and AI answers (until v2 link table). Migration jobs may also write here. |
+| `api_keys` _(existing)_ | 10 | API tokens | (existing migration `20250912T101500-api-keys`) + new columns hash, prefix, scopes_json | existing | workspace_id | Service + controller activated in B10 |
+| `api_key_scopes` | 10 | API key capabilities | id, api_key_id, scope_kind, target_id (nullable) | (api_key_id), (scope_kind, target_id) | inherited via api_keys.workspace_id | |
+| `integration_sources` | 12 | Connected external sources (continuous sync) | id, workspace_id, kind, config jsonb, credentials_encrypted, status, created_at | (workspace_id, kind) | workspace_id | |
+| `integration_sync_jobs` | 12 | Sync run history | id, source_id, started_at, ended_at, status, doc_count, error | (source_id, started_at DESC) | inherited | |
+| `integration_documents` | 12 | External doc staging | id, source_id, external_id, title, body, acl jsonb, last_synced_at | unique(source_id, external_id) | inherited | Feeds `ai_embeddings` with `source_kind='external_document'` |
+| `expert_insight_media` | 13 | Multimedia attachments on insights | id, insight_id, kind (image/video/audio/file/link), url, mime, transcript, position | (insight_id) | inherited | Deferred to multimodal branch. Transcripts indexed under the parent insight. |
+| `attachments` _(existing)_ | 13 | Add processing status columns for ingestion pipeline | (existing) + processing_status, extracted_text_ref | existing | workspace_id | Multimodal ingestion targets this |
 
 ---
 
@@ -691,9 +746,15 @@ AI_EMBEDDING_CHUNK_OVERLAP=200
 
 # === Expert Insights (Branch 3) ===
 AI_INSIGHT_REQUIRE_REVIEW=false         # if true, only Admin/reviewer can publish
-AI_INSIGHT_RAG_BOOST=1.5                # multiplier on RRF score for insights (used by B5)
+AI_INSIGHT_RAG_BOOST=1.5                # multiplier on RRF score for insights (used by B6)
 
-# === Retrieval (Branches 4-5) ===
+# === Migration & Import Hub (Branch 4) ===
+MIGRATION_MAX_FILE_SIZE_MB=1000         # cap on uploaded export size
+MIGRATION_MAX_PAGES_PER_JOB=5000        # cap on pages produced per job
+MIGRATION_MAX_ATTACHMENTS_PER_JOB=5000  # cap on attachments produced per job
+MIGRATION_DRY_RUN_DEFAULT=true          # admins must opt-in to live mode
+
+# === Retrieval (Branches 5-6) ===
 AI_RAG_VECTOR_TOP_K=40
 AI_RAG_KEYWORD_TOP_K=40
 AI_RAG_HYBRID_MERGE=rrf                 # rrf|weighted
@@ -705,7 +766,7 @@ AI_RAG_ENABLE_MMR=true
 AI_RAG_ENABLE_RERANKING=true
 AI_RAG_RERANKER_MODEL=mistral-rerank    # provider-specific
 
-# === Answers (Branch 6) ===
+# === Answers (Branch 7) ===
 AI_RAG_MAX_CONTEXT_TOKENS=6000
 AI_RAG_GENERATION_TEMPERATURE=0.2
 AI_RAG_ENABLE_VERIFICATION=true
@@ -713,13 +774,13 @@ AI_RAG_ENABLE_QUERY_REWRITE=true
 AI_RAG_REFUSAL_CONFIDENCE_THRESHOLD=0.4
 AI_RAG_DEBUG=false
 
-# === Doc-health hookup (Branch 6) ===
+# === Doc-health hookup (Branch 7) ===
 AI_CONFIDENCE_WEIGHT=0.10               # was 0; flipped here
 
-# === Eval (Branch 7) ===
+# === Eval (Branch 8) ===
 AI_EVAL_GOLDEN_SET_PATH=apps/server/eval/golden.jsonl
 
-# === Integrations (Branch 11) ===
+# === Integrations — continuous sync (Branch 12) ===
 INTEGRATION_CONFLUENCE_OAUTH_CLIENT_ID=
 INTEGRATION_CONFLUENCE_OAUTH_CLIENT_SECRET=
 INTEGRATION_JIRA_OAUTH_CLIENT_ID=
@@ -740,27 +801,36 @@ INTEGRATION_JIRA_OAUTH_CLIENT_SECRET=
 | Insight CRUD + lifecycle | Integration | 3 | draft→published→retired transitions; auto-retire on `expires_at`; soft delete |
 | Insight permissions | Integration | 3 | Expert/Admin can create+publish; non-expert 403; published-only visible to readers |
 | Insight indexing | Integration | 3 | Publish writes `ai_embeddings` row with `source_kind='expert_insight'`; retire/delete removes |
-| Permission filtering | Integration (DB) | 4 | Two-user matrix across two spaces; soft-delete; page-level deny; insights inherit space perms |
-| Workspace isolation | Integration | 4, 6 | Cross-tenant leak attempts return 0 results |
-| Vector retrieval | Integration | 4 | Recall on synthetic fixture (mixed pages + insights) |
-| Keyword retrieval | Integration | 4 | Postgres FTS over both `pages.tsv` and `expert_insights.tsv` |
-| Hybrid merge (RRF) | Unit | 4 | Property: stable, monotone |
-| Cross-source retrieval | Integration | 4 | Result set includes `source_kind` discriminator; published insight retrievable |
-| MMR | Unit (property) | 5 | Identical-chunk dedup; lambda=1 == relevance-only; diversifies across source kinds |
-| Reranker | Integration | 5 | Smoke + fallback when API down; insight boost effective |
-| Citation extraction | Unit | 6 | Span resolution; orphan citations stripped; both source kinds resolved |
-| Answer verification | Integration | 6 | Mocked LLM, asserts unsupported claim flagged |
-| Insufficient-context refusal | Integration | 6 | Empty retrieval → refusal |
-| **Insight overrides stale page** | **Integration** | **6** | **Fixture: page says v1, insight says v2 → answer cites insight, picks v2** |
-| Expired/retired insight ignored | Integration | 6 | Expired insight does not surface in answer |
-| Doc-health AI confidence flip | Integration | 6 | Canary workspace: no score regression after weight 0→0.10 |
-| End-to-end golden | Eval harness | 7 | recall@5/10, precision@5, MRR, faithfulness, refusal correctness, **insight usage rate** |
-| Chat coherence | Integration | 8 | 5-turn fixture; per-turn permission check; insight cited mid-conversation |
-| API scopes | Integration | 9 | Scope matrix; revocation; rate limit |
-| MCP tools | Integration | 10 | Each tool enforces scope; tool catalog includes `get_expert_insights` |
-| Agent permissions | Integration | 10 | Agent without scope → 403 |
-| Integrations | Integration | 11 | Connector contract + ACL mapping; external_document retrievable |
-| Multimodal | Integration | 12 | Per-format extraction smoke; insight-with-audio transcript searchable |
+| **Migration adapters** | **Unit + integration** | **4** | **MD/HTML/Notion/Confluence/DOCX fixtures round-trip to ProseMirror; unsupported blocks emit warnings** |
+| **Migration hierarchy + metadata** | **Integration** | **4** | **Nested folder export reproduces parent-child page tree; title/created_at/updated_at preserved** |
+| **Migration link rewriting** | **Integration** | **4** | **Two-pass: intra-export links resolved to ConqrHub slugs; external links preserved + reported** |
+| **Migration duplicate / conflict detection** | **Integration** | **4** | **Re-import same export → conflicts surfaced; chosen strategy (skip/rename/fail) honored** |
+| **Migration dry-run vs apply** | **Integration** | **4** | **Dry-run report matches apply diff; dry-run produces zero non-`file_tasks` writes** |
+| **Migration retry** | **Integration** | **4** | **Retry re-runs only `failed` items; successful items unchanged** |
+| **Migration permissions** | **Integration** | **4** | **Non-Admin → 403; imported pages adopt target-space defaults** |
+| **Migration post-import indexing** | **Integration** | **4** | **Each new page produces FTS row + AI_QUEUE embedding job** |
+| **Migration audit** | **Integration** | **4** | **Every state transition logged** |
+| Permission filtering | Integration (DB) | 5 | Two-user matrix across two spaces; soft-delete; page-level deny; insights inherit space perms |
+| Workspace isolation | Integration | 5, 7 | Cross-tenant leak attempts return 0 results |
+| Vector retrieval | Integration | 5 | Recall on synthetic fixture (mixed pages + insights + migrated content) |
+| Keyword retrieval | Integration | 5 | Postgres FTS over both `pages.tsv` and `expert_insights.tsv` |
+| Hybrid merge (RRF) | Unit | 5 | Property: stable, monotone |
+| Cross-source retrieval | Integration | 5 | Result set includes `source_kind` discriminator; published insight retrievable; migrated page retrievable |
+| MMR | Unit (property) | 6 | Identical-chunk dedup; lambda=1 == relevance-only; diversifies across source kinds |
+| Reranker | Integration | 6 | Smoke + fallback when API down; insight boost effective |
+| Citation extraction | Unit | 7 | Span resolution; orphan citations stripped; both source kinds resolved |
+| Answer verification | Integration | 7 | Mocked LLM, asserts unsupported claim flagged |
+| Insufficient-context refusal | Integration | 7 | Empty retrieval → refusal |
+| **Insight overrides stale page** | **Integration** | **7** | **Fixture: page says v1, insight says v2 → answer cites insight, picks v2** |
+| Expired/retired insight ignored | Integration | 7 | Expired insight does not surface in answer |
+| Doc-health AI confidence flip | Integration | 7 | Canary workspace: no score regression after weight 0→0.10 |
+| End-to-end golden | Eval harness | 8 | recall@5/10, precision@5, MRR, faithfulness, refusal correctness, **insight usage rate** |
+| Chat coherence | Integration | 9 | 5-turn fixture; per-turn permission check; insight cited mid-conversation |
+| API scopes | Integration | 10 | Scope matrix; revocation; rate limit |
+| MCP tools | Integration | 11 | Each tool enforces scope; tool catalog includes `get_expert_insights` |
+| Agent permissions | Integration | 11 | Agent without scope → 403 |
+| Integrations (continuous) | Integration | 12 | Connector contract + ACL mapping; external_document retrievable |
+| Multimodal | Integration | 13 | Per-format extraction smoke; insight-with-audio transcript searchable |
 
 CI gating: unit + integration must pass on every PR; eval harness is informational on PRs but gated on releases.
 
@@ -776,7 +846,7 @@ CI gating: unit + integration must pass on every PR; eval harness is information
 - **nDCG@10**
 - **permission-leak rate** (must be 0)
 
-### Answer-quality metrics (Branch 5+)
+### Answer-quality metrics (Branch 7+)
 
 - **Faithfulness** — % of claims supported by cited chunks (LLM-as-judge using Mistral-large with deterministic temp; sample-checked by humans).
 - **Citation accuracy** — % of citations whose chunk actually contains the cited claim.
@@ -889,21 +959,30 @@ flowchart LR
 
 | Risk | Severity | Likelihood | Mitigation | Branch |
 |------|----------|-----------|-----------|--------|
-| Hallucination | High | High | Verifier pass + citation enforcement + refusal-first prompt + low temperature | 5 |
-| Permission leakage | Critical | Medium | SQL-level filter; full matrix tests; audit log replay; never permission-filter post-hoc | 3, 8 |
-| Cross-tenant leakage via cache/race | Critical | Low | workspace_id in every cache key; scope object passed by value, never mutated; no shared global state in retrieval | 3 |
+| Hallucination | High | High | Verifier pass + citation enforcement + refusal-first prompt + low temperature | 7 |
+| Permission leakage (RAG) | Critical | Medium | SQL-level filter; full matrix tests; audit log replay; never permission-filter post-hoc | 5, 8 |
+| **Permission bypass during migration** | **Critical** | **Medium** | **Imported pages adopt target-space defaults (never the source platform's user list); creator is always the importing Admin; original-author is metadata only, never an ACL grant; `Migration` CASL subject restricts who can run jobs** | **4** |
+| Cross-tenant leakage via cache/race | Critical | Low | workspace_id in every cache key; scope object passed by value, never mutated; no shared global state in retrieval | 5 |
+| **Migration storage explosion** | **Medium** | **High** | **Dry-run reports total size before live mode; `MIGRATION_MAX_FILE_SIZE_MB` and `MIGRATION_MAX_ATTACHMENTS_PER_JOB` caps; admin sees cost estimate** | **4** |
+| **Migration link rot** | **Medium** | **High** | **Two-pass link resolution; unresolved links preserved as raw URLs + flagged in report; admin-visible "unresolved links" count** | **4** |
+| **Migration format quirks (Notion DBs, Confluence macros)** | **Medium** | **High** | **Explicit unsupported-block list per adapter; warnings (not crashes); fallback raw-HTML block preserves original; documented per-source compatibility matrix** | **4** |
+| **Migration encoding bugs (UTF-16 BOM, CP1252)** | **Low** | **High** | **Adapters normalize to UTF-8 at the boundary; tested against fixtures from multiple OSes** | **4** |
+| **Migration hierarchy collisions** | **Medium** | **Medium** | **Conflict-strategy enum at job-create (skip / rename-with-suffix / fail); admin chooses upfront; honored deterministically** | **4** |
+| **Indexing storm after large migration** | **Medium** | **High** | **Throttle AI_QUEUE post-import (capped concurrency); admin sees pre-flight token-cost estimate; embedding job runs at lower priority** | **4, 2** |
+| **Migration audit gaps** | **Medium** | **Medium** | **Every job + item state transition writes to `rag_audit_events` (or sibling); compliance can replay any import** | **4, 8** |
+| **Migration partial failure leaves orphans** | **Medium** | **Medium** | **Per-item retry; transactional page+attachment insert; `import_errors` audit; "rollback job" admin action removes successful items if user opts out** | **4** |
 | Stale content cited as fresh | Medium | High | Chunk header includes `last_updated_at`; freshness penalty in scoring; expert insights override stale pages | 7 |
 | Bad chunking (split mid-list, mid-code) | Medium | Medium | ProseMirror-aware chunker as v1.1 (v1 is char-based with smart breaks); golden eval catches | 2 (basic), later |
-| Embedding cost runaway on backfill | Medium | Medium | Batch + content-hash skip + admin pre-flight estimate | 2 |
-| Slow retrieval at scale | Medium | Medium | HNSW index; query timeout; cache normalized query → top-K for 60s | 3, 4 |
-| Mistral provider outage | Medium | Low | Circuit breaker; degrade to FTS-only search; refuse new RAG calls | 5 |
+| Embedding cost runaway on backfill | Medium | Medium | Batch + content-hash skip + admin pre-flight estimate | 2, 4 |
+| Slow retrieval at scale | Medium | Medium | HNSW index; query timeout; cache normalized query → top-K for 60s | 5, 6 |
+| Mistral provider outage | Medium | Low | Circuit breaker; degrade to FTS-only search; refuse new RAG calls | 7 |
 | pgvector unsupported on customer Postgres | Medium | Low | Document required extension; provide Docker image with pgvector; document fallback | 0, 2 |
-| Multimodal complexity blows scope | High (project) | High | Hard-defer to Branch 12; v1 ships pages + (text-only) insights only | — |
-| Integration permission mismatch | High | Medium | Conservative default-deny; per-source ACL mapper; integration tests with real ACLs | 12 |
+| Multimodal complexity blows scope | High (project) | High | Hard-defer to Branch 13; v1 ships pages + (text-only) insights + migrated text only | — |
+| Integration permission mismatch (continuous sync) | High | Medium | Conservative default-deny; per-source ACL mapper; integration tests with real ACLs | 12 |
 | Agent misuse / tool abuse | High | Medium | Scoped keys + rate limits + audit; read-only v1; approval flow for writes in v2 | 10, 11 |
 | MCP tool prompt injection | Medium | High | Sanitize tool inputs; reject inputs with embedded "ignore previous" patterns; cap response sizes | 11 |
 | Vendor lock-in to Mistral | Low | Medium | Provider abstraction already supports 5 drivers; embeddings tagged with `model` so swap = re-embed | 1 |
-| Doc-health AI confidence flip destabilizes scores | Medium | Medium | Flip behind env; canary on one workspace; monitor score deltas | 5 |
+| Doc-health AI confidence flip destabilizes scores | Medium | Medium | Flip behind env; canary on one workspace; monitor score deltas | 7 |
 | Eval golden set drifts as content changes | Low | High | Versioned golden set; expert review queue feeds new examples | 8 |
 
 ---
@@ -922,7 +1001,7 @@ flowchart LR
 - **Per-workspace model overrides.** Sounds right, kills unit economics. Env-only until ≥ 3 paying enterprise customers ask for it.
 - **Write tools in MCP.** Read-only v1; writes need approval workflows that don't exist yet.
 - **Real-time streaming integrations** (Slack, GitHub webhooks). Start with polling/scheduled syncs in Branch 12 — webhooks are an optimization.
-- **Multi-modal expert insights** (audio/video/images/files). Branch 12. Don't bleed into Branch 3 — v1 insights are text only.
+- **Multi-modal expert insights** (audio/video/images/files). Branch 13. Don't bleed into Branch 3 — v1 insights are text only.
 - **Super Admin tier UI.** v2. The role exists in the vision; the buyer doesn't yet.
 
 ### Keeping the roadmap clean
@@ -937,15 +1016,16 @@ flowchart LR
 - **B1 (Mistral):** existing P1 Ask AI tests pass with `AI_DRIVER=mistral`; manual smoke on 3 actions.
 - **B2 (Embeddings):** indexer integration tests; backfill of dev workspace under cost ceiling; re-save no-op; `source_kind` enum enforced; non-page rows insertable (smoke for B3).
 - **B3 (Insights core):** Expert can create + publish + retire; non-expert 403; published insight produces an `ai_embeddings` row; retire removes it; lifecycle tests green.
-- **B4 (Hybrid retrieval):** permission matrix green; recall@10 ≥ 0.8 on fixture covering pages + insights; latency P95 ≤ 200ms (excluding LLM); cross-source retrieval verified.
-- **B5 (MMR + rerank):** precision@5 ≥ +10% vs B4; latency P95 ≤ 800ms total retrieval; insight boost effective on contradictory fixture.
-- **B6 (Answers):** 10-Q golden ≥ 8 grounded with correct citations; 0 hallucinated citations; refusal correctness ≥ 0.9; **insight overrides stale page** fixture passes; doc-health `AI_CONFIDENCE_WEIGHT` flip on a canary workspace shows no score regression.
-- **B7 (Eval):** every prior branch's metrics reproducible; feedback round-trip works; insight-usage metric correct.
-- **B8 (Chat):** 5-turn coherence; per-turn permission enforcement; chat answer cites an insight in at least one turn.
-- **B9 (API):** API-key matrix tests; rate limits effective.
-- **B10 (MCP):** Claude Desktop or Cursor connects and answers a question grounded in the wiki, including via `get_expert_insights`.
-- **B11 (Integrations):** real Confluence space ingested; cited in answer with `source_kind='external_document'`.
-- **B12 (Multimodal):** 5 file types end-to-end; one Expert Insight with audio attachment becomes searchable via transcript.
+- **B4 (Migration & Import Hub):** Markdown ZIP, HTML ZIP, Notion ZIP, Confluence ZIP, DOCX adapters all produce valid pages; dry-run report matches apply diff; non-Admin → 403; permissions never bypassed; failed items retryable; report shows imported / skipped / failed / warnings / unresolved links / unsupported blocks; full audit log written; post-import: every new page indexed for FTS + queued for embeddings; storage and page-count caps respected.
+- **B5 (Hybrid retrieval):** permission matrix green; recall@10 ≥ 0.8 on fixture covering pages + insights + migrated content; latency P95 ≤ 200ms (excluding LLM); cross-source retrieval verified.
+- **B6 (MMR + rerank):** precision@5 ≥ +10% vs B5; latency P95 ≤ 800ms total retrieval; insight boost effective on contradictory fixture.
+- **B7 (Answers):** 10-Q golden ≥ 8 grounded with correct citations; 0 hallucinated citations; refusal correctness ≥ 0.9; **insight overrides stale page** fixture passes; doc-health `AI_CONFIDENCE_WEIGHT` flip on a canary workspace shows no score regression.
+- **B8 (Eval):** every prior branch's metrics reproducible; feedback round-trip works; insight-usage metric correct.
+- **B9 (Chat):** 5-turn coherence; per-turn permission enforcement; chat answer cites an insight in at least one turn.
+- **B10 (API):** API-key matrix tests; rate limits effective.
+- **B11 (MCP):** Claude Desktop or Cursor connects and answers a question grounded in the wiki, including via `get_expert_insights`.
+- **B12 (Integrations — continuous sync):** real Confluence space connected and synced; cited in answer with `source_kind='external_document'`. (Distinct from B4 one-time migration.)
+- **B13 (Multimodal):** 5 file types end-to-end; one Expert Insight with audio attachment becomes searchable via transcript.
 
 ---
 
@@ -973,7 +1053,7 @@ These are unresolved decisions; the plan above bakes in defaults, but the answer
 Baked into the plan; called out so they can be challenged before code lands.
 
 1. **pgvector is acceptable** for self-hosted customers (most modern Postgres images ship it; the official `pgvector/pgvector` image is the dev default).
-2. **v1 RAG is text-only**: pages + expert-insight text. PDF/Office/audio/video deferred to Branch 12+.
+2. **v1 RAG is text-only**: pages + expert-insight text + migrated text (markdown/html/notion/confluence/docx). PDF/Office/audio/video deferred to Branch 13+.
 3. **Mixed-language content**; Mistral handles EN/FR/AR cross-lingual retrieval natively. No language detection in v1.
 4. **Vector DB choice: pgvector**. Co-locates with permissions, no new infra for self-hosted, simplifies tenant isolation.
 5. **`CLOUD` env var distinguishes hosted vs self-hosted.** Affects defaults (cost gates, telemetry, model defaults).
