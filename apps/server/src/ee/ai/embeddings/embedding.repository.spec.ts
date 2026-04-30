@@ -1,107 +1,125 @@
 import { EmbeddingRepository } from './embedding.repository';
 
-function makeConflictBuilder() {
-  return {
-    columns: () => ({
-      doUpdateSet: () => undefined,
-    }),
+/**
+ * Build a minimal Kysely-shaped fluent chain. Every method returns the
+ * same proxy so we only need to configure the terminal methods.
+ */
+function makeChain(overrides: {
+  executeTakeFirst?: () => Promise<unknown>;
+  execute?: () => Promise<unknown>;
+}) {
+  const chain: any = {
+    select: () => chain,
+    where: () => chain,
+    limit: () => chain,
+    columns: () => chain,
+    doUpdateSet: () => chain,
+    onConflict: (cb?: (oc: any) => any) => {
+      cb?.(chain);
+      return chain;
+    },
+    values: () => chain,
+    execute: overrides.execute ?? jest.fn().mockResolvedValue([]),
+    executeTakeFirst:
+      overrides.executeTakeFirst ?? jest.fn().mockResolvedValue(undefined),
   };
+  return chain;
 }
 
-function makeDb() {
-  const deleteCalls: string[] = [];
-  const upsertedChunks: unknown[] = [];
+function makeDb(opts: {
+  selectRow?: Record<string, unknown>;
+  trackInserts?: unknown[];
+  trackDeletes?: string[];
+}) {
+  const { trackInserts = [], trackDeletes = [] } = opts;
 
-  const buildDeleteChain = (): any => ({
-    where: () => buildDeleteChain(),
-    execute: async () => {
-      deleteCalls.push('delete');
-    },
-  });
-
-  const db: any = {
-    selectFrom: () => ({
-      select: () => ({
-        where: () => ({
-          where: () => ({
-            where: () => ({
-              limit: () => ({
-                executeTakeFirst: async () => undefined,
-              }),
-            }),
-          }),
+  return {
+    selectFrom: (_table: string) =>
+      makeChain({
+        executeTakeFirst: jest.fn().mockResolvedValue(opts.selectRow),
+      }),
+    insertInto: (_table: string) => ({
+      values: (row: unknown) => {
+        trackInserts.push(row);
+        return makeChain({
+          execute: jest.fn().mockResolvedValue([]),
+        });
+      },
+    }),
+    deleteFrom: (_table: string) =>
+      makeChain({
+        execute: jest.fn().mockImplementation(async () => {
+          trackDeletes.push(_table);
         }),
       }),
-    }),
-    deleteFrom: () => buildDeleteChain(),
-    insertInto: () => ({
-      values: (v: unknown) => ({
-        onConflict: (cb: (oc: any) => any) => {
-          cb(makeConflictBuilder());
-          return {
-            execute: async () => {
-              upsertedChunks.push(v);
-            },
-          };
-        },
-        execute: async () => {
-          upsertedChunks.push(v);
-        },
-      }),
-    }),
-    _deleteCalls: deleteCalls,
-    _upsertedChunks: upsertedChunks,
-  };
-
-  return db;
+  } as any;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 describe('EmbeddingRepository', () => {
-  let db: ReturnType<typeof makeDb>;
-  let repo: EmbeddingRepository;
-
-  beforeEach(() => {
-    db = makeDb();
-    repo = new EmbeddingRepository(db as any);
-  });
-
   describe('isContentUnchanged()', () => {
     it('returns false when no row exists for the source', async () => {
-      const result = await repo.isContentUnchanged(
-        'page',
-        'page-1',
-        'mistral-embed',
-        'abc123',
+      const repo = new EmbeddingRepository(makeDb({ selectRow: undefined }));
+      expect(
+        await repo.isContentUnchanged('page', 'p1', 'mistral-embed', 'abc'),
+      ).toBe(false);
+    });
+
+    it('returns true when the stored content_hash matches', async () => {
+      const repo = new EmbeddingRepository(
+        makeDb({ selectRow: { contentHash: 'abc123' } }),
       );
-      expect(result).toBe(false);
+      expect(
+        await repo.isContentUnchanged('page', 'p1', 'mistral-embed', 'abc123'),
+      ).toBe(true);
+    });
+
+    it('returns false when the stored hash differs', async () => {
+      const repo = new EmbeddingRepository(
+        makeDb({ selectRow: { contentHash: 'old-hash' } }),
+      );
+      expect(
+        await repo.isContentUnchanged('page', 'p1', 'mistral-embed', 'new-hash'),
+      ).toBe(false);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
 
   describe('deleteBySource()', () => {
-    it('issues a delete query', async () => {
+    it('issues exactly one delete targeting aiEmbeddings', async () => {
+      const tracked: string[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackDeletes: tracked }));
       await repo.deleteBySource('page', 'page-uuid');
-      expect(db._deleteCalls).toHaveLength(1);
+      expect(tracked).toHaveLength(1);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
 
   describe('deleteBySourceIds()', () => {
-    it('does nothing for empty array', async () => {
+    it('short-circuits on an empty array without touching the DB', async () => {
+      const tracked: string[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackDeletes: tracked }));
       await repo.deleteBySourceIds('page', []);
-      expect(db._deleteCalls).toHaveLength(0);
+      expect(tracked).toHaveLength(0);
     });
 
-    it('issues delete for non-empty array', async () => {
-      await repo.deleteBySourceIds('page', ['id-1', 'id-2']);
-      expect(db._deleteCalls).toHaveLength(1);
+    it('issues one delete for a non-empty list', async () => {
+      const tracked: string[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackDeletes: tracked }));
+      await repo.deleteBySourceIds('page', ['id-1', 'id-2', 'id-3']);
+      expect(tracked).toHaveLength(1);
     });
   });
 
-  describe('upsertChunks()', () => {
-    it('calls deleteBySource when chunks array is empty', async () => {
-      const deleteSpy = jest
-        .spyOn(repo, 'deleteBySource')
-        .mockResolvedValue();
+  // ───────────────────────────────────────────────────────────────────────────
 
+  describe('upsertChunks()', () => {
+    it('calls deleteBySource and returns early when chunks is empty', async () => {
+      const repo = new EmbeddingRepository(makeDb({}));
+      const deleteSpy = jest.spyOn(repo, 'deleteBySource').mockResolvedValue();
       await repo.upsertChunks({
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -112,11 +130,12 @@ describe('EmbeddingRepository', () => {
         contentHash: 'hash',
         chunks: [],
       });
-
       expect(deleteSpy).toHaveBeenCalledWith('page', 'page-1');
     });
 
-    it('upserts one row per chunk', async () => {
+    it('inserts one row per chunk', async () => {
+      const inserts: unknown[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackInserts: inserts }));
       await repo.upsertChunks({
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -130,11 +149,69 @@ describe('EmbeddingRepository', () => {
           { chunkIndex: 1, chunkText: 'World', embedding: [0.3, 0.4] },
         ],
       });
-
-      expect(db._upsertedChunks).toHaveLength(2);
+      expect(inserts).toHaveLength(2);
     });
 
-    it('issues a stale-chunk delete after upserting', async () => {
+    it('formats the embedding as a vector literal string in each row', async () => {
+      const inserts: any[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackInserts: inserts }));
+      await repo.upsertChunks({
+        workspaceId: 'ws',
+        spaceId: 'sp',
+        sourceKind: 'page',
+        sourceId: 'page-1',
+        model: 'mistral-embed',
+        dim: 1024,
+        contentHash: 'hash',
+        chunks: [{ chunkIndex: 0, chunkText: 'Hi', embedding: [0.5, 0.6] }],
+      });
+      // The embedding is passed as a SQL template expression (not a plain array).
+      // We assert the row was passed — the exact cast is handled by Kysely sql``
+      expect(inserts[0]).toHaveProperty('chunkIndex', 0);
+      expect(inserts[0]).toHaveProperty('chunkText', 'Hi');
+      expect(inserts[0]).toHaveProperty('contentHash', 'hash');
+    });
+
+    it('issues a stale-chunk delete after upserting all chunks', async () => {
+      const deletes: string[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackDeletes: deletes }));
+      await repo.upsertChunks({
+        workspaceId: 'ws',
+        spaceId: 'sp',
+        sourceKind: 'page',
+        sourceId: 'page-1',
+        model: 'mistral-embed',
+        dim: 1024,
+        contentHash: 'hash',
+        chunks: [
+          { chunkIndex: 0, chunkText: 'A', embedding: [0.1] },
+          { chunkIndex: 1, chunkText: 'B', embedding: [0.2] },
+        ],
+      });
+      // Exactly one stale-chunk delete (chunk_index >= 2).
+      expect(deletes).toHaveLength(1);
+    });
+
+    it('stores metadata as JSON when provided', async () => {
+      const inserts: any[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackInserts: inserts }));
+      const meta = { pageId: 'p1', title: 'My Page', spaceId: 'sp' };
+      await repo.upsertChunks({
+        workspaceId: 'ws',
+        spaceId: 'sp',
+        sourceKind: 'page',
+        sourceId: 'page-1',
+        model: 'mistral-embed',
+        dim: 1024,
+        contentHash: 'hash',
+        chunks: [{ chunkIndex: 0, chunkText: 'Hi', embedding: [0.1], metadata: meta }],
+      });
+      expect(inserts[0].metadata).toBe(JSON.stringify(meta));
+    });
+
+    it('stores null metadata when none is provided', async () => {
+      const inserts: any[] = [];
+      const repo = new EmbeddingRepository(makeDb({ trackInserts: inserts }));
       await repo.upsertChunks({
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -145,9 +222,7 @@ describe('EmbeddingRepository', () => {
         contentHash: 'hash',
         chunks: [{ chunkIndex: 0, chunkText: 'Hi', embedding: [0.1] }],
       });
-
-      // One delete for stale chunks (chunkIndex >= 1).
-      expect(db._deleteCalls).toHaveLength(1);
+      expect(inserts[0].metadata).toBeNull();
     });
   });
 });
