@@ -12,6 +12,9 @@ import { createOllama } from 'ai-sdk-ollama';
 import {
   type EmbeddingModel,
   type LanguageModel,
+  type ModelMessage,
+  type ToolSet,
+  type StopCondition,
   embed,
   embedMany,
   generateText,
@@ -169,6 +172,31 @@ export class AiProviderService implements OnModuleInit {
     });
   }
 
+  /**
+   * Multi-turn chat with optional tool support. Uses the dedicated chatModel
+   * (falls back to completionModel when AI_CHAT_MODEL is not set separately).
+   * Supports multi-step loops via `stopWhen: stepCountIs(N)`.
+   */
+  chat(args: {
+    messages: ModelMessage[];
+    system?: string;
+    tools?: ToolSet;
+    temperature?: number;
+    maxOutputTokens?: number;
+    stopWhen?: StopCondition<any>;
+  }): StreamTextResult {
+    const model = this.requireChatModel();
+    return streamText({
+      model,
+      messages: args.messages,
+      system: args.system,
+      tools: args.tools,
+      temperature: args.temperature ?? 0.5,
+      maxOutputTokens: args.maxOutputTokens,
+      stopWhen: args.stopWhen,
+    });
+  }
+
   async embed(text: string): Promise<number[]> {
     const model = this.requireEmbeddingModel();
     const { embedding } = await embed({ model, value: text });
@@ -256,6 +284,15 @@ export class AiProviderService implements OnModuleInit {
       );
     }
     return this.completionModel;
+  }
+
+  private requireChatModel(): LanguageModel {
+    if (!this.chatModel) {
+      throw new ServiceUnavailableException(
+        'AI provider is not configured. Set AI_DRIVER and provider credentials.',
+      );
+    }
+    return this.chatModel;
   }
 
   private requireEmbeddingModel(): EmbeddingModel {
