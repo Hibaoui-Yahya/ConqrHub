@@ -1,0 +1,13 @@
+# Local dev overrides for `docker compose up -d db redis`.
+# Exposes db + redis to the host and matches the password in .env so the
+# NestJS server (running on the host via `pnpm run dev`) can connect.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: docmostdev
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
