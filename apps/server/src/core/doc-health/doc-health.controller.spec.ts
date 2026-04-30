@@ -52,6 +52,13 @@ function buildController() {
       scannedMessages: 0,
     }),
   };
+  const searchAnalytics: any = {
+    findFailedQueries: jest.fn().mockResolvedValue({
+      items: [],
+      rangeDays: 30,
+      totalQueries: 0,
+    }),
+  };
   const workspaceAbility: any = { createForUser: jest.fn() };
   const spaceAbility: any = { createForUser: jest.fn() };
   const spaceRepo: any = { findById: jest.fn() };
@@ -62,6 +69,7 @@ function buildController() {
     snapshots,
     alerts,
     gaps,
+    searchAnalytics,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -74,6 +82,7 @@ function buildController() {
     snapshots,
     alerts,
     gaps,
+    searchAnalytics,
     workspaceAbility,
     spaceAbility,
     spaceRepo,
@@ -467,6 +476,58 @@ describe('DocHealthController', () => {
         ),
       ).rejects.toThrow(ForbiddenException);
       expect(gaps.findGaps).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSearchGaps', () => {
+    it('returns failed queries for a workspace admin', async () => {
+      const { controller, workspaceAbility, searchAnalytics } =
+        buildController();
+      workspaceAbility.createForUser.mockReturnValue(adminAbility);
+      searchAnalytics.findFailedQueries.mockResolvedValue({
+        items: [
+          {
+            query: 'pto policy',
+            category: 'no_results',
+            occurrences: 4,
+            uniqueAskers: 3,
+            lastAskedAt: '2026-04-27T12:00:00.000Z',
+            avgResultCount: 0,
+          },
+        ],
+        rangeDays: 30,
+        totalQueries: 120,
+      });
+
+      const result = await controller.getSearchGaps(
+        { days: 30, minOccurrences: 2, limit: 25 },
+        mockAdminUser,
+        mockWorkspace,
+      );
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].query).toBe('pto policy');
+      expect(searchAnalytics.findFailedQueries).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace.id,
+        days: 30,
+        minOccurrences: 2,
+        limit: 25,
+      });
+    });
+
+    it('rejects a non-admin', async () => {
+      const { controller, workspaceAbility, searchAnalytics } =
+        buildController();
+      workspaceAbility.createForUser.mockReturnValue(memberAbility);
+
+      await expect(
+        controller.getSearchGaps(
+          { days: 30, minOccurrences: 2, limit: 25 },
+          mockUser,
+          mockWorkspace,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(searchAnalytics.findFailedQueries).not.toHaveBeenCalled();
     });
   });
 });

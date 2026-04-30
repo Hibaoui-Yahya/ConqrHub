@@ -42,6 +42,16 @@ export class SearchShareDTO extends SearchDTO {
   spaceId: string;
 }
 
+export class SearchClickDTO {
+  @IsNotEmpty()
+  @IsString()
+  query: string;
+
+  @IsNotEmpty()
+  @IsString()
+  pageId: string;
+}
+
 export class SearchSuggestionDTO {
   @IsString()
   query: string;

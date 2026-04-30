@@ -33,6 +33,7 @@ import {
   HealthAlertsService,
 } from './services/alerts.service';
 import { KnowledgeGapsService } from './services/knowledge-gaps.service';
+import { SearchAnalyticsService } from '../search/search-analytics.service';
 import {
   HealthAlertItem,
   HealthAlertSubscribeDto,
@@ -42,6 +43,8 @@ import {
   HealthTrendResponse,
   KnowledgeGapsQueryDto,
   KnowledgeGapsResponse,
+  SearchGapsQueryDto,
+  SearchGapsResponse,
   SpaceHealthDto,
 } from './dto/doc-health.dto';
 
@@ -54,6 +57,7 @@ export class DocHealthController {
     private readonly snapshots: HealthSnapshotService,
     private readonly alerts: HealthAlertsService,
     private readonly gaps: KnowledgeGapsService,
+    private readonly searchAnalytics: SearchAnalyticsService,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly spaceRepo: SpaceRepo,
@@ -256,6 +260,27 @@ export class DocHealthController {
       throw new ForbiddenException();
     }
     return this.gaps.findGaps({
+      workspaceId: workspace.id,
+      days: input.days,
+      minOccurrences: input.minOccurrences,
+      limit: input.limit,
+    });
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('/search-gaps')
+  async getSearchGaps(
+    @Body() input: SearchGapsQueryDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ): Promise<SearchGapsResponse> {
+    const ability = this.workspaceAbility.createForUser(user, workspace);
+    if (
+      ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
+    ) {
+      throw new ForbiddenException();
+    }
+    return this.searchAnalytics.findFailedQueries({
       workspaceId: workspace.id,
       days: input.days,
       minOccurrences: input.minOccurrences,

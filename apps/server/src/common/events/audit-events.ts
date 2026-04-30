@@ -58,6 +58,7 @@ export const AuditEvent = {
   PAGE_RESTRICTED: 'page.restricted',
   PAGE_RESTRICTION_REMOVED: 'page.restriction_removed',
   PAGE_PERMISSION_ADDED: 'page.permission_added',
+  PAGE_PERMISSION_UPDATED: 'page.permission_updated',
   PAGE_PERMISSION_REMOVED: 'page.permission_removed',
   // Page verification
   PAGE_VERIFICATION_CREATED: 'page.verification_created',

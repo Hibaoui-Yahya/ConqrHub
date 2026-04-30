@@ -409,6 +409,17 @@ export interface PageVerifiers {
   userId: string;
 }
 
+export interface SearchEvents {
+  createdAt: Generated<Timestamp>;
+  eventType: string;
+  id: Generated<string>;
+  pageId: string | null;
+  query: string;
+  resultCount: number | null;
+  userId: string | null;
+  workspaceId: string;
+}
+
 export interface Shares {
   createdAt: Generated<Timestamp>;
   creatorId: string | null;
@@ -607,6 +618,7 @@ export interface DB {
   pages: Pages;
   pageVerifications: PageVerifications;
   pageVerifiers: PageVerifiers;
+  searchEvents: SearchEvents;
   shares: Shares;
   spaceMembers: SpaceMembers;
   spaces: Spaces;

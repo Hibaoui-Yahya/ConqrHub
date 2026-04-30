@@ -18,6 +18,7 @@ const SIGNAL_LABELS: Record<keyof ISignalBreakdown, string> = {
   ownership: "Ownership",
   verification: "Verification",
   contentStrength: "Content strength",
+  searchSuccess: "Search success",
 };
 
 function scoreColor(score: number) {
@@ -112,10 +113,11 @@ export default function HealthScoreCard({
           </Stack>
 
           {!data.insufficientData &&
-            (Object.keys(SIGNAL_LABELS) as (keyof ISignalBreakdown)[]).map(
-              (key) => {
+            (Object.keys(SIGNAL_LABELS) as (keyof ISignalBreakdown)[])
+              .filter((key) => data.signals[key] !== undefined)
+              .map((key) => {
                 const value = data.signals[key];
-                const isApplicable = value !== null;
+                const isApplicable = value !== null && value !== undefined;
                 return (
                   <Stack key={key} gap={2}>
                     <Group justify="space-between">
@@ -125,14 +127,13 @@ export default function HealthScoreCard({
                       </Text>
                     </Group>
                     <Progress
-                      value={isApplicable ? value : 0}
-                      color={isApplicable ? scoreColor(value) : "gray"}
+                      value={isApplicable ? (value as number) : 0}
+                      color={isApplicable ? scoreColor(value as number) : "gray"}
                       size="sm"
                     />
                   </Stack>
                 );
-              },
-            )}
+              })}
         </Stack>
       </Group>
     </Card>

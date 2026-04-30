@@ -9,6 +9,7 @@ import HealthAlertCard from "@/features/doc-health/components/health-alert-card"
 import HealthScoreCard from "@/features/doc-health/components/health-score-card";
 import HealthTrendChart from "@/features/doc-health/components/health-trend-chart";
 import KnowledgeGapsCard from "@/features/doc-health/components/knowledge-gaps-card";
+import SearchGapsCard from "@/features/doc-health/components/search-gaps-card";
 import SpaceScoresTable from "@/features/doc-health/components/space-scores-table";
 import IssueList from "@/features/doc-health/components/issue-list";
 import { useWorkspaceHealthQuery } from "@/features/doc-health/queries/doc-health-query";
@@ -66,6 +67,8 @@ export default function DocHealthPage() {
         <HealthAlertCard />
 
         <KnowledgeGapsCard />
+
+        <SearchGapsCard />
 
         <Stack gap="xs">
           <Title order={4}>{t("Spaces")}</Title>

@@ -35,9 +35,14 @@ export async function updateShare(data: IUpdateShare): Promise<any> {
   return req.data;
 }
 
-export async function getShareForPage(pageId: string): Promise<IShareForPage> {
+export async function getShareForPage(
+  pageId: string,
+): Promise<IShareForPage | null> {
   const req = await api.post<any>("/shares/for-page", { pageId });
-  return req.data;
+  // Backend returns `undefined` (no body) when the page has no share —
+  // TanStack Query rejects undefined as a valid query result, so coalesce
+  // to null. Existing consumers already null-check (`!!share`, `share?.…`).
+  return req.data ?? null;
 }
 
 export async function getSharePageInfo(

@@ -8,13 +8,13 @@ export const SIGNAL_WEIGHTS = {
   contentStrength: 0.2,
 } as const;
 
-// v2 signals — scaffolded today, weight stays at 0 until the AI Search
-// analytics infrastructure (PRD 20.2 + AI Search analytics) starts
-// populating the source columns. The v2 work flips these to nonzero,
-// rebalances the existing weights, and wires the signals into scorePage.
-// See docs/admin/documentation-health.md → "Signals deferred to v2".
+// v2 signals. AI confidence stays at 0 until the AI Search code path starts
+// populating ai_chat_messages.confidence (that path lives in EE and isn't yet
+// wired). Search success is live: SearchAnalyticsService records every query
+// and click, and DocHealthService blends the signal into the workspace-level
+// rollup. See docs/admin/documentation-health.md → "Signals deferred to v2".
 export const AI_CONFIDENCE_WEIGHT = 0;
-export const SEARCH_SUCCESS_WEIGHT = 0;
+export const SEARCH_SUCCESS_WEIGHT = 0.15;
 export const AI_CONFIDENCE_FLOOR = 0.5;
 export const AI_CONFIDENCE_CEILING = 0.9;
 export const SEARCH_SUCCESS_MIN_QUERIES = 5;
@@ -204,23 +204,37 @@ export class ScoringService {
   }
 
   /**
-   * v2 signal scaffold: ratio of search queries that resolved into a
-   * successful click-through to a wiki page. Requires the search analytics
-   * pipeline (PRD 20.2) which does not yet exist. Returns null until both
-   * (a) the analytics table is wired and (b) SEARCH_SUCCESS_WEIGHT > 0.
-   *
-   * The MIN_QUERIES guard prevents a single failed search on a quiet
-   * workspace from tanking the score.
+   * Ratio of search queries that resolved into a click-through, mapped onto
+   * the 0–100 health-signal scale. The MIN_QUERIES guard prevents a single
+   * failed search on a quiet workspace from tanking the score — under the
+   * threshold we return null and the workspace rollup falls back to the
+   * page-level signals only.
    */
   scoreSearchSuccess(input: {
     successfulQueries: number;
     totalQueries: number;
   }): number | null {
-    if (SEARCH_SUCCESS_WEIGHT === 0) return null;
     if (!Number.isFinite(input.totalQueries)) return null;
     if (input.totalQueries < SEARCH_SUCCESS_MIN_QUERIES) return null;
     if (input.totalQueries === 0) return null;
     const ratio = input.successfulQueries / input.totalQueries;
     return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+  }
+
+  /**
+   * Blend a workspace-level signal (e.g., search success) into a previously
+   * computed page-rollup score. Page-rollup signals have a combined weight of
+   * 1.0; the workspace signal contributes `weight` on top. If either input is
+   * null, returns the other unchanged.
+   */
+  blendWorkspaceSignal(
+    pageRollupScore: number | null,
+    workspaceSignal: number | null,
+    weight: number,
+  ): number | null {
+    if (pageRollupScore === null) return null;
+    if (workspaceSignal === null || weight <= 0) return pageRollupScore;
+    const blended = (pageRollupScore * 1 + workspaceSignal * weight) / (1 + weight);
+    return Math.round(blended);
   }
 }

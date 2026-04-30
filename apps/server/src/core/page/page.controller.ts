@@ -12,6 +12,14 @@ import {
 } from '@nestjs/common';
 import { PageService } from './services/page.service';
 import { PageAccessService } from './page-access/page-access.service';
+import { PagePermissionService } from './services/page-permission.service';
+import {
+  AddPagePermissionDto,
+  PagePermissionsListDto,
+  PageRestrictDto,
+  RemovePagePermissionDto,
+  UpdatePagePermissionRoleDto,
+} from './dto/page-permission.dto';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 import { MovePageDto, MovePageToSpaceDto } from './dto/move-page.dto';
@@ -58,6 +66,7 @@ export class PageController {
     private readonly pageHistoryService: PageHistoryService,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly pageAccessService: PageAccessService,
+    private readonly pagePermissionService: PagePermissionService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -646,5 +655,68 @@ export class PageController {
     await this.pageAccessService.validateCanView(page, user);
 
     return this.pageService.getPageBreadCrumbs(page.id);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('permission-info')
+  async getPagePermissionInfo(
+    @Body() dto: PageRestrictDto,
+    @AuthUser() user: User,
+  ) {
+    return this.pagePermissionService.getRestrictionInfo(dto.pageId, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('restrict')
+  async restrictPage(
+    @Body() dto: PageRestrictDto,
+    @AuthUser() user: User,
+  ) {
+    await this.pagePermissionService.restrictPage(dto.pageId, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('remove-restriction')
+  async unrestrictPage(
+    @Body() dto: PageRestrictDto,
+    @AuthUser() user: User,
+  ) {
+    await this.pagePermissionService.unrestrictPage(dto.pageId, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('add-permission')
+  async addPagePermission(
+    @Body() dto: AddPagePermissionDto,
+    @AuthUser() user: User,
+  ) {
+    await this.pagePermissionService.addPermission(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('remove-permission')
+  async removePagePermission(
+    @Body() dto: RemovePagePermissionDto,
+    @AuthUser() user: User,
+  ) {
+    await this.pagePermissionService.removePermission(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('update-permission')
+  async updatePagePermissionRole(
+    @Body() dto: UpdatePagePermissionRoleDto,
+    @AuthUser() user: User,
+  ) {
+    await this.pagePermissionService.updateRole(dto, user);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('permissions')
+  async listPagePermissions(
+    @Body() dto: PagePermissionsListDto,
+    @AuthUser() user: User,
+  ) {
+    return this.pagePermissionService.listPermissions(dto.pageId, user, dto);
   }
 }

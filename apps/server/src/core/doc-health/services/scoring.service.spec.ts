@@ -296,30 +296,22 @@ describe('ScoringService', () => {
     });
   });
 
-  describe('v2 signal scaffolding (zero-weight)', () => {
+  describe('v2 AI-confidence scaffold (still zero-weight)', () => {
     it('scoreAiConfidence returns null while AI_CONFIDENCE_WEIGHT is 0', () => {
-      // The scaffold MUST stay inert until v2 flips the weight on. If
-      // someone bumps AI_CONFIDENCE_WEIGHT without rebalancing the
-      // existing weights, this test will start failing — that's the
-      // signal to update scorePage and SignalBreakdown together.
+      // The AI confidence scaffold stays inert until the EE AI Search code
+      // path starts writing ai_chat_messages.confidence. If someone bumps
+      // AI_CONFIDENCE_WEIGHT without rebalancing the existing weights, this
+      // test will start failing — that's the signal to update scorePage and
+      // SignalBreakdown together.
       expect(service.scoreAiConfidence(0.95)).toBeNull();
       expect(service.scoreAiConfidence(0.1)).toBeNull();
       expect(service.scoreAiConfidence(null)).toBeNull();
       expect(service.scoreAiConfidence(Number.NaN)).toBeNull();
     });
 
-    it('scoreSearchSuccess returns null while SEARCH_SUCCESS_WEIGHT is 0', () => {
-      expect(
-        service.scoreSearchSuccess({ successfulQueries: 9, totalQueries: 10 }),
-      ).toBeNull();
-      expect(
-        service.scoreSearchSuccess({ successfulQueries: 0, totalQueries: 0 }),
-      ).toBeNull();
-    });
-
-    it('scorePage signals shape is unaffected by the v2 scaffold', () => {
-      // Sanity check that adding the new methods didn't change the
-      // SignalBreakdown shape or the existing scoring math.
+    it('scorePage signals shape is unaffected by workspace-level scaffolds', () => {
+      // Sanity check: searchSuccess is workspace-level only and must not
+      // appear in per-page signal output.
       const scored = service.scorePage({
         updatedAt: new Date(NOW),
         hasActiveOwner: true,
@@ -335,6 +327,61 @@ describe('ScoringService', () => {
         'ownership',
         'verification',
       ]);
+    });
+  });
+
+  describe('scoreSearchSuccess', () => {
+    it('returns null when total queries are below the minimum threshold', () => {
+      expect(
+        service.scoreSearchSuccess({ successfulQueries: 2, totalQueries: 3 }),
+      ).toBeNull();
+    });
+
+    it('returns null when there are no queries', () => {
+      expect(
+        service.scoreSearchSuccess({ successfulQueries: 0, totalQueries: 0 }),
+      ).toBeNull();
+    });
+
+    it('maps the click-through ratio onto a 0-100 scale', () => {
+      expect(
+        service.scoreSearchSuccess({
+          successfulQueries: 9,
+          totalQueries: 10,
+        }),
+      ).toBe(90);
+      expect(
+        service.scoreSearchSuccess({
+          successfulQueries: 5,
+          totalQueries: 20,
+        }),
+      ).toBe(25);
+    });
+
+    it('clamps to 0-100 even if inputs are inconsistent', () => {
+      expect(
+        service.scoreSearchSuccess({
+          successfulQueries: 100,
+          totalQueries: 10,
+        }),
+      ).toBe(100);
+    });
+  });
+
+  describe('blendWorkspaceSignal', () => {
+    it('returns the page rollup score unchanged when the workspace signal is null', () => {
+      expect(service.blendWorkspaceSignal(80, null, 0.15)).toBe(80);
+    });
+
+    it('returns null when the page rollup is null (insufficient data)', () => {
+      expect(service.blendWorkspaceSignal(null, 60, 0.15)).toBeNull();
+    });
+
+    it('weights the workspace signal at the configured ratio', () => {
+      // page=100, search=0, weight=0.15 → (100*1 + 0*0.15) / 1.15 ≈ 87
+      expect(service.blendWorkspaceSignal(100, 0, 0.15)).toBe(87);
+      // page=80, search=80, weight=0.15 → 80
+      expect(service.blendWorkspaceSignal(80, 80, 0.15)).toBe(80);
     });
   });
 });

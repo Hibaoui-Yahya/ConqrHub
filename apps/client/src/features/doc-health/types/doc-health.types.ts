@@ -11,6 +11,7 @@ export interface ISignalBreakdown {
   ownership: number;
   verification: number | null;
   contentStrength: number;
+  searchSuccess?: number | null;
 }
 
 export interface ISpaceScoreSummary {
@@ -124,6 +125,29 @@ export interface IKnowledgeGapsResponse {
 }
 
 export interface IKnowledgeGapsQuery {
+  days?: number;
+  minOccurrences?: number;
+  limit?: number;
+}
+
+export type SearchGapCategory = "no_results" | "no_click";
+
+export interface ISearchGap {
+  query: string;
+  category: SearchGapCategory;
+  occurrences: number;
+  uniqueAskers: number;
+  lastAskedAt: string;
+  avgResultCount: number;
+}
+
+export interface ISearchGapsResponse {
+  items: ISearchGap[];
+  rangeDays: number;
+  totalQueries: number;
+}
+
+export interface ISearchGapsQuery {
   days?: number;
   minOccurrences?: number;
   limit?: number;

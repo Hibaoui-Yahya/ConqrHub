@@ -20,6 +20,7 @@ import { HealthSnapshotService } from '../../../core/doc-health/services/snapsho
 import { HealthAlertsService } from '../../../core/doc-health/services/alerts.service';
 import { BrokenLinksService } from '../../../core/doc-health/services/broken-links.service';
 import { DuplicatesService } from '../../../core/doc-health/services/duplicates.service';
+import { SearchAnalyticsService } from '../../../core/search/search-analytics.service';
 
 @Processor(QueueName.GENERAL_QUEUE)
 export class GeneralQueueProcessor
@@ -109,10 +110,23 @@ export class GeneralQueueProcessor
           const snapshot = this.moduleRef.get(HealthSnapshotService, {
             strict: false,
           });
-          if (!snapshot) return;
-          const removed = await snapshot.pruneOlderThan();
-          if (removed > 0) {
-            this.logger.log(`Doc-health pruned ${removed} old snapshots`);
+          if (snapshot) {
+            const removed = await snapshot.pruneOlderThan();
+            if (removed > 0) {
+              this.logger.log(`Doc-health pruned ${removed} old snapshots`);
+            }
+          }
+
+          const searchAnalytics = this.moduleRef.get(SearchAnalyticsService, {
+            strict: false,
+          });
+          if (searchAnalytics) {
+            const removedEvents = await searchAnalytics.pruneOldEvents();
+            if (removedEvents > 0) {
+              this.logger.log(
+                `Doc-health pruned ${removedEvents} old search events`,
+              );
+            }
           }
           break;
         }

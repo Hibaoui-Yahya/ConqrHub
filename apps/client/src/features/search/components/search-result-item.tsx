@@ -17,6 +17,7 @@ import {
   IAttachmentSearch,
   IPageSearch,
 } from "@/features/search/types/search.types";
+import { trackSearchClick } from "@/features/search/services/search-service";
 import DOMPurify from "dompurify";
 import { useTranslation } from "react-i18next";
 
@@ -24,12 +25,14 @@ interface SearchResultItemProps {
   result: IPageSearch | IAttachmentSearch;
   isAttachmentResult: boolean;
   showSpace?: boolean;
+  query?: string;
 }
 
 export function SearchResultItem({
   result,
   isAttachmentResult,
   showSpace,
+  query,
 }: SearchResultItemProps) {
   const { t } = useTranslation();
 
@@ -93,6 +96,11 @@ export function SearchResultItem({
     );
   } else {
     const pageResult = result as IPageSearch;
+    const handleClick = () => {
+      if (query && query.trim().length > 0) {
+        void trackSearchClick({ query, pageId: pageResult.id });
+      }
+    };
     return (
       <Spotlight.Action
         component={Link}
@@ -102,6 +110,7 @@ export function SearchResultItem({
           pageResult.slugId,
           pageResult.title,
         )}
+        onClick={handleClick}
         style={{ userSelect: "none" }}
       >
         <Group wrap="nowrap" w="100%">

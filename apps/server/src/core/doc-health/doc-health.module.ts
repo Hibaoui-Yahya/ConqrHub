@@ -12,9 +12,10 @@ import { KnowledgeGapsService } from './services/knowledge-gaps.service';
 import { DuplicatesService } from './services/duplicates.service';
 import { CaslModule } from '../casl/casl.module';
 import { NotificationModule } from '../notification/notification.module';
+import { SearchModule } from '../search/search.module';
 
 @Module({
-  imports: [CaslModule, NotificationModule],
+  imports: [CaslModule, NotificationModule, SearchModule],
   controllers: [DocHealthController],
   providers: [
     ScoringService,

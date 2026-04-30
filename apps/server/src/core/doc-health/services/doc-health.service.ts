@@ -12,7 +12,9 @@ import {
   PageScoringInput,
   ScoredPage,
   ScoringService,
+  SEARCH_SUCCESS_WEIGHT,
 } from './scoring.service';
+import { SearchAnalyticsService } from '../../search/search-analytics.service';
 
 type PageHealthRow = {
   id: string;
@@ -33,13 +35,27 @@ export class DocHealthService {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly scoring: ScoringService,
+    private readonly searchAnalytics: SearchAnalyticsService,
   ) {}
 
   async getWorkspaceHealth(
     workspaceId: string,
   ): Promise<WorkspaceHealthResponse> {
     const rows = await this.fetchPageRows({ workspaceId });
-    return this.buildWorkspaceResponse(rows);
+    const searchSuccess = await this.computeSearchSuccessSignal(workspaceId);
+    return this.buildWorkspaceResponse(rows, searchSuccess);
+  }
+
+  private async computeSearchSuccessSignal(
+    workspaceId: string,
+  ): Promise<number | null> {
+    const summary = await this.searchAnalytics.computeWorkspaceSuccess({
+      workspaceId,
+    });
+    return this.scoring.scoreSearchSuccess({
+      successfulQueries: summary.successfulQueries,
+      totalQueries: summary.totalQueries,
+    });
   }
 
   async getSpaceHealth(
@@ -64,6 +80,7 @@ export class DocHealthService {
 
   private buildWorkspaceResponse(
     rows: PageHealthRow[],
+    searchSuccess: number | null,
   ): WorkspaceHealthResponse {
     const bySpace = new Map<
       string,
@@ -106,11 +123,17 @@ export class DocHealthService {
         return a.score - b.score;
       });
 
+    const blendedScore = this.scoring.blendWorkspaceSignal(
+      overall.score,
+      searchSuccess,
+      SEARCH_SUCCESS_WEIGHT,
+    );
+
     return {
-      score: overall.score,
+      score: blendedScore,
       pageCount: rows.length,
       scoredPageCount: allScored.length,
-      signals: overall.signals,
+      signals: { ...overall.signals, searchSuccess },
       insufficientData: overall.insufficientData,
       spaces,
     };

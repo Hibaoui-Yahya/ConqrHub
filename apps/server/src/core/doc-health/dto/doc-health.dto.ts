@@ -84,6 +84,7 @@ export type SignalBreakdown = {
   ownership: number;
   verification: number | null;
   contentStrength: number;
+  searchSuccess?: number | null;
 };
 
 export type HealthScoreResponse = {
@@ -178,4 +179,43 @@ export type KnowledgeGapsResponse = {
   items: KnowledgeGapItem[];
   rangeDays: number;
   scannedMessages: number;
+};
+
+export class SearchGapsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  days?: number = 30;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  minOccurrences?: number = 2;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 25;
+}
+
+export type SearchGapCategory = 'no_results' | 'no_click';
+
+export type SearchGapItem = {
+  query: string;
+  category: SearchGapCategory;
+  occurrences: number;
+  uniqueAskers: number;
+  lastAskedAt: string;
+  avgResultCount: number;
+};
+
+export type SearchGapsResponse = {
+  items: SearchGapItem[];
+  rangeDays: number;
+  totalQueries: number;
 };

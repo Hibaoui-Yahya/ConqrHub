@@ -10,6 +10,8 @@ import {
   IHealthTrendResponse,
   IKnowledgeGapsQuery,
   IKnowledgeGapsResponse,
+  ISearchGapsQuery,
+  ISearchGapsResponse,
   IWorkspaceHealth,
 } from "@/features/doc-health/types/doc-health.types";
 
@@ -85,6 +87,16 @@ export async function getKnowledgeGaps(
 ): Promise<IKnowledgeGapsResponse> {
   const req = await api.post<IKnowledgeGapsResponse>(
     "/workspace-health/gaps",
+    params,
+  );
+  return req.data;
+}
+
+export async function getSearchGaps(
+  params: ISearchGapsQuery,
+): Promise<ISearchGapsResponse> {
+  const req = await api.post<ISearchGapsResponse>(
+    "/workspace-health/search-gaps",
     params,
   );
   return req.data;

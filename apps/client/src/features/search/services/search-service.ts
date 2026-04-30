@@ -34,3 +34,16 @@ export async function searchAttachments(
   const req = await api.post<{ items: IAttachmentSearch[] }>("/search-attachments", params);
   return req.data.items;
 }
+
+export async function trackSearchClick(params: {
+  query: string;
+  pageId: string;
+}): Promise<void> {
+  // Fire-and-forget: doc-health uses these to compute the search-success
+  // signal, but a failure here must never block navigation.
+  try {
+    await api.post("/search/click", params);
+  } catch {
+    // ignore
+  }
+}

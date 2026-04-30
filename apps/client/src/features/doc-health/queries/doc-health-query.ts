@@ -11,6 +11,7 @@ import {
   getHealthIssues,
   getHealthTrend,
   getKnowledgeGaps,
+  getSearchGaps,
   getSpaceHealth,
   getWorkspaceHealth,
   listHealthAlerts,
@@ -27,6 +28,8 @@ import {
   IHealthTrendResponse,
   IKnowledgeGapsQuery,
   IKnowledgeGapsResponse,
+  ISearchGapsQuery,
+  ISearchGapsResponse,
   IWorkspaceHealth,
 } from "@/features/doc-health/types/doc-health.types";
 
@@ -127,6 +130,16 @@ export function useKnowledgeGapsQuery(
   return useQuery({
     queryKey: ["doc-health", "gaps", params],
     queryFn: () => getKnowledgeGaps(params),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useSearchGapsQuery(
+  params: ISearchGapsQuery,
+): UseQueryResult<ISearchGapsResponse, Error> {
+  return useQuery({
+    queryKey: ["doc-health", "search-gaps", params],
+    queryFn: () => getSearchGaps(params),
     placeholderData: keepPreviousData,
   });
 }
