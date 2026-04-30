@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { EnvironmentModule } from '../../../integrations/environment/environment.module';
+import { QueueName } from '../../../integrations/queue/constants';
+import { ChunkingService } from './chunking.service';
+import { EmbeddingRepository } from './embedding.repository';
+import { EmbeddingIndexerService } from './embedding-indexer.service';
+import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
+import { EmbeddingsAdminController } from './embeddings-admin.controller';
+import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
+
+@Module({
+  imports: [
+    EnvironmentModule,
+    BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
+  ],
+  controllers: [EmbeddingsAdminController],
+  providers: [
+    ChunkingService,
+    EmbeddingRepository,
+    EmbeddingIndexerService,
+    AiEmbeddingQueueProcessor,
+    WorkspaceAbilityFactory,
+  ],
+  exports: [EmbeddingRepository, EmbeddingIndexerService, ChunkingService],
+})
+export class EmbeddingsModule {}

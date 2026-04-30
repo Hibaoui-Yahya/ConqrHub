@@ -333,4 +333,28 @@ export class EnvironmentService {
   getClickHouseUrl(): string {
     return this.configService.get<string>('CLICKHOUSE_URL');
   }
+
+  getAiEmbeddingBatchSize(): number {
+    const raw = this.configService.get<string>('AI_EMBEDDING_BATCH_SIZE', '32');
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 32;
+  }
+
+  getAiEmbeddingChunkChars(): number {
+    const raw = this.configService.get<string>(
+      'AI_EMBEDDING_CHUNK_CHARS',
+      '1600',
+    );
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1600;
+  }
+
+  getAiEmbeddingChunkOverlap(): number {
+    const raw = this.configService.get<string>(
+      'AI_EMBEDDING_CHUNK_OVERLAP',
+      '200',
+    );
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 200;
+  }
 }
