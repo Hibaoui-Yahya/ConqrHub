@@ -288,6 +288,10 @@ export class EnvironmentService {
     return this.configService.get<string>('GEMINI_API_KEY');
   }
 
+  getMistralApiKey(): string {
+    return this.configService.get<string>('MISTRAL_API_KEY');
+  }
+
   getOllamaApiUrl(): string {
     return this.configService.get<string>(
       'OLLAMA_API_URL',

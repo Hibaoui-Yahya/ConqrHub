@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.52",
+    "@ai-sdk/mistral": "^3",
     "@ai-sdk/openai": "^3.0.47",
     "@ai-sdk/openai-compatible": "^2.0.37",
     "@aws-sdk/client-s3": "3.1037.0",
@@ -169,7 +170,7 @@
       "^.+\\.(t|j)sx?$": "ts-jest"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!(\\.pnpm/)?(nanoid|uuid|image-dimensions|marked)(@|/))"
+      "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:@react-email[\\\\/+][^\\\\/]+|uuid|nanoid)(?:@[^\\\\/]+)?[\\\\/])"
     ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
@@ -180,9 +181,6 @@
       "^@docmost/db/(.*)$": "<rootDir>/database/$1",
       "^@docmost/transactional/(.*)$": "<rootDir>/integrations/transactional/$1",
       "^@docmost/ee/(.*)$": "<rootDir>/ee/$1"
-    },
-    "transformIgnorePatterns": [
-      "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:@react-email[\\\\/+][^\\\\/]+|uuid|nanoid)(?:@[^\\\\/]+)?[\\\\/])"
-    ]
+    }
   }
 }

@@ -7,6 +7,7 @@ import {
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createMistral } from '@ai-sdk/mistral';
 import { createOllama } from 'ai-sdk-ollama';
 import {
   type EmbeddingModel,
@@ -18,17 +19,49 @@ import {
 } from 'ai';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 
-export type AiDriver = 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
+export type AiDriver =
+  | 'openai'
+  | 'gemini'
+  | 'ollama'
+  | 'openai-compatible'
+  | 'mistral';
 
 // streamText's full return type names internal generics that TS can't
 // re-emit from this file. Aliasing keeps the public API typed without
 // dragging the SDK's internal Output type into our .d.ts surface.
 export type StreamTextResult = ReturnType<typeof streamText>;
 
-const DEFAULT_COMPLETION_MODEL = 'gpt-4o-mini';
-const DEFAULT_CHAT_MODEL = 'gpt-4o-mini';
-const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
-const DEFAULT_EMBEDDING_DIMENSION = 1536;
+type DriverDefaults = {
+  completion: string;
+  chat: string;
+  embedding: string;
+  dimension: number;
+};
+
+// Defaults are per-driver because each provider has its own model
+// catalog. The historical OpenAI-flavored defaults stay the fallback
+// for openai / gemini / ollama / openai-compatible — operators almost
+// always override AI_*_MODEL anyway, and changing those defaults
+// would be a behavior change for existing users. Mistral gets its
+// own native defaults so AI_DRIVER=mistral with no other config
+// boots into a sensible state.
+const OPENAI_FLAVOR_DEFAULTS: DriverDefaults = {
+  completion: 'gpt-4o-mini',
+  chat: 'gpt-4o-mini',
+  embedding: 'text-embedding-3-small',
+  dimension: 1536,
+};
+
+const MISTRAL_DEFAULTS: DriverDefaults = {
+  completion: 'mistral-large-latest',
+  chat: 'mistral-large-latest',
+  embedding: 'mistral-embed',
+  dimension: 1024,
+};
+
+function defaultsForDriver(driver: AiDriver | null): DriverDefaults {
+  return driver === 'mistral' ? MISTRAL_DEFAULTS : OPENAI_FLAVOR_DEFAULTS;
+}
 
 /**
  * AiProviderService is the EE single-entry-point to the LLM stack. Other AI
@@ -36,9 +69,10 @@ const DEFAULT_EMBEDDING_DIMENSION = 1536;
  * selection and credential handling live in exactly one place.
  *
  * Driver selection is env-driven (AI_DRIVER). Switching providers therefore
- * doesn't require code changes — just env updates and a restart. Cloud
- * defaults to openai; self-hosted operators commonly point at ollama or an
- * openai-compatible endpoint (LiteLLM, Azure OpenAI, vLLM).
+ * doesn't require code changes — just env updates and a restart. Supported
+ * drivers: openai, gemini, mistral, ollama, openai-compatible (LiteLLM,
+ * Azure OpenAI, vLLM, etc.). ConqrHub's documented default for new
+ * deployments is mistral; openai remains fully supported.
  */
 @Injectable()
 export class AiProviderService implements OnModuleInit {
@@ -76,7 +110,8 @@ export class AiProviderService implements OnModuleInit {
       normalised === 'openai' ||
       normalised === 'gemini' ||
       normalised === 'ollama' ||
-      normalised === 'openai-compatible'
+      normalised === 'openai-compatible' ||
+      normalised === 'mistral'
     ) {
       return normalised;
     }
@@ -91,7 +126,7 @@ export class AiProviderService implements OnModuleInit {
   getEmbeddingDimension(): number {
     const dim = this.env.getAiEmbeddingDimension();
     if (Number.isFinite(dim) && dim > 0) return dim;
-    return DEFAULT_EMBEDDING_DIMENSION;
+    return defaultsForDriver(this.getDriver()).dimension;
   }
 
   /**
@@ -148,7 +183,7 @@ export class AiProviderService implements OnModuleInit {
 
   private buildCompletionModel(driver: AiDriver): LanguageModel {
     const modelId =
-      this.env.getAiCompletionModel() || DEFAULT_COMPLETION_MODEL;
+      this.env.getAiCompletionModel() || defaultsForDriver(driver).completion;
     return this.providerFor(driver).languageModel(modelId);
   }
 
@@ -156,13 +191,13 @@ export class AiProviderService implements OnModuleInit {
     const modelId =
       this.env.getAiChatModel() ||
       this.env.getAiCompletionModel() ||
-      DEFAULT_CHAT_MODEL;
+      defaultsForDriver(driver).chat;
     return this.providerFor(driver).languageModel(modelId);
   }
 
   private buildEmbeddingModel(driver: AiDriver): EmbeddingModel {
     const modelId =
-      this.env.getAiEmbeddingModel() || DEFAULT_EMBEDDING_MODEL;
+      this.env.getAiEmbeddingModel() || defaultsForDriver(driver).embedding;
     return this.providerFor(driver).textEmbeddingModel(modelId);
   }
 
@@ -191,6 +226,13 @@ export class AiProviderService implements OnModuleInit {
     if (driver === 'ollama') {
       const baseURL = this.env.getOllamaApiUrl();
       return createOllama({ baseURL });
+    }
+    if (driver === 'mistral') {
+      const apiKey = this.env.getMistralApiKey();
+      if (!apiKey) {
+        throw new Error('MISTRAL_API_KEY is required when AI_DRIVER=mistral');
+      }
+      return createMistral({ apiKey });
     }
     // openai-compatible: LiteLLM, Azure OpenAI, vLLM, etc.
     const apiKey = this.env.getOpenAiApiKey();
