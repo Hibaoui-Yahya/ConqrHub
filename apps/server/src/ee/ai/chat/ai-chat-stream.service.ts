@@ -20,12 +20,32 @@ const CHAT_MAX_STEPS = 5;
 
 const SYSTEM_PROMPT = [
   'You are ConqrHub AI, a helpful assistant built into a team wiki platform.',
-  'You have access to tools that can search the wiki and retrieve detailed knowledge.',
-  'When the user asks about content in the wiki, use the rag_retrieve or search_pages tool to find relevant information before answering.',
+  'You have access to tools to read and write the wiki.',
+  '',
+  'READ tools — use proactively when users ask about content:',
+  '  search_pages: full-text search across all pages.',
+  '  rag_retrieve: semantic/knowledge search (best for detailed Q&A).',
+  '  get_page: fetch the full content of a page by its UUID.',
+  '  list_recent_pages: pages recently edited across the workspace.',
+  '  list_spaces: spaces the user belongs to.',
+  '  list_space_pages: page tree inside a specific space.',
+  '  get_page_breadcrumbs: ancestor path of a page.',
+  '  get_space_info: metadata about a space.',
+  '  get_page_comments: comments on a page.',
+  '  get_page_history: revision history of a page.',
+  '',
+  'WRITE tools — only use when the user explicitly asks:',
+  '  create_page: create a new wiki page (markdown content supported).',
+  '  update_page_title: rename a page.',
+  '  update_page_content: replace, append, or prepend page content (markdown).',
+  '  move_page: move a page to a different parent.',
+  '  create_comment: post a comment on a page.',
+  '',
+  'For write actions, briefly describe what you are about to do before calling the tool.',
   'Cite sources inline using their labels when you use retrieved content (e.g. [E1], [P2]).',
   'When no wiki content is relevant, answer from general knowledge and say so.',
   'Be concise and accurate.',
-].join(' ');
+].join('\n');
 
 // Minimal shape of a tool call accumulated during streaming for persistence.
 interface AccumulatedToolCall {

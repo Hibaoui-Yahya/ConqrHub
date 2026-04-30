@@ -180,7 +180,10 @@
     "moduleNameMapper": {
       "^@docmost/db/(.*)$": "<rootDir>/database/$1",
       "^@docmost/transactional/(.*)$": "<rootDir>/integrations/transactional/$1",
-      "^@docmost/ee/(.*)$": "<rootDir>/ee/$1"
+      "^@docmost/ee/(.*)$": "<rootDir>/ee/$1",
+      "^@docmost/editor-ext$": "<rootDir>/__mocks__/editor-ext.ts",
+      "^image-dimensions$": "<rootDir>/__mocks__/image-dimensions.ts",
+      "^(\\.{1,2}/.+)\\.js$": "$1"
     }
   }
 }
