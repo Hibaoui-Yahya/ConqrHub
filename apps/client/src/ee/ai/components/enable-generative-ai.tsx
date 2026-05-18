@@ -12,7 +12,7 @@ import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 export default function EnableGenerativeAi() {
   const { t } = useTranslation();
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
-  const [checked, setChecked] = useState(workspace?.settings?.ai?.generative);
+  const [checked, setChecked] = useState(workspace?.settings?.ai?.generative ?? true);
   const hasAccess = useHasFeature(Feature.AI);
   const upgradeLabel = useUpgradeLabel(4);
 

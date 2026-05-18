@@ -37,7 +37,7 @@ interface AiSearchToggleProps {
 export function AiSearchToggle({ size, label }: AiSearchToggleProps) {
   const { t } = useTranslation();
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
-  const [checked, setChecked] = useState(workspace?.settings?.ai?.search);
+  const [checked, setChecked] = useState(workspace?.settings?.ai?.search ?? true);
   const hasAccess = useHasFeature(Feature.AI);
   const upgradeLabel = useUpgradeLabel(4);
 

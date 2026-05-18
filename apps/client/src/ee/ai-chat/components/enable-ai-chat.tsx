@@ -36,7 +36,7 @@ export default function EnableAiChat() {
 function AiChatToggle() {
   const { t } = useTranslation();
   const [workspace, setWorkspace] = useAtom(workspaceAtom);
-  const [checked, setChecked] = useState(workspace?.settings?.ai?.chat);
+  const [checked, setChecked] = useState(workspace?.settings?.ai?.chat ?? true);
   const hasAccess = useHasFeature(Feature.AI);
   const upgradeLabel = useUpgradeLabel(4);
 
