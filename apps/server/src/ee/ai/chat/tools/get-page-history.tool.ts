@@ -50,13 +50,18 @@ export class GetPageHistoryTool implements ChatTool, OnModuleInit {
     id: string;
     title: string | null;
     creatorId: string | null;
-    createdAt: Date;
+    createdAt: string;
   }[]> {
     const page = await this.pageService.findById(args.pageId);
     if (!page) throw new NotFoundException('Page not found');
 
-    const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+    let ability;
+    try {
+      ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+    }
+    if (ability?.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
       throw new ForbiddenException('You do not have access to this page');
     }
 
@@ -69,7 +74,7 @@ export class GetPageHistoryTool implements ChatTool, OnModuleInit {
       id: h.id,
       title: h.title ?? null,
       creatorId: h.creatorId ?? null,
-      createdAt: h.createdAt,
+      createdAt: h.createdAt?.toISOString?.() ?? new Date().toISOString(),
     }));
   }
 }

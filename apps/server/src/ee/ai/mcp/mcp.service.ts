@@ -76,18 +76,23 @@ export class McpService {
 
     try {
       const result = await tool.execute(params.arguments ?? {}, { user, workspaceId: ctx.workspaceId } as any);
+
+      const text = result === undefined || result === null
+        ? 'null'
+        : typeof result === 'string'
+          ? result
+          : JSON.stringify(result, (key, value) => {
+              if (value === undefined) return null;
+              return value;
+            }, 2);
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-          },
-        ],
+        content: [{ type: 'text' as const, text }],
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Tool execution failed';
       return {
-        content: [{ type: 'text', text: `Error: ${message}` }],
+        content: [{ type: 'text' as const, text: `Error: ${message}` }],
         isError: true,
       };
     }

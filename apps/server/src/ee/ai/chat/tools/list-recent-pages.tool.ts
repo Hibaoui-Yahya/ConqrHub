@@ -32,7 +32,7 @@ export class ListRecentPagesTool implements ChatTool, OnModuleInit {
   async execute(
     args: { limit?: number },
     ctx: ChatToolContext,
-  ): Promise<{ id: string; title: string | null; slugId: string; spaceId: string; updatedAt: Date }[]> {
+  ): Promise<{ id: string; title: string | null; slugId: string; spaceId: string; updatedAt: string }[]> {
     const { items } = await this.pageService.getRecentPages(ctx.user.id, {
       limit: args.limit ?? 10,
     } as any);
@@ -41,7 +41,7 @@ export class ListRecentPagesTool implements ChatTool, OnModuleInit {
       title: p.title ?? null,
       slugId: p.slugId,
       spaceId: p.spaceId,
-      updatedAt: p.updatedAt,
+      updatedAt: p.updatedAt?.toISOString?.() ?? new Date().toISOString(),
     }));
   }
 }

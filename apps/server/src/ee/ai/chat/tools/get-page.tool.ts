@@ -15,13 +15,13 @@ import { jsonToText } from '../../../../collaboration/collaboration.util';
 import { ChatTool, ChatToolContext } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
 
-const MAX_CONTENT_CHARS = 4000;
+const MAX_CONTENT_CHARS = 8000;
 
 @Injectable()
 export class GetPageTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page';
   readonly description =
-    'Get the full content of a specific ConqrHub page by its ID. Use this after search_pages to read the actual page text.';
+    'Get the full content of a specific ConqrHub page by its ID. Use this after search_pages to read the actual page text. Returns up to 8000 characters.';
   readonly parameters = z.object({
     pageId: z
       .string()
@@ -49,14 +49,18 @@ export class GetPageTool implements ChatTool, OnModuleInit {
     slugId: string;
     spaceId: string;
     content: string;
-    updatedAt: Date;
+    updatedAt: string;
   }> {
     const page = await this.pageService.findById(args.pageId, true);
     if (!page) throw new NotFoundException('Page not found');
 
-    const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-      throw new ForbiddenException('You do not have access to this page');
+    try {
+      const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
+      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+        throw new ForbiddenException('You do not have access to this page');
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
     }
 
     const raw = page.content as any;
@@ -67,8 +71,8 @@ export class GetPageTool implements ChatTool, OnModuleInit {
       title: page.title ?? null,
       slugId: page.slugId,
       spaceId: page.spaceId,
-      content: text,
-      updatedAt: page.updatedAt,
+      content: text || '(empty page)',
+      updatedAt: page.updatedAt?.toISOString?.() ?? new Date().toISOString(),
     };
   }
 }

@@ -39,7 +39,7 @@ export class CreateCommentTool implements ChatTool, OnModuleInit {
   async execute(
     args: { pageId: string; text: string },
     ctx: ChatToolContext,
-  ): Promise<{ id: string; createdAt: Date }> {
+  ): Promise<{ id: string; createdAt: string }> {
     const page = await this.pageService.findById(args.pageId);
     if (!page) throw new NotFoundException('Page not found');
 
@@ -70,6 +70,6 @@ export class CreateCommentTool implements ChatTool, OnModuleInit {
       } as any,
     );
 
-    return { id: comment.id, createdAt: comment.createdAt };
+    return { id: comment.id, createdAt: comment.createdAt?.toISOString?.() ?? new Date().toISOString() };
   }
 }

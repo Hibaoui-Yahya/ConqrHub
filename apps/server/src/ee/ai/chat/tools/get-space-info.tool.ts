@@ -41,13 +41,17 @@ export class GetSpaceInfoTool implements ChatTool, OnModuleInit {
     name: string;
     slug: string;
     description: string | null;
-    createdAt: Date;
+    createdAt: string;
   }> {
-    const ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
-    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-      throw new ForbiddenException(
-        `You do not have access to space ${args.spaceId}`,
-      );
+    try {
+      const ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
+      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+        throw new ForbiddenException(
+          `You do not have access to space ${args.spaceId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
     }
 
     const space = await this.spaceService.getSpaceInfo(args.spaceId, ctx.workspaceId);
@@ -55,10 +59,10 @@ export class GetSpaceInfoTool implements ChatTool, OnModuleInit {
 
     return {
       id: space.id,
-      name: space.name,
+      name: space.name ?? 'Untitled',
       slug: space.slug,
       description: (space as any).description ?? null,
-      createdAt: space.createdAt,
+      createdAt: space.createdAt?.toISOString?.() ?? new Date().toISOString(),
     };
   }
 }

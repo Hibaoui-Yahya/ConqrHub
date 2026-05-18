@@ -52,13 +52,18 @@ export class GetPageCommentsTool implements ChatTool, OnModuleInit {
     text: string;
     type: string | null;
     creatorId: string;
-    createdAt: Date;
+    createdAt: string;
   }[]> {
     const page = await this.pageService.findById(args.pageId);
     if (!page) throw new NotFoundException('Page not found');
 
-    const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+    let ability;
+    try {
+      ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+    }
+    if (ability?.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
       throw new ForbiddenException('You do not have access to this page');
     }
 
@@ -71,7 +76,7 @@ export class GetPageCommentsTool implements ChatTool, OnModuleInit {
       text: c.content ? jsonToText(c.content).slice(0, 500) : '',
       type: c.type ?? null,
       creatorId: c.creatorId,
-      createdAt: c.createdAt,
+      createdAt: c.createdAt?.toISOString?.() ?? new Date().toISOString(),
     }));
   }
 }
