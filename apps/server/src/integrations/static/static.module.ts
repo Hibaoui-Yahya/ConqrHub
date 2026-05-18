@@ -69,7 +69,17 @@ export class StaticModule implements OnModuleInit {
         wildcard: false,
       });
 
+      // Serve index.html for all GET requests except API, MCP, and collab routes.
       app.get(RENDER_PATH, (req: any, res: any) => {
+        const url: string = req.url ?? req.raw?.url ?? '';
+        if (
+          url.startsWith('/api') ||
+          url.startsWith('/mcp') ||
+          url.startsWith('/collab') ||
+          url.startsWith('/socket.io')
+        ) {
+          return res.callNotFound();
+        }
         const stream = fs.createReadStream(indexFilePath);
         res
           .header('Cache-Control', 'no-cache, no-store, must-revalidate')
