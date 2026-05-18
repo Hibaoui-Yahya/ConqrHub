@@ -51,33 +51,42 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
     isEmpty: boolean;
   }> {
     if (args.spaceId) {
-      const ability = await this.spaceAbility.createForUser(
-        ctx.user,
-        args.spaceId,
-      );
-      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException(
-          `You do not have access to space ${args.spaceId}`,
+      try {
+        const ability = await this.spaceAbility.createForUser(
+          ctx.user,
+          args.spaceId,
         );
+        if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+          throw new ForbiddenException(
+            `You do not have access to space ${args.spaceId}`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof ForbiddenException) throw err;
+        // Space permissions lookup failed — proceed with workspace-scoped search
       }
     }
 
-    const context = await this.retrieval.retrieve({
-      question: args.question,
-      workspaceId: ctx.workspaceId,
-      spaceId: args.spaceId,
-    });
+    try {
+      const context = await this.retrieval.retrieve({
+        question: args.question,
+        workspaceId: ctx.workspaceId,
+        spaceId: args.spaceId,
+      });
 
-    return {
-      isEmpty: context.isEmpty,
-      chunks: context.chunks.map((c) => ({
-        label: c.label,
-        kind: c.kind,
-        sourceId: c.sourceId,
-        title: c.title,
-        score: c.score,
-        excerpt: c.chunkText.slice(0, 300),
-      })),
-    };
+      return {
+        isEmpty: context.isEmpty,
+        chunks: context.chunks.map((c) => ({
+          label: c.label,
+          kind: c.kind,
+          sourceId: c.sourceId,
+          title: c.title,
+          score: c.score,
+          excerpt: c.chunkText.slice(0, 300),
+        })),
+      };
+    } catch {
+      return { isEmpty: true, chunks: [] };
+    }
   }
 }
