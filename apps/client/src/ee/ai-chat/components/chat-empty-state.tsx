@@ -2,8 +2,11 @@ import {
   IconSparkles,
   IconSearch,
   IconFilePlus,
-  IconEdit,
+  IconPencil,
   IconFileText,
+  IconBulb,
+  IconList,
+  IconArrowBigRightLines,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import ChatInput from "./chat-input";
@@ -18,24 +21,34 @@ type Suggestion = {
 
 const SUGGESTIONS: Suggestion[] = [
   {
-    icon: <IconSearch size={16} />,
+    icon: <IconSearch size={18} />,
     text: "Search across all pages",
     prompt: "Search for pages about ",
   },
   {
-    icon: <IconFilePlus size={16} />,
+    icon: <IconFilePlus size={18} />,
     text: "Create a new page",
     prompt: "Create a new page titled ",
   },
   {
-    icon: <IconFileText size={16} />,
+    icon: <IconFileText size={18} />,
     text: "Summarize a page",
     prompt: "Summarize the page @",
   },
   {
-    icon: <IconEdit size={16} />,
+    icon: <IconPencil size={18} />,
     text: "Update page content",
     prompt: "Update the page @",
+  },
+  {
+    icon: <IconBulb size={18} />,
+    text: "Get page insights",
+    prompt: "What are the key insights from @",
+  },
+  {
+    icon: <IconList size={18} />,
+    text: "List recent pages",
+    prompt: "Show me the most recently updated pages",
   },
 ];
 
@@ -54,10 +67,17 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
 
   return (
     <div className={classes.emptyState}>
-      <IconSparkles size={48} stroke={1.5} className={classes.emptyStateIcon} />
-      <div className={classes.emptyStateBrand}>{t("Conqrai AI")}</div>
-      <div className={classes.emptyStateTitle}>
-        {t("What can I help you with?")}
+      <div className={classes.emptyStateHero}>
+        <div className={classes.emptyStateIconWrapper}>
+          <IconSparkles size={32} stroke={1.5} className={classes.emptyStateIcon} />
+        </div>
+        <div className={classes.emptyStateBrand}>{t("Conqrai AI")}</div>
+        <div className={classes.emptyStateTitle}>
+          {t("How can I help you today?")}
+        </div>
+        <div className={classes.emptyStateSubtitle}>
+          {t("Search pages, create content, or get insights — all in one place.")}
+        </div>
       </div>
 
       <div className={classes.emptyStateInput}>
@@ -71,7 +91,7 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
       </div>
 
       <div className={classes.suggestionsSection}>
-        <div className={classes.suggestionsLabel}>Get started</div>
+        <div className={classes.suggestionsLabel}>Try these</div>
         <div className={classes.suggestionsGrid}>
           {SUGGESTIONS.map((s) => (
             <button
@@ -82,9 +102,15 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
             >
               <span className={classes.suggestionIcon}>{s.icon}</span>
               <span className={classes.suggestionText}>{s.text}</span>
+              <IconArrowBigRightLines size={14} className={classes.suggestionArrow} />
             </button>
           ))}
         </div>
+      </div>
+
+      <div className={classes.emptyStateFooter}>
+        <kbd className={classes.kbd}>Shift + Enter</kbd>
+        <span className={classes.footerText}>for new line</span>
       </div>
     </div>
   );

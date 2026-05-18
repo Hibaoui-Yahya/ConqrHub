@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollArea, Text, Divider, Modal } from "@mantine/core";
 import {
   IconHome,
-  IconClock,
+  IconSparkles,
   IconStar,
   IconLayoutGrid,
   IconSettings,
@@ -23,6 +23,7 @@ import { AvatarIconType } from "@/features/attachments/types/attachment.types";
 
 const mainNavItems = [
   { label: "Home", icon: IconHome, path: "/home" },
+  { label: "AI Chat", icon: IconSparkles, path: "/ai" },
   { label: "Favorites", icon: IconStar, path: "/favorites" },
   { label: "Spaces", icon: IconLayoutGrid, path: "/spaces" },
 ];
@@ -62,7 +63,11 @@ export default function GlobalSidebar() {
             <Link
               key={item.label}
               className={classes.link}
-              data-active={active === item.path || undefined}
+              data-active={
+                item.path === "/ai"
+                  ? active.startsWith("/ai") || undefined
+                  : active === item.path || undefined
+              }
               to={item.path}
               onClick={handleNavClick}
             >

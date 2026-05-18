@@ -17,8 +17,8 @@ import classes from "../styles/chat-input.module.css";
 
 type PendingAttachment = ChatAttachment & { uploading: boolean };
 
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"];
-const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.csv,.md,.png,.jpg,.jpeg,.webp";
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "tiff", "tif"]);
+const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.csv,.md";
 // Kept in sync with MAX_ATTACHMENTS_PER_MESSAGE in apps/server/src/ee/ai-chat/ai-chat-limits.ts
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 
@@ -127,9 +127,38 @@ export default function ChatInput({
     }
 
     const incoming = Array.from(files);
-    const accepted = incoming.slice(0, room);
 
-    if (incoming.length > accepted.length) {
+    const imageFiles = incoming.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase() || "";
+      return IMAGE_EXTENSIONS.has(ext);
+    });
+
+    if (imageFiles.length > 0) {
+      notifications.show({
+        color: "red",
+        title: t("Images not supported"),
+        message: t(
+          imageFiles.length === 1
+            ? "{{name}} cannot be uploaded — this AI model does not support image input."
+            : "{{count}} image files were skipped — this AI model does not support image input.",
+          { name: imageFiles[0].name, count: imageFiles.length },
+        ),
+      });
+    }
+
+    const nonImageFiles = incoming.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase() || "";
+      return !IMAGE_EXTENSIONS.has(ext);
+    });
+
+    if (nonImageFiles.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const accepted = nonImageFiles.slice(0, room);
+
+    if (nonImageFiles.length > accepted.length) {
       notifications.show({
         color: "yellow",
         message: t(
@@ -304,7 +333,7 @@ export default function ChatInput({
               key={attachment.id}
               className={`${classes.attachmentChip} ${attachment.uploading ? classes.attachmentChipUploading : ""}`}
             >
-              {IMAGE_EXTENSIONS.includes(attachment.fileExt) ? (
+              {IMAGE_EXTENSIONS.has(attachment.fileExt) ? (
                 <IconPhoto size={14} />
               ) : (
                 <IconFile size={14} />

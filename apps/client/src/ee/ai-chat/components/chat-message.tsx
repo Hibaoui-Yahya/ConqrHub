@@ -27,7 +27,7 @@ chatSanitizer.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"];
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "tiff", "tif"]);
 
 type Props = {
   message: AiChatMessage;
@@ -84,7 +84,7 @@ export default function ChatMessage({
             <div className={classes.messageAttachments}>
               {attachments.map((a) => (
                 <span key={a.id} className={classes.messageAttachmentChip}>
-                  {IMAGE_EXTENSIONS.includes(a.fileExt) ? (
+                  {IMAGE_EXTENSIONS.has(a.fileExt) ? (
                     <IconPhoto size={13} />
                   ) : (
                     <IconFile size={13} />
