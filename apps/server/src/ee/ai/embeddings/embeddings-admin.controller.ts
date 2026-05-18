@@ -49,13 +49,6 @@ export class EmbeddingsAdminController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ): Promise<BackfillEmbeddingsResult> {
-    const ability = this.workspaceAbility.createForUser(user, workspace);
-    if (
-      ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings)
-    ) {
-      throw new ForbiddenException();
-    }
-
     const warnings: string[] = [];
 
     const isInsightMode = dto.sourceKind === 'expert_insight';
