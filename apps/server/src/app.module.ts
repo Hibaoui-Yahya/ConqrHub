@@ -29,9 +29,11 @@ import { NoopAuditModule } from './integrations/audit/audit.module';
 import { ThrottleModule } from './integrations/throttle/throttle.module';
 
 const enterpriseModules = [];
+let hasEe = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   if (require('./ee/ee.module')?.EeModule) {
+    hasEe = true;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     enterpriseModules.push(require('./ee/ee.module')?.EeModule);
   }
@@ -42,6 +44,8 @@ try {
   }
 }
 
+const auditModules = hasEe ? [] : [NoopAuditModule];
+
 @Module({
   imports: [
     ClsModule.forRoot({
@@ -49,7 +53,7 @@ try {
       middleware: { mount: true },
     }),
     LoggerModule,
-    NoopAuditModule,
+    ...auditModules,
     CoreModule,
     DatabaseModule,
     EnvironmentModule,
