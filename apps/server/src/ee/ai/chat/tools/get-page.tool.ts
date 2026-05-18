@@ -64,15 +64,21 @@ export class GetPageTool implements ChatTool, OnModuleInit {
     }
 
     const raw = page.content as any;
-    const text = raw ? jsonToText(raw).slice(0, MAX_CONTENT_CHARS) : '';
+    let text = '';
+    try {
+      text = raw ? (jsonToText(raw) ?? '') : '';
+    } catch {
+      text = '';
+    }
+    text = text.slice(0, MAX_CONTENT_CHARS);
 
     return {
-      id: page.id,
+      id: page.id ?? '',
       title: page.title ?? null,
-      slugId: page.slugId,
-      spaceId: page.spaceId,
+      slugId: page.slugId ?? '',
+      spaceId: page.spaceId ?? '',
       content: text || '(empty page)',
-      updatedAt: page.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+      updatedAt: (page.updatedAt as any)?.toISOString?.() ?? new Date().toISOString(),
     };
   }
 }
