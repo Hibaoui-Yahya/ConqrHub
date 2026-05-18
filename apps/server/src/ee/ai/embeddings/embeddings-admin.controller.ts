@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   HttpCode,
   HttpStatus,
   Logger,
@@ -16,14 +15,10 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
-import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
-import {
-  WorkspaceCaslAction,
-  WorkspaceCaslSubject,
-} from '../../../core/casl/interfaces/workspace-ability.type';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { ChunkingService } from './chunking.service';
+import { EmbeddingIndexerService } from './embedding-indexer.service';
 import {
   BackfillEmbeddingsDto,
   BackfillEmbeddingsResult,
@@ -39,7 +34,7 @@ export class EmbeddingsAdminController {
     @InjectQueue(QueueName.AI_QUEUE) private readonly aiQueue: Queue,
     private readonly env: EnvironmentService,
     private readonly chunking: ChunkingService,
-    private readonly workspaceAbility: WorkspaceAbilityFactory,
+    private readonly indexer: EmbeddingIndexerService,
   ) {}
 
   @HttpCode(HttpStatus.OK)
@@ -108,21 +103,16 @@ export class EmbeddingsAdminController {
         .filter((p) => p.textContent?.trim())
         .map((p) => p.id);
 
-      // Enqueue in chunks of 50 so individual jobs stay small.
-      const JOB_BATCH = 50;
-      for (let i = 0; i < pageIds.length; i += JOB_BATCH) {
-        const batch = pageIds.slice(i, i + JOB_BATCH);
-        await this.aiQueue.add(QueueJob.GENERATE_PAGE_EMBEDDINGS, {
-          pageIds: batch,
-          workspaceId: dto.workspaceId,
-        });
+      // Index synchronously in batches to avoid overwhelming the embedding API.
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < pageIds.length; i += BATCH_SIZE) {
+        const batch = pageIds.slice(i, i + BATCH_SIZE);
+        await this.indexer.indexPages(batch, dto.workspaceId);
         enqueuedJobs++;
+        this.logger.log(
+          `Backfill: indexed batch ${enqueuedJobs} (${batch.length} pages)`,
+        );
       }
-
-      this.logger.log(
-        `Backfill: enqueued ${enqueuedJobs} job(s) for ${indexablePages} pages ` +
-          `(workspace=${dto.workspaceId})`,
-      );
     }
 
     return {

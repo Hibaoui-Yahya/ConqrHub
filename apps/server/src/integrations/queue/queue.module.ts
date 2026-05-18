@@ -68,9 +68,10 @@ import { GeneralQueueProcessor } from './processors/general-queue.processor';
     BullModule.registerQueue({
       name: QueueName.AI_QUEUE,
       defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: true,
-        attempts: 1,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
       },
     }),
     BullModule.registerQueue({
