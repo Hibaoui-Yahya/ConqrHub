@@ -33,7 +33,6 @@ import {
   shareSearchSpotlight,
 } from "@/features/search/constants.ts";
 import { NotificationPopover } from "@/features/notification/components/notification-popover.tsx";
-import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 
 export function AppHeader() {
   const { t } = useTranslation();
@@ -45,8 +44,6 @@ export function AppHeader() {
   const { isTrial, trialDaysLeft } = useTrial();
   const location = useLocation();
   const toggleAside = useToggleAside();
-  const [workspace] = useAtom(workspaceAtom);
-  const aiChatEnabled = workspace?.settings?.ai?.chat === true;
 
   const isPageRoute = location.pathname.includes("/p/");
 
@@ -104,49 +101,46 @@ export function AppHeader() {
         </div>
 
         <Group px={"xl"} wrap="nowrap">
-          {aiChatEnabled && (
-            <>
-              <UnstyledButton
-                component={Link}
-                to="/ai"
-                className={classes.link}
-                visibleFrom="sm"
-                onClick={(e: React.MouseEvent) => {
-                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
-                    return;
-                  }
-                  if (isPageRoute) {
-                    e.preventDefault();
-                    toggleAside("chat");
-                  }
-                }}
-              >
-                {t("AI Chat")}
-              </UnstyledButton>
-              <Tooltip label={t("AI Chat")} openDelay={250} withArrow>
-                <ActionIcon
-                  component={Link}
-                  to="/ai"
-                  variant="subtle"
-                  color="dark"
-                  size="sm"
-                  hiddenFrom="sm"
-                  aria-label={t("AI Chat")}
-                  onClick={(e: React.MouseEvent) => {
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
-                      return;
-                    }
-                    if (isPageRoute) {
-                      e.preventDefault();
-                      toggleAside("chat");
-                    }
-                  }}
-                >
-                  <IconSparkles size={20} stroke={2} />
-                </ActionIcon>
-              </Tooltip>
-            </>
-          )}
+          <UnstyledButton
+            component={Link}
+            to="/ai"
+            className={classes.link}
+            visibleFrom="sm"
+            onClick={(e: React.MouseEvent) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+                return;
+              }
+              if (isPageRoute) {
+                e.preventDefault();
+                toggleAside("chat");
+              }
+            }}
+          >
+            <IconSparkles size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
+            {t("AI Chat")}
+          </UnstyledButton>
+          <Tooltip label={t("AI Chat")} openDelay={250} withArrow>
+            <ActionIcon
+              component={Link}
+              to="/ai"
+              variant="subtle"
+              color="dark"
+              size="sm"
+              hiddenFrom="sm"
+              aria-label={t("AI Chat")}
+              onClick={(e: React.MouseEvent) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+                  return;
+                }
+                if (isPageRoute) {
+                  e.preventDefault();
+                  toggleAside("chat");
+                }
+              }}
+            >
+              <IconSparkles size={20} stroke={2} />
+            </ActionIcon>
+          </Tooltip>
           <NotificationPopover />
           {isCloud() && isTrial && trialDaysLeft !== 0 && (
             <Badge
