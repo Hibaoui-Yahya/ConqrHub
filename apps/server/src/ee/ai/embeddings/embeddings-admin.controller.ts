@@ -107,7 +107,9 @@ export class EmbeddingsAdminController {
       const BATCH_SIZE = 10;
       for (let i = 0; i < pageIds.length; i += BATCH_SIZE) {
         const batch = pageIds.slice(i, i + BATCH_SIZE);
-        await this.indexer.indexPages(batch, dto.workspaceId);
+        for (const pageId of batch) {
+          await this.indexer.indexPage(pageId, dto.workspaceId);
+        }
         enqueuedJobs++;
         this.logger.log(
           `Backfill: indexed batch ${enqueuedJobs} (${batch.length} pages)`,
