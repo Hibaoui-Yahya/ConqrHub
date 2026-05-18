@@ -70,5 +70,6 @@ import { CreateCommentTool } from './tools/create-comment.tool';
     MovePageTool,
     CreateCommentTool,
   ],
+  exports: [ChatToolRegistry],
 })
 export class AiChatModule {}
