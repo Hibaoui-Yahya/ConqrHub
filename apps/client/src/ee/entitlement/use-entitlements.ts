@@ -6,6 +6,6 @@ export function useEntitlements(): UseQueryResult<Entitlements> {
   return useQuery({
     queryKey: ["entitlements"],
     queryFn: getEntitlements,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 }
