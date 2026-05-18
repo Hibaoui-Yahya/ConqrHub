@@ -13,6 +13,12 @@ import { AiProviderService } from '../providers/ai-provider.service';
 import { AiChatTitleService } from './ai-chat-title.service';
 import { ChatToolRegistry } from './tools/chat-tool.registry';
 import { SendMessageDto } from './dto/send-message.dto';
+import { PageService } from '../../../core/page/services/page.service';
+import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.factory';
+import {
+  SpaceCaslAction,
+  SpaceCaslSubject,
+} from '../../../core/casl/interfaces/space-ability.type';
 
 const CHAT_TEMPERATURE = 0.4;
 const CHAT_MAX_OUTPUT_TOKENS = 2048;
@@ -114,7 +120,33 @@ export class AiChatStreamService {
     private readonly messageRepo: AiChatMessageRepo,
     private readonly titleService: AiChatTitleService,
     private readonly toolRegistry: ChatToolRegistry,
+    private readonly pageService: PageService,
+    private readonly spaceAbility: SpaceAbilityFactory,
   ) {}
+
+  private async resolveReferencedPages(
+    user: User,
+    workspaceId: string,
+    pageIds: string[],
+  ): Promise<Array<{ id: string; title: string | null; spaceId: string }>> {
+    const out: Array<{ id: string; title: string | null; spaceId: string }> =
+      [];
+    for (const id of pageIds) {
+      try {
+        const page = await this.pageService.findById(id);
+        if (!page || (page as any).workspaceId !== workspaceId) continue;
+        const ability = await this.spaceAbility.createForUser(
+          user,
+          page.spaceId,
+        );
+        if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) continue;
+        out.push({ id: page.id, title: page.title ?? null, spaceId: page.spaceId });
+      } catch {
+        // Page not found or not accessible — silently drop per the plan.
+      }
+    }
+    return out;
+  }
 
   async send(
     dto: SendMessageDto,
@@ -168,34 +200,54 @@ export class AiChatStreamService {
     }
 
     // Load message history (chronological, omitting metadata for model).
+    // For assistant turns with tool-calls, AI SDK v6 requires a matching
+    // `tool` role message containing tool-results — otherwise the next
+    // streamText call rejects with MissingToolResultsError.
     const history = await this.messageRepo.listByChat(chatId, user.workspaceId);
-    const modelMessages: ModelMessage[] = (history.map((m) => {
+    const modelMessages: ModelMessage[] = [];
+    for (const m of history) {
       if (m.role === 'user') {
-        return { role: 'user', content: m.content ?? '' };
+        modelMessages.push({ role: 'user', content: m.content ?? '' });
+        continue;
       }
-      // Reconstruct assistant messages with tool calls for multi-step context.
-      if (m.toolCalls && Array.isArray(m.toolCalls) && m.toolCalls.length > 0) {
-        const tcs = m.toolCalls as unknown as AccumulatedToolCall[];
-        return {
-          role: 'assistant',
-          content: [
-            ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
-            ...tcs.map((tc) => ({
-              type: 'tool-call' as const,
-              toolCallId: tc.id,
-              toolName: tc.name,
-              input: tc.args,
-            })),
-          ],
-        };
+      const tcs =
+        m.toolCalls && Array.isArray(m.toolCalls)
+          ? (m.toolCalls as unknown as AccumulatedToolCall[])
+          : [];
+      // Only replay tool-calls that completed (have a result). An interrupted
+      // turn from a previous error would otherwise poison the next request.
+      const completed = tcs.filter((tc) => tc.result !== undefined);
+      if (completed.length === 0) {
+        modelMessages.push({ role: 'assistant', content: m.content ?? '' });
+        continue;
       }
-      return { role: 'assistant', content: m.content ?? '' };
-    }) as unknown) as ModelMessage[];
+      modelMessages.push({
+        role: 'assistant',
+        content: [
+          ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
+          ...completed.map((tc) => ({
+            type: 'tool-call' as const,
+            toolCallId: tc.id,
+            toolName: tc.name,
+            input: tc.args,
+          })),
+        ],
+      } as unknown as ModelMessage);
+      modelMessages.push({
+        role: 'tool',
+        content: completed.map((tc) => ({
+          type: 'tool-result' as const,
+          toolCallId: tc.id,
+          toolName: tc.name,
+          output: { type: 'json' as const, value: tc.result as any },
+        })),
+      } as unknown as ModelMessage);
+    }
 
     // Build the user message content (with optional page mentions as context prefix).
     const userContent = dto.content;
 
-    // Persist the user message row.
+    // Persist the user message row (raw content; mentions go into metadata).
     const userMsg = await this.messageRepo.insert({
       chatId,
       workspaceId: user.workspaceId,
@@ -213,8 +265,29 @@ export class AiChatStreamService {
       },
     });
 
+    // Resolve mentions/contextPage to titles+ids the user can actually Read.
+    const referenceIds = [
+      ...(dto.contextPageId ? [dto.contextPageId] : []),
+      ...(dto.mentionedPageIds ?? []),
+    ];
+    const refs = referenceIds.length
+      ? await this.resolveReferencedPages(
+          user,
+          user.workspaceId,
+          referenceIds,
+        )
+      : [];
+
+    let modelUserContent = userContent;
+    if (refs.length > 0) {
+      const refBlock = refs
+        .map((r) => `- ${r.title ?? '(untitled)'} (pageId: ${r.id})`)
+        .join('\n');
+      modelUserContent = `Referenced pages:\n${refBlock}\n\n${userContent}`;
+    }
+
     // Add the new user message to the model context.
-    modelMessages.push({ role: 'user', content: userContent });
+    modelMessages.push({ role: 'user', content: modelUserContent });
 
     // Build tools context.
     const toolCtx = { user, workspaceId: user.workspaceId };

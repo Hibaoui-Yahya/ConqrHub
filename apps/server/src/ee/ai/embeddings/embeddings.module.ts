@@ -9,10 +9,12 @@ import { InsightIndexerService } from './insight-indexer.service';
 import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
 import { EmbeddingsAdminController } from './embeddings-admin.controller';
 import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
+import { AiProviderModule } from '../providers/ai-provider.module';
 
 @Module({
   imports: [
     EnvironmentModule,
+    AiProviderModule,
     BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
   ],
   controllers: [EmbeddingsAdminController],

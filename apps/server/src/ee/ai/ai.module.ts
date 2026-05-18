@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EnvironmentModule } from '../../integrations/environment/environment.module';
-import { AiProviderService } from './providers/ai-provider.service';
+import { AiProviderModule } from './providers/ai-provider.module';
 import { AiGenerateService } from './generate/ai-generate.service';
 import { AiGenerateController } from './generate/ai-generate.controller';
 import { WorkspaceAiToggleGuard } from './guards/workspace-ai-toggle.guard';
@@ -17,9 +17,15 @@ import { AiChatModule } from './chat/ai-chat.module';
  *   - AI Chat: multi-turn conversations with tool calling (Branch 5 / P4)
  */
 @Module({
-  imports: [EnvironmentModule, EmbeddingsModule, RagModule, AiChatModule],
+  imports: [
+    EnvironmentModule,
+    AiProviderModule,
+    EmbeddingsModule,
+    RagModule,
+    AiChatModule,
+  ],
   controllers: [AiGenerateController],
-  providers: [AiProviderService, AiGenerateService, WorkspaceAiToggleGuard],
-  exports: [AiProviderService],
+  providers: [AiGenerateService, WorkspaceAiToggleGuard],
+  exports: [AiProviderModule],
 })
 export class AiModule {}

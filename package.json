@@ -134,7 +134,6 @@
       "langsmith": "0.5.19",
       "follow-redirects": "1.16.0",
       "protobufjs":  "7.5.5"
-    },
-    "neverBuiltDependencies": []
+    }
   }
 }

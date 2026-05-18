@@ -104,7 +104,7 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @ValidateIf((obj) => obj.AI_DRIVER)
-  @IsIn(['openai', 'openai-compatible', 'gemini', 'ollama'])
+  @IsIn(['openai', 'openai-compatible', 'gemini', 'mistral', 'ollama'])
   @IsString()
   AI_DRIVER: string;
 
@@ -123,9 +123,8 @@ export class EnvironmentVariables {
   @IsString()
   AI_EMBEDDING_SUPPORTS_MRL: string;
 
-  @ValidateIf((obj) => obj.AI_DRIVER)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   AI_COMPLETION_MODEL: string;
 
   @IsOptional()
@@ -150,6 +149,11 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   GEMINI_API_KEY: string;
+
+  @ValidateIf((obj) => obj.AI_DRIVER === 'mistral')
+  @IsString()
+  @IsNotEmpty()
+  MISTRAL_API_KEY: string;
 
   @ValidateIf((obj) => obj.AI_DRIVER && obj.AI_DRIVER === 'ollama')
   @IsUrl({ protocols: ['http', 'https'], require_tld: false })

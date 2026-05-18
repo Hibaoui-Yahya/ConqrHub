@@ -1,3 +1,7 @@
+jest.mock('../../../core/page/services/page.service', () => ({
+  PageService: class MockPageService {},
+}));
+
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { AiChatStreamService } from './ai-chat-stream.service';
 import { AiProviderService } from '../providers/ai-provider.service';
@@ -134,12 +138,20 @@ function makeSvc(
   titleService = makeTitleService(),
   registry = makeRegistry(),
 ): AiChatStreamService {
+  const pageService = { findById: jest.fn().mockResolvedValue(undefined) };
+  const spaceAbility = {
+    createForUser: jest
+      .fn()
+      .mockResolvedValue({ cannot: jest.fn().mockReturnValue(true) }),
+  };
   return new AiChatStreamService(
     ai as any,
     chatRepo,
     msgRepo,
     titleService as any,
     registry as any,
+    pageService as any,
+    spaceAbility as any,
   );
 }
 

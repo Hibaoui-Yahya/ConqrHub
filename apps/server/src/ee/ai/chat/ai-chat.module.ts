@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RagModule } from '../rag/rag.module';
+import { AiProviderModule } from '../providers/ai-provider.module';
 import { SearchModule } from '../../../core/search/search.module';
 import { EnvironmentModule } from '../../../integrations/environment/environment.module';
 import { PageModule } from '../../../core/page/page.module';
@@ -36,6 +37,7 @@ import { CreateCommentTool } from './tools/create-comment.tool';
 @Module({
   imports: [
     EnvironmentModule,
+    AiProviderModule,
     RagModule,
     SearchModule,
     PageModule,
