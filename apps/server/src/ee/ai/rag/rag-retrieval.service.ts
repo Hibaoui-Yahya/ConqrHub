@@ -35,7 +35,7 @@ export class RagRetrievalService {
   async retrieve(opts: {
     question: string;
     workspaceId: string;
-    spaceId: string;
+    spaceId?: string;
     pageId?: string;
     topK?: number;
   }): Promise<RetrievedContext> {

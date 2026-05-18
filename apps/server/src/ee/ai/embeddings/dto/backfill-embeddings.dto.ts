@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class BackfillEmbeddingsDto {
@@ -12,6 +12,14 @@ export class BackfillEmbeddingsDto {
   @IsOptional()
   @IsUUID()
   pageId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  insightId?: string;
+
+  @IsOptional()
+  @IsIn(['page', 'expert_insight'])
+  sourceKind?: string;
 
   @IsOptional()
   @IsBoolean()

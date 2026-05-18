@@ -7,15 +7,8 @@ import { WorkspaceAiToggleGuard } from './guards/workspace-ai-toggle.guard';
 import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { RagModule } from './rag/rag.module';
 import { AiChatModule } from './chat/ai-chat.module';
+import { McpModule } from './mcp/mcp.module';
 
-/**
- * EE AI module. Includes:
- *   - Provider abstraction (AiProviderService, all drivers)
- *   - Generative AI / Ask AI endpoints
- *   - Embedding storage, chunking, queue processor, and admin backfill (Branch 2)
- *   - RAG Answers: similarity search + context assembly + answer generation (Branch 4)
- *   - AI Chat: multi-turn conversations with tool calling (Branch 5 / P4)
- */
 @Module({
   imports: [
     EnvironmentModule,
@@ -23,6 +16,7 @@ import { AiChatModule } from './chat/ai-chat.module';
     EmbeddingsModule,
     RagModule,
     AiChatModule,
+    McpModule,
   ],
   controllers: [AiGenerateController],
   providers: [AiGenerateService, WorkspaceAiToggleGuard],

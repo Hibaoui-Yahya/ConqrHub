@@ -58,6 +58,12 @@ export class EmbeddingsAdminController {
 
     const warnings: string[] = [];
 
+    const isInsightMode = dto.sourceKind === 'expert_insight';
+
+    if (isInsightMode) {
+      return this.backfillInsights(dto, warnings);
+    }
+
     let query = (this.db as any)
       .selectFrom('pages')
       .select(['id', 'textContent'])
@@ -132,6 +138,84 @@ export class EmbeddingsAdminController {
       estimatedEmbeddingCalls: estimatedChunks,
       enqueuedJobs,
       skippedPages,
+      warnings,
+    };
+  }
+
+  private async backfillInsights(
+    dto: BackfillEmbeddingsDto,
+    warnings: string[],
+  ): Promise<BackfillEmbeddingsResult> {
+    let query = (this.db as any)
+      .selectFrom('expertInsights')
+      .select(['id', 'title', 'body'])
+      .where('workspaceId', '=', dto.workspaceId)
+      .where('deletedAt', 'is', null);
+
+    if (dto.insightId) {
+      query = query.where('id', '=', dto.insightId);
+    }
+
+    const insights: { id: string; title: string | null; body: string | null }[] =
+      await query.execute();
+
+    const chunkChars = this.env.getAiEmbeddingChunkChars();
+    const overlap = this.env.getAiEmbeddingChunkOverlap();
+
+    let estimatedChunks = 0;
+    let skipped = 0;
+
+    for (const insight of insights) {
+      const text = [insight.title, insight.body].filter(Boolean).join('\n\n');
+      if (!text.trim()) {
+        skipped++;
+        continue;
+      }
+      const chunks = this.chunking.chunk(text, { chunkChars, overlap });
+      estimatedChunks += chunks.length;
+    }
+
+    const indexable = insights.length - skipped;
+
+    if (insights.length === 0) {
+      warnings.push('No insights found matching the given scope.');
+    }
+    if (skipped > 0) {
+      warnings.push(`${skipped} insight(s) skipped — no text content to embed.`);
+    }
+
+    let enqueuedJobs = 0;
+
+    if (!dto.dryRun && indexable > 0) {
+      const insightIds = insights
+        .filter((ins) => {
+          const text = [ins.title, ins.body].filter(Boolean).join('\n\n');
+          return text.trim();
+        })
+        .map((ins) => ins.id);
+
+      const JOB_BATCH = 50;
+      for (let i = 0; i < insightIds.length; i += JOB_BATCH) {
+        const batch = insightIds.slice(i, i + JOB_BATCH);
+        await this.aiQueue.add(QueueJob.GENERATE_INSIGHT_EMBEDDINGS, {
+          insightIds: batch,
+          workspaceId: dto.workspaceId,
+        });
+        enqueuedJobs++;
+      }
+
+      this.logger.log(
+        `Insight backfill: enqueued ${enqueuedJobs} job(s) for ${indexable} insights ` +
+          `(workspace=${dto.workspaceId})`,
+      );
+    }
+
+    return {
+      estimatedPages: indexable,
+      estimatedChunks,
+      estimatedEmbeddingCalls: estimatedChunks,
+      enqueuedJobs,
+      skippedPages: skipped,
       warnings,
     };
   }

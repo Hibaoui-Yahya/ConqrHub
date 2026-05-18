@@ -8,6 +8,7 @@ import { EmbeddingIndexerService } from './embedding-indexer.service';
 import { InsightIndexerService } from './insight-indexer.service';
 import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
 import { EmbeddingsAdminController } from './embeddings-admin.controller';
+import { EmbeddingReindexScheduler } from './embedding-reindex.scheduler';
 import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
 import { AiProviderModule } from '../providers/ai-provider.module';
 
@@ -24,6 +25,7 @@ import { AiProviderModule } from '../providers/ai-provider.module';
     EmbeddingIndexerService,
     InsightIndexerService,
     AiEmbeddingQueueProcessor,
+    EmbeddingReindexScheduler,
     WorkspaceAbilityFactory,
   ],
   exports: [
