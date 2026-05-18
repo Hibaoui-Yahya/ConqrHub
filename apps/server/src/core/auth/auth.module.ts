@@ -4,13 +4,12 @@ import { AuthService } from './services/auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { SignupService } from './services/signup.service';
-import { TokenService } from './services/token.service';
 import { TokenModule } from './token.module';
 
 @Module({
   imports: [TokenModule, WorkspaceModule],
   controllers: [AuthController],
   providers: [AuthService, SignupService, JwtStrategy],
-  exports: [SignupService, TokenService],
+  exports: [SignupService],
 })
 export class AuthModule {}

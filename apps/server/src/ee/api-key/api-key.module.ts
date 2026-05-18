@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { ApiKeyController } from './api-key.controller';
 import { ApiKeyService } from './api-key.service';
 import { ApiKeyRepo } from './api-key.repo';
-import { AuthModule } from '../../core/auth/auth.module';
+import { TokenModule } from '../../core/auth/token.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [TokenModule],
   controllers: [ApiKeyController],
   providers: [ApiKeyService, ApiKeyRepo],
   exports: [ApiKeyService],
