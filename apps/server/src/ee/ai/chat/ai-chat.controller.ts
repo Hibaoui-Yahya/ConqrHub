@@ -7,6 +7,7 @@ import {
   Logger,
   Post,
   Req,
+  UnsupportedMediaTypeException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -34,6 +35,15 @@ import {
 } from '../../../core/attachment/attachment.utils';
 import { AttachmentType } from '../../../core/attachment/attachment.constants';
 import { createByteCountingStream } from '../../../common/helpers/utils';
+
+const IMAGE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'tiff', 'tif', 'ico',
+]);
+
+const IMAGE_MIMETYPES = new Set([
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp',
+  'image/svg+xml', 'image/tiff', 'image/x-icon', 'image/vnd.microsoft.icon',
+]);
 
 @UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
 @RequireAiFeature('chat')
@@ -117,6 +127,14 @@ export class AiChatController {
     const prepared = await prepareFile(Promise.resolve(fileData), {
       skipBuffer: true,
     });
+
+    const ext = (prepared.fileExtension ?? '').toLowerCase();
+    const mime = (prepared.mimeType ?? '').toLowerCase();
+    if (IMAGE_EXTENSIONS.has(ext) || IMAGE_MIMETYPES.has(mime)) {
+      throw new UnsupportedMediaTypeException(
+        `Image files are not supported by this AI model. Please use supported formats: PDF, DOCX, TXT, CSV, or Markdown.`,
+      );
+    }
 
     const attachmentId = uuid7();
     const filePath = `${getAttachmentFolderPath(AttachmentType.Chat, workspace.id)}/${attachmentId}/${prepared.fileName}`;
