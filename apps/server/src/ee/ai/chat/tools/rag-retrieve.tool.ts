@@ -13,7 +13,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class RagRetrieveTool implements ChatTool, OnModuleInit {
   readonly name = 'rag_retrieve';
   readonly description =
-    'Retrieve relevant knowledge from the wiki knowledge base using semantic search. Use this when the user asks about specific content, asks for detailed information, or when general knowledge might not be sufficient. Returns context chunks with source labels.';
+    'Retrieve relevant knowledge from the ConqrHub knowledge base using semantic search. Use this when the user asks about specific content, asks for detailed information, or when general knowledge might not be sufficient. Returns context chunks with source labels.';
   readonly parameters = z.object({
     question: z
       .string()

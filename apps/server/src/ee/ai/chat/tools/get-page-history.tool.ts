@@ -19,7 +19,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class GetPageHistoryTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page_history';
   readonly description =
-    'Get the revision history of a wiki page: who edited it and when. Returns recent versions without full content.';
+    'Get the revision history of a ConqrHub page: who edited it and when. Returns recent versions without full content.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page'),
     limit: z

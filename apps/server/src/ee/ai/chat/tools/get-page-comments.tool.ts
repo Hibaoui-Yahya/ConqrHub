@@ -20,7 +20,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class GetPageCommentsTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page_comments';
   readonly description =
-    'Get the comments posted on a wiki page. Useful for understanding discussions, feedback, or open questions on a page.';
+    'Get the comments posted on a ConqrHub page. Useful for understanding discussions, feedback, or open questions on a page.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page'),
     limit: z

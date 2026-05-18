@@ -18,7 +18,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class GetSpaceInfoTool implements ChatTool, OnModuleInit {
   readonly name = 'get_space_info';
   readonly description =
-    'Get metadata about a wiki space: its name, slug, description, and member count.';
+    'Get metadata about a ConqrHub space: its name, slug, description, and member count.';
   readonly parameters = z.object({
     spaceId: z.string().describe('The UUID of the space'),
   });

@@ -18,7 +18,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class MovePageTool implements ChatTool, OnModuleInit {
   readonly name = 'move_page';
   readonly description =
-    'Move a wiki page to a different parent page (or to the space root). Only use when the user explicitly asks to move or reorganize a page.';
+    'Move a ConqrHub page to a different parent page (or to the space root). Only use when the user explicitly asks to move or reorganize a page.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page to move'),
     parentPageId: z

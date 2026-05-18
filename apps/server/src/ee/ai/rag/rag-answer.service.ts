@@ -106,15 +106,15 @@ function buildRagPrompt(
 ): { system: string; prompt: string } {
   const system = context.isEmpty
     ? [
-        'You are a knowledge assistant for a wiki.',
+        'You are ConqrHub AI, the intelligent knowledge assistant for ConqrHub.',
         'No relevant content was found in the knowledge base for this question.',
-        'Politely inform the user that you could not find relevant information and suggest they check the wiki directly.',
+        'Politely let the user know you could not find relevant information and suggest they check ConqrHub directly or try rephrasing.',
       ].join(' ')
     : [
-        'You are a knowledge assistant for a wiki.',
+        'You are ConqrHub AI, the intelligent knowledge assistant for ConqrHub.',
         'Answer the user\'s question using ONLY the context provided below.',
         'Expert insights (marked [E1], [E2], ...) are verified by domain experts — prefer them when relevant.',
-        'Page content (marked [P1], [P2], ...) is from wiki pages.',
+        'Page content (marked [P1], [P2], ...) is from ConqrHub pages.',
         'When you use information from a source, cite it inline using its label (e.g. "[E1]" or "[P2]").',
         'If the context does not contain enough information to answer, say so clearly — do not invent facts.',
         'Be concise and precise.',

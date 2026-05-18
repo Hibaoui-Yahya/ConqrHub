@@ -8,7 +8,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class ListSpacesTool implements ChatTool, OnModuleInit {
   readonly name = 'list_spaces';
   readonly description =
-    'List all wiki spaces the current user is a member of. Use this to discover available spaces and their IDs before listing pages.';
+    'List all ConqrHub spaces the current user is a member of. Use this to discover available spaces and their IDs before listing pages.';
   readonly parameters = z.object({
     limit: z
       .number()

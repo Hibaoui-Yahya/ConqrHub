@@ -21,7 +21,7 @@ const MAX_CONTENT_CHARS = 4000;
 export class GetPageTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page';
   readonly description =
-    'Get the full content of a specific wiki page by its ID. Use this after search_pages to read the actual page text.';
+    'Get the full content of a specific ConqrHub page by its ID. Use this after search_pages to read the actual page text.';
   readonly parameters = z.object({
     pageId: z
       .string()

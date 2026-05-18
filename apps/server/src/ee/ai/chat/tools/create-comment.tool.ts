@@ -19,7 +19,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class CreateCommentTool implements ChatTool, OnModuleInit {
   readonly name = 'create_comment';
   readonly description =
-    'Post a comment on a wiki page. Only use this when the user explicitly asks to leave, add, or post a comment.';
+    'Post a comment on a ConqrHub page. Only use this when the user explicitly asks to leave, add, or post a comment.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page to comment on'),
     text: z.string().describe('The plain-text content of the comment'),

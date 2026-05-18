@@ -18,7 +18,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class UpdatePageTitleTool implements ChatTool, OnModuleInit {
   readonly name = 'update_page_title';
   readonly description =
-    'Update the title of an existing wiki page. Only use this when the user explicitly asks to rename or retitle a page.';
+    'Update the title of an existing ConqrHub page. Only use this when the user explicitly asks to rename or retitle a page.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page to rename'),
     title: z.string().describe('The new title for the page'),

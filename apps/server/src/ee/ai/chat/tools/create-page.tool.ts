@@ -17,7 +17,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class CreatePageTool implements ChatTool, OnModuleInit {
   readonly name = 'create_page';
   readonly description =
-    'Create a new wiki page in a space. Provide markdown content to populate it. Only use this when the user explicitly asks to create a page.';
+    'Create a new ConqrHub page in a space. Provide markdown content to populate it. Only use this when the user explicitly asks to create a page.';
   readonly parameters = z.object({
     spaceId: z.string().describe('The UUID of the space to create the page in'),
     title: z.string().describe('The page title'),

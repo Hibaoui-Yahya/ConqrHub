@@ -8,7 +8,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class SearchPagesTool implements ChatTool, OnModuleInit {
   readonly name = 'search_pages';
   readonly description =
-    'Search the workspace wiki for pages that match a query. Returns a ranked list of matching pages with their titles and a short excerpt.';
+    'Search the ConqrHub workspace for pages that match a query. Returns a ranked list of matching pages with their titles and a short excerpt.';
   readonly parameters = z.object({
     query: z.string().describe('The search query'),
     limit: z

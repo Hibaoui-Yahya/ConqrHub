@@ -18,7 +18,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class GetPageBreadcrumbsTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page_breadcrumbs';
   readonly description =
-    'Get the ancestor path (breadcrumbs) of a page, from the space root down to the page\'s parent. Useful for understanding where a page lives in the wiki hierarchy.';
+    'Get the ancestor path (breadcrumbs) of a page, from the space root down to the page\'s parent. Useful for understanding where a page lives in the ConqrHub hierarchy.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page'),
   });

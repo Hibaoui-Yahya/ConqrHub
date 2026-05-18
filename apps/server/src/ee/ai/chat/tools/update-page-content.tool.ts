@@ -18,7 +18,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class UpdatePageContentTool implements ChatTool, OnModuleInit {
   readonly name = 'update_page_content';
   readonly description =
-    'Update the content of a wiki page using markdown. Can replace the entire content, append to it, or prepend to it. Only use when the user explicitly asks to edit, append to, or replace a page\'s content.';
+    'Update the content of a ConqrHub page using markdown. Can replace the entire content, append to it, or prepend to it. Only use when the user explicitly asks to edit, append to, or replace a page\'s content.';
   readonly parameters = z.object({
     pageId: z.string().describe('The UUID of the page to update'),
     content: z.string().describe('The new content in markdown format'),
