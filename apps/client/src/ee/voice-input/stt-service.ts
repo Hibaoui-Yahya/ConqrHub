@@ -9,8 +9,7 @@ export async function transcribeAudio(
   form.append("file", audio, "recording.webm");
   form.append("context", JSON.stringify(context));
 
-  const res = await api.post<SttResult>("/ai/stt", form, {
+  return await api.post("/ai/stt", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return res.data;
 }

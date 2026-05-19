@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import EnableAiSearch from "@/ee/ai/components/enable-ai-search.tsx";
 import EnableGenerativeAi from "@/ee/ai/components/enable-generative-ai.tsx";
 import EnableAiChat from "@/ee/ai-chat/components/enable-ai-chat.tsx";
+import EnableAiStt from "@/ee/voice-input/components/enable-ai-stt.tsx";
 import McpSettings from "@/ee/ai/components/mcp-settings.tsx";
 import { Alert, Stack, Tabs } from "@mantine/core";
 import { IconInfoCircle } from "@tabler/icons-react";
@@ -73,6 +74,7 @@ export default function AiSettings() {
             {!isCloud() && <EnableAiSearch />}
             <EnableGenerativeAi />
             <EnableAiChat />
+            <EnableAiStt />
           </Stack>
         </Tabs.Panel>
 
