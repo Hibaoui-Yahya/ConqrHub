@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { IconMicrophone, IconX, IconLoader2 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
@@ -89,6 +89,20 @@ export function MicButton({
       }, [t]),
     });
 
+  // Esc cancels an in-progress recording (and is the only cancel surface
+  // in compact mode, where there is no separate cancel button).
+  useEffect(() => {
+    if (state !== "recording") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancel();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [state, cancel]);
+
   if (!hasAi || !sttEnabled || !supported) return null;
 
   const baseClass = compact
@@ -96,6 +110,21 @@ export function MicButton({
     : classes.button;
 
   if (state === "recording") {
+    // Compact mode: single stop button so the recording state fits the
+    // small leftSection of inline inputs. Esc still cancels via the hook.
+    if (compact) {
+      return (
+        <button
+          type="button"
+          className={`${baseClass} ${classes.recording} ${className ?? ""}`}
+          onClick={stop}
+          aria-label={t("Stop recording")}
+          title={t("Stop recording")}
+        >
+          <span className={classes.dot} />
+        </button>
+      );
+    }
     return (
       <div className={`${classes.group} ${className ?? ""}`}>
         <button
@@ -105,9 +134,7 @@ export function MicButton({
           aria-label={t("Stop recording")}
         >
           <span className={classes.dot} />
-          {!compact && (
-            <span className={classes.timer}>{formatElapsed(elapsedMs)}</span>
-          )}
+          <span className={classes.timer}>{formatElapsed(elapsedMs)}</span>
         </button>
         <button
           type="button"

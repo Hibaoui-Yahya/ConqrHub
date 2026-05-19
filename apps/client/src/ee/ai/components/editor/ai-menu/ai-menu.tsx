@@ -342,7 +342,7 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
                 }}
               />
             }
-            leftSectionWidth={32}
+            leftSectionWidth={36}
             rightSection={
               <ActionIcon
                 disabled={!prompt || isLoading}
