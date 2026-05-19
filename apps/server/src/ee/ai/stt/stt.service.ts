@@ -75,11 +75,14 @@ export class SttService {
     model: string,
     apiKey: string,
   ): Promise<string> {
+    const baseMime = (mime || 'audio/webm').split(';')[0].trim();
+    const ext = baseMime.split('/')[1] || 'webm';
+    const blob = new Blob([new Uint8Array(audio)], { type: baseMime });
+
     const form = new FormData();
-    const safeMime = mime || 'audio/webm';
-    const blob = new Blob([new Uint8Array(audio)], { type: safeMime });
-    form.append('file', blob, `recording.${safeMime.split('/')[1] || 'webm'}`);
+    form.append('file', blob, `recording.${ext}`);
     form.append('model', model);
+    form.append('response_format', 'json');
 
     const res = await fetch(
       'https://api.mistral.ai/v1/audio/transcriptions',
@@ -90,14 +93,30 @@ export class SttService {
       },
     );
 
+    const raw = await res.text();
+
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      this.logger.error(`Mistral transcription failed: ${res.status} ${body}`);
+      this.logger.error(
+        `Mistral transcription failed: ${res.status} ${raw} model=${model} mime=${baseMime} bytes=${audio.length}`,
+      );
       throw new ServiceUnavailableException('Transcription failed');
     }
 
-    const data = (await res.json()) as { text?: string };
-    return (data.text ?? '').trim();
+    let data: { text?: string } = {};
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      this.logger.warn(
+        `Mistral returned non-JSON body for transcription: ${raw.slice(0, 200)}`,
+      );
+    }
+    const text = (data.text ?? '').trim();
+    if (!text) {
+      this.logger.warn(
+        `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${audio.length} body=${raw.slice(0, 300)}`,
+      );
+    }
+    return text;
   }
 
   private async correct(
