@@ -25,6 +25,7 @@ import {
   IconColumns3,
   IconColumns2,
   IconTag,
+  IconMicrophone,
 } from "@tabler/icons-react";
 import {
   CommandProps,
@@ -76,6 +77,21 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       icon: IconCheckbox,
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).toggleTaskList().run();
+      },
+    },
+    {
+      title: "Voice dictation",
+      description: "Record and transcribe speech into text.",
+      searchTerms: ["voice", "dictate", "mic", "speech", "stt"],
+      icon: IconMicrophone,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).run();
+        const event = new CustomEvent("voice-dictate:open", {
+          detail: {
+            pageSlug: window.location.pathname.match(/\/p\/([^/]+)/)?.[1],
+          },
+        });
+        window.dispatchEvent(event);
       },
     },
     {
@@ -362,6 +378,16 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       icon: IconInfoCircle,
       command: ({ editor, range }: CommandProps) =>
         editor.chain().focus().deleteRange(range).toggleCallout().run(),
+    },
+    {
+      title: "Voice dictation",
+      description: "Record and transcribe speech into text.",
+      searchTerms: ["voice", "dictate", "mic", "speech", "stt"],
+      icon: IconMicrophone,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).run();
+        window.dispatchEvent(new CustomEvent("voice-dictate:open"));
+      },
     },
     {
       title: "Math inline",

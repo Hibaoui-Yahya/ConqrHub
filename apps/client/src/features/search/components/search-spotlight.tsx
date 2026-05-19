@@ -13,6 +13,7 @@ import { SearchResultItem } from "./search-result-item.tsx";
 import { AiSearchResult } from "../../../ee/ai/components/ai-search-result.tsx";
 import { useHasFeature } from "@/ee/hooks/use-feature";
 import { Feature } from "@/ee/features";
+import { MicButton } from "@/ee/voice-input/mic-button";
 
 interface SearchSpotlightProps {
   spaceId?: string;
@@ -135,6 +136,10 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
                 handleAiSearchTrigger();
               }
             }}
+          />
+          <MicButton
+            context={{ kind: "search" }}
+            onTranscript={(text) => setQuery(text)}
           />
           {isAiMode && hasAiFeature && (
             <Button

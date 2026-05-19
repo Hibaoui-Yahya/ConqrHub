@@ -16,6 +16,7 @@ import { marked } from "marked";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { copyToClipboard, htmlToMarkdown } from "@docmost/editor-ext";
 import { useLocation } from "react-router-dom";
+import { MicButton } from "@/ee/voice-input/mic-button";
 
 interface EditorAiMenuProps {
   editor: Editor | null;
@@ -325,6 +326,19 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
             value={prompt}
             disabled={isLoading}
             onChange={(e) => setPrompt(e.currentTarget.value)}
+            leftSection={
+              <MicButton
+                context={{
+                  kind: "ask-ai",
+                  pageId: location.pathname.match(/\/p\/([^/]+)/)?.[1],
+                }}
+                onTranscript={(text) => {
+                  setPrompt((p) => (p ? `${p} ${text}` : text));
+                  inputRef.current?.focus();
+                }}
+              />
+            }
+            leftSectionWidth={48}
             rightSection={
               <ActionIcon
                 disabled={!prompt || isLoading}

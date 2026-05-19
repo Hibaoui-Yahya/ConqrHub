@@ -3,7 +3,7 @@ import { AiProviderService } from '../providers/ai-provider.service';
 import { AiChatRepo } from '@docmost/db/repos/ai-chat/ai-chat.repo';
 
 const TITLE_SYSTEM =
-  'Write a 4-6 word title for this conversation. No quotes. No trailing punctuation. Output only the title.';
+  'Produce a 4 to 6 word title summarizing the conversation. Output only the title text. No quotes. No trailing punctuation. No prefixes such as "Title:".';
 const MAX_PROMPT_CHARS = 500;
 
 @Injectable()
@@ -17,7 +17,7 @@ export class AiChatTitleService {
 
   /**
    * Generates a short title from the first user message and persists it.
-   * Failures are swallowed — the chat stays usable with a null title.
+   * Failures are swallowed so the chat stays usable with a null title.
    */
   async generate(
     chatId: string,

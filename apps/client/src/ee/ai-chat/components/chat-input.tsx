@@ -14,6 +14,7 @@ import MentionView from "@/features/editor/components/mention/mention-view";
 import { uploadChatFile } from "../services/ai-chat-service";
 import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
 import classes from "../styles/chat-input.module.css";
+import { MicButton } from "@/ee/voice-input/mic-button";
 
 type PendingAttachment = ChatAttachment & { uploading: boolean };
 
@@ -403,6 +404,20 @@ export default function ChatInput({
             </button>
           </Popover.Dropdown>
         </Popover>
+
+        <MicButton
+          context={{
+            kind: "chat",
+            chatId: chatIdRef.current,
+            mentionPageIds: contextPages?.map((p) => p.id),
+          }}
+          onTranscript={(text) => {
+            if (!editor) return;
+            const hasText = !editor.isEmpty;
+            editor.commands.insertContent(hasText ? ` ${text}` : text);
+            editor.commands.focus("end");
+          }}
+        />
 
         <div style={{ flex: 1 }} />
 
