@@ -38,6 +38,16 @@ export class ChunkMetaDto {
   durationMs!: number;
 }
 
+export class SaveAiOutputDto {
+  @IsString()
+  @IsIn(['summary', 'actions', 'decisions'])
+  key!: 'summary' | 'actions' | 'decisions';
+
+  @IsString()
+  @Length(0, 64_000)
+  value!: string;
+}
+
 export class ListMeetingsQueryDto {
   @IsOptional()
   @Type(() => Number)
