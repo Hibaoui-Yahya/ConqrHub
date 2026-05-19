@@ -292,6 +292,22 @@ export class EnvironmentService {
     return this.configService.get<string>('MISTRAL_API_KEY');
   }
 
+  getAiSttEnabled(): boolean {
+    const raw = this.configService.get<string>('AI_STT_ENABLED');
+    if (raw == null || raw === '') {
+      // Default: enabled when a Mistral key is configured.
+      return Boolean(this.configService.get<string>('MISTRAL_API_KEY'));
+    }
+    return !['false', '0', 'no', 'off'].includes(String(raw).trim().toLowerCase());
+  }
+
+  getAiSttModel(): string {
+    return (
+      this.configService.get<string>('AI_STT_MODEL') ||
+      'voxtral-small-2507'
+    );
+  }
+
   getOllamaApiUrl(): string {
     return this.configService.get<string>(
       'OLLAMA_API_URL',
