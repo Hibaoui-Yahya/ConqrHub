@@ -8,6 +8,7 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { RagModule } from './rag/rag.module';
 import { AiChatModule } from './chat/ai-chat.module';
 import { McpModule } from './mcp/mcp.module';
+import { SttModule } from './stt/stt.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { McpModule } from './mcp/mcp.module';
     RagModule,
     AiChatModule,
     McpModule,
+    SttModule,
   ],
   controllers: [AiGenerateController],
   providers: [AiGenerateService, WorkspaceAiToggleGuard],
