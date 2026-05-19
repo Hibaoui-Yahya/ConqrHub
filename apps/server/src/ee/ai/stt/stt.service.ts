@@ -76,10 +76,9 @@ export class SttService {
     apiKey: string,
   ): Promise<string> {
     const form = new FormData();
-    const blob = new Blob([new Uint8Array(audio)], {
-      type: mime || 'audio/webm',
-    });
-    form.append('file', blob, `recording.${mime.split('/')[1] || 'webm'}`);
+    const safeMime = mime || 'audio/webm';
+    const blob = new Blob([new Uint8Array(audio)], { type: safeMime });
+    form.append('file', blob, `recording.${safeMime.split('/')[1] || 'webm'}`);
     form.append('model', model);
 
     const res = await fetch(
