@@ -204,6 +204,9 @@ export class MeetingController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    this.logger.log(
+      `ai-output save mid=${meetingId} key=${dto?.key} valueLen=${dto?.value?.length ?? 'undef'} typeofKey=${typeof dto?.key} typeofValue=${typeof dto?.value}`,
+    );
     return this.meetingService.saveAiOutput(
       meetingId,
       workspace.id,
