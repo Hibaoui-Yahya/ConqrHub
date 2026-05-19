@@ -304,7 +304,7 @@ export class EnvironmentService {
   getAiSttModel(): string {
     return (
       this.configService.get<string>('AI_STT_MODEL') ||
-      'voxtral-mini-transcribe-2507'
+      'voxtral-mini-latest'
     );
   }
 
