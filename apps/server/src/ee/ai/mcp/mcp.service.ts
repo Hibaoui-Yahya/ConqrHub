@@ -28,7 +28,8 @@ function categorizeTool(name: string): string {
   if (
     /^(create|update|delete|move|duplicate|copy)_page/.test(name) ||
     name === 'copy_page_to_space' ||
-    name === 'move_page_to_space'
+    name === 'move_page_to_space' ||
+    name === 'add_diagram'
   ) {
     return 'Pages (write)';
   }

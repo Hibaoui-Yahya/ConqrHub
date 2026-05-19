@@ -52,6 +52,7 @@ import { UpdateSpaceTool } from './tools/update-space.tool';
 import { UpdateCommentTool } from './tools/update-comment.tool';
 import { DeletePageTool } from './tools/delete-page.tool';
 import { DeleteCommentTool } from './tools/delete-comment.tool';
+import { AddDiagramTool } from './tools/add-diagram.tool';
 
 // AiChatRepo and AiChatMessageRepo are registered in the @Global() DatabaseModule
 // and are therefore available here without a local re-registration.
@@ -109,6 +110,7 @@ import { DeleteCommentTool } from './tools/delete-comment.tool';
     UpdateCommentTool,
     DeletePageTool,
     DeleteCommentTool,
+    AddDiagramTool,
   ],
   exports: [ChatToolRegistry],
 })

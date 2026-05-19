@@ -1,6 +1,6 @@
 # MCP Reference
 
-> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 28 tools that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
+> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 29 tools that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
 
 ConqrHub's MCP (Model Context Protocol) endpoint lets external agents read, search, and modify the workspace with the same permissions as the user behind the API key. The agent integration is gated by the workspace `mcp` AI feature toggle (default: off — admins enable it from **Settings → AI → MCP**).
 
@@ -192,7 +192,7 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 | `list_recent_pages` | — | `limit` (1–20, default 10) | Most recently edited pages across all accessible spaces. |
 | `list_space_pages` | `spaceId` | `parentPageId`, `limit` (1–50, default 20) | Pages in a space, optionally starting from a parent. |
 
-### Pages — write (8)
+### Pages — write (9)
 
 | Tool | Required args | Optional | Purpose |
 |---|---|---|---|
@@ -200,11 +200,33 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 | `update_page` | `pageId` | `title`, `content`, `contentOperation` (`replace` \| `append` \| `prepend`, default `replace`) | Edit title and/or content in one call. |
 | `update_page_title` | `pageId`, `title` | — | Rename only. |
 | `update_page_content` | `pageId`, `content` | `operation` (`replace` \| `append` \| `prepend`, default `replace`) | Edit content only. |
+| `add_diagram` | `pageId`, `type` (`mermaid`), `source` | `caption`, `position` (`append` \| `prepend`, default `append`) | Insert a diagram block. See [Diagrams](#diagrams) below. |
 | `move_page` | `pageId` | `parentPageId` (null to move to space root) | Re-parent within the same space. |
 | `duplicate_page` | `pageId` | — | Clone into the same space (prefixed `Copy of`). |
 | `copy_page_to_space` | `pageId`, `targetSpaceId` | — | Clone into another space (read on source + write on target). |
 | `move_page_to_space` | `pageId`, `targetSpaceId` | — | Move into another space (edit on source + write on target). |
 | `delete_page` | `pageId` | — | Soft delete to trash (recoverable for 30 days). |
+
+#### Diagrams
+
+`add_diagram` lets an agent attach a rendered diagram to a page. Today only **Mermaid** is supported because the diagram body is plain text — the editor renders it client-side with `mermaid.js`. Pass the raw Mermaid source as `source`, without ``` fences:
+
+```jsonc
+{
+  "name": "add_diagram",
+  "arguments": {
+    "pageId": "fkDQj507tR",
+    "type": "mermaid",
+    "source": "sequenceDiagram\n  Agent->>MCP: tools/call add_diagram\n  MCP->>Agent: { success: true }",
+    "caption": "Fig 1: agent appends a sequence diagram",
+    "position": "append"
+  }
+}
+```
+
+Mermaid supports flowcharts, sequence diagrams, class diagrams, state diagrams, ER diagrams, gantt charts, mindmaps, gitGraphs, pie charts, journey maps, and quadrant charts — see the [Mermaid syntax docs](https://mermaid.js.org/intro/) for the full grammar.
+
+**Excalidraw** and **Drawio** are **not** creatable via MCP today. Both store the diagram as a scene that the server has to render into an SVG attachment before the editor node can reference it; that pipeline doesn't exist yet. Create those interactively in the web UI for now. If you need to add this, the work is: (a) accept the scene JSON or XML, (b) render server-side to SVG, (c) upload as an attachment, (d) emit an `excalidraw` / `drawio` node with `src` and `attachmentId`.
 
 ### Spaces — read (2)
 
