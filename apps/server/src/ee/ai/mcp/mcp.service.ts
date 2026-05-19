@@ -162,11 +162,17 @@ export class McpService {
     };
   }
 
-  getToolsCatalog(): { name: string; description: string; category: string }[] {
+  getToolsCatalog(): {
+    name: string;
+    description: string;
+    category: string;
+    inputSchema: unknown;
+  }[] {
     return this.toolRegistry.getAll().map((t) => ({
       name: t.name,
       description: t.description,
       category: categorizeTool(t.name),
+      inputSchema: this.toInputJsonSchema(t.name, t.parameters),
     }));
   }
 
@@ -205,8 +211,28 @@ export class McpService {
 
     const toolCtx = { user: ctx.user, workspaceId: ctx.workspace.id };
 
+    let args: unknown = params.arguments ?? {};
+    if (tool.parameters instanceof z.ZodType) {
+      const parsed = (tool.parameters as z.ZodType).safeParse(args);
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+          .join('; ');
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid arguments for ${tool.name}: ${issues}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      args = parsed.data;
+    }
+
     try {
-      const result = await tool.execute(params.arguments ?? {}, toolCtx as any);
+      const result = await tool.execute(args, toolCtx as any);
 
       const text = result === undefined || result === null
         ? 'null'

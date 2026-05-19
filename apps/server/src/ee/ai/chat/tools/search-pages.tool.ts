@@ -34,10 +34,14 @@ export class SearchPagesTool implements ChatTool, OnModuleInit {
     args: { query: string; limit?: number },
     ctx: ChatToolContext,
   ): Promise<{ id: string; title: string | null; slugId: string; excerpt: string }[]> {
-    const { items } = await this.searchService.searchPage(
-      { query: args.query, limit: args.limit ?? 5 } as any,
+    const trimmed = (args.query ?? '').trim();
+    if (!trimmed) return [];
+
+    const result = await this.searchService.searchPage(
+      { query: trimmed, limit: args.limit ?? 5 } as any,
       { userId: ctx.user.id, workspaceId: ctx.workspaceId },
     );
+    const items = result?.items ?? [];
     return items.map((item: any) => ({
       id: item.id,
       title: item.title,

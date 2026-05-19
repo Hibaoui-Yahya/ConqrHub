@@ -17,13 +17,18 @@ import { ChatToolRegistry } from './chat-tool.registry';
 export class ListSpacePagesTool implements ChatTool, OnModuleInit {
   readonly name = 'list_space_pages';
   readonly description =
-    'List pages in a specific space, optionally starting from a parent page. Returns the page tree structure.';
+    'List pages in a specific space, optionally starting from a parent page. Returns the page tree structure. Pass spaceId (UUID) — slugs are not accepted; use list_spaces if you only have the name.';
   readonly parameters = z.object({
-    spaceId: z.string().describe('The space UUID to list pages from'),
+    spaceId: z
+      .string()
+      .uuid()
+      .describe('Space UUID (not a slug). Use list_spaces to look it up.'),
     parentPageId: z
       .string()
       .optional()
-      .describe('Optional parent page UUID to list children of'),
+      .describe(
+        'Optional parent page UUID or slugId. Omit to list top-level pages.',
+      ),
     limit: z
       .number()
       .int()

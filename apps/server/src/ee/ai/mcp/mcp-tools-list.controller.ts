@@ -8,7 +8,14 @@ export class McpToolsListController {
   constructor(private readonly mcpService: McpService) {}
 
   @Get('tools')
-  list(): { tools: { name: string; description: string; category: string }[] } {
+  list(): {
+    tools: {
+      name: string;
+      description: string;
+      category: string;
+      inputSchema: unknown;
+    }[];
+  } {
     return { tools: this.mcpService.getToolsCatalog() };
   }
 }

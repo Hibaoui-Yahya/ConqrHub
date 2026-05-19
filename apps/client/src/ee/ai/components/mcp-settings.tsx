@@ -23,6 +23,7 @@ import { IconCheck, IconCopy, IconInfoCircle } from "@tabler/icons-react";
 import { CopyButton } from "@/components/common/copy-button.tsx";
 import McpSetupSnippets from "@/ee/ai/components/mcp-setup-snippets.tsx";
 import McpToolsTable from "@/ee/ai/components/mcp-tools-table.tsx";
+import McpAgentGuide from "@/ee/ai/components/mcp-agent-guide.tsx";
 
 export default function McpSettings() {
   const { t } = useTranslation();
@@ -115,6 +116,10 @@ export default function McpSettings() {
 
           <div style={{ marginTop: "var(--mantine-spacing-lg)" }}>
             <McpSetupSnippets mcpUrl={mcpUrl} />
+          </div>
+
+          <div style={{ marginTop: "var(--mantine-spacing-lg)" }}>
+            <McpAgentGuide mcpUrl={mcpUrl} />
           </div>
 
           <div style={{ marginTop: "var(--mantine-spacing-lg)" }}>

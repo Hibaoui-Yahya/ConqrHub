@@ -21,12 +21,13 @@ const MAX_CONTENT_CHARS = 8000;
 export class GetPageTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page';
   readonly description =
-    'Get the full content of a specific ConqrHub page by its ID. Use this after search_pages to read the actual page text. Returns up to 8000 characters.';
+    'Get the full content of a specific ConqrHub page. Accepts either the page UUID or the short slugId (e.g. "69mCnVW2Xg"). Use after search_pages or list_pages to read the actual page text. Returns up to 8000 characters.';
   readonly parameters = z.object({
     pageId: z
       .string()
+      .min(1)
       .describe(
-        'The UUID of the page (returned by search_pages or list_space_pages)',
+        'The page UUID or short slugId (both returned by search_pages and list_pages).',
       ),
   });
 
@@ -52,7 +53,11 @@ export class GetPageTool implements ChatTool, OnModuleInit {
     updatedAt: string;
   }> {
     const page = await this.pageService.findById(args.pageId, true);
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page) {
+      throw new NotFoundException(
+        `Page not found for id "${args.pageId}". Pass either the page UUID or the short slugId returned by search_pages / list_pages.`,
+      );
+    }
 
     try {
       const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
