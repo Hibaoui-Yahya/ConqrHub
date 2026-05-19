@@ -13,8 +13,11 @@ import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorat
 import { SkipTransform } from '../../../common/decorators/skip-transform.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { McpService } from './mcp.service';
+import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
+import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+@RequireAiFeature('mcp')
 @Controller('mcp')
 export class McpController {
   private readonly logger = new Logger(McpController.name);

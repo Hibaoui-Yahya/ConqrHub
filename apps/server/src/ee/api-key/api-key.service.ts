@@ -3,6 +3,9 @@ import { v7 as uuid7 } from 'uuid';
 import { ApiKeyRepo } from './api-key.repo';
 import { TokenService } from '../../core/auth/services/token.service';
 import { ApiKey } from '@docmost/db/types/entity.types';
+import { UserRepo } from '@docmost/db/repos/user/user.repo';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { isUserDisabled } from '../../common/helpers';
 
 @Injectable()
 export class ApiKeyService {
@@ -11,6 +14,8 @@ export class ApiKeyService {
   constructor(
     private readonly repo: ApiKeyRepo,
     private readonly tokenService: TokenService,
+    private readonly userRepo: UserRepo,
+    private readonly workspaceRepo: WorkspaceRepo,
   ) {}
 
   async create(opts: {
@@ -93,12 +98,15 @@ export class ApiKeyService {
       lastUsedAt: new Date(),
     });
 
-    return {
-      user: {
-        id: payload.sub,
-        workspaceId: payload.workspaceId,
-      },
-      workspace: { id: payload.workspaceId },
-    };
+    const [user, workspace] = await Promise.all([
+      this.userRepo.findById(payload.sub, payload.workspaceId),
+      this.workspaceRepo.findById(payload.workspaceId),
+    ]);
+
+    if (!user || isUserDisabled(user) || !workspace) {
+      throw new UnauthorizedException('API key user or workspace not found');
+    }
+
+    return { user, workspace };
   }
 }

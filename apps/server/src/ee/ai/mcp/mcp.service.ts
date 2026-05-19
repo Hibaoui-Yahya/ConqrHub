@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { z } from 'zod';
 import { ChatToolRegistry } from '../chat/tools/chat-tool.registry';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
@@ -12,6 +13,28 @@ export interface McpContext {
   workspace: Workspace;
 }
 
+function categorizeTool(name: string): string {
+  if (name.includes('attachment')) return 'Attachments';
+  if (name === 'rag_retrieve' || name === 'search_pages') return 'Search & RAG';
+  if (name.endsWith('_comment') || name.endsWith('_comments')) {
+    return /^(create|update|delete)_comment$/.test(name)
+      ? 'Comments (write)'
+      : 'Comments (read)';
+  }
+  if (name === 'get_current_user' || name.includes('member')) return 'Users';
+  if (name.includes('space')) {
+    return /^(create|update|delete)_space/.test(name) ? 'Spaces (write)' : 'Spaces (read)';
+  }
+  if (
+    /^(create|update|delete|move|duplicate|copy)_page/.test(name) ||
+    name === 'copy_page_to_space' ||
+    name === 'move_page_to_space'
+  ) {
+    return 'Pages (write)';
+  }
+  return 'Pages (read)';
+}
+
 @Injectable()
 export class McpService {
   private readonly logger = new Logger(McpService.name);
@@ -21,7 +44,16 @@ export class McpService {
     version: '0.80.1',
   };
 
+  // Most recent first — we echo back the client's version if we support it,
+  // otherwise fall back to our latest. Per MCP spec §Initialization.
+  private readonly supportedProtocolVersions = [
+    '2025-06-18',
+    '2025-03-26',
+    '2024-11-05',
+  ];
+
   private readonly transport: StreamableHTTPServerTransport;
+  private readonly jsonSchemaCache = new Map<string, unknown>();
 
   constructor(private readonly toolRegistry: ChatToolRegistry) {
     this.transport = new StreamableHTTPServerTransport({
@@ -103,11 +135,18 @@ export class McpService {
   }
 
   private initialize(params: any) {
+    const requested =
+      typeof params?.protocolVersion === 'string'
+        ? params.protocolVersion
+        : undefined;
+    const negotiated =
+      requested && this.supportedProtocolVersions.includes(requested)
+        ? requested
+        : this.supportedProtocolVersions[0];
+
     return {
-      protocolVersion: '2024-11-05',
-      capabilities: {
-        tools: {},
-      },
+      protocolVersion: negotiated,
+      capabilities: { tools: {} },
       serverInfo: this.serverInfo,
     };
   }
@@ -118,9 +157,41 @@ export class McpService {
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
-        inputSchema: t.parameters,
+        inputSchema: this.toInputJsonSchema(t.name, t.parameters),
       })),
     };
+  }
+
+  getToolsCatalog(): { name: string; description: string; category: string }[] {
+    return this.toolRegistry.getAll().map((t) => ({
+      name: t.name,
+      description: t.description,
+      category: categorizeTool(t.name),
+    }));
+  }
+
+  private toInputJsonSchema(name: string, parameters: unknown): unknown {
+    const cached = this.jsonSchemaCache.get(name);
+    if (cached) return cached;
+
+    let schema: unknown;
+    if (parameters instanceof z.ZodType) {
+      schema = z.toJSONSchema(parameters, { io: 'input' });
+    } else if (
+      parameters &&
+      typeof parameters === 'object' &&
+      (parameters as any).type === 'object'
+    ) {
+      schema = parameters;
+    } else {
+      schema = { type: 'object', properties: {} };
+    }
+
+    if (schema && typeof schema === 'object') {
+      delete (schema as any).$schema;
+    }
+    this.jsonSchemaCache.set(name, schema);
+    return schema;
   }
 
   private async callTool(

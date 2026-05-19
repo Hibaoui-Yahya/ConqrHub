@@ -35,10 +35,10 @@ import { UpdatePageContentTool } from './tools/update-page-content.tool';
 import { MovePageTool } from './tools/move-page.tool';
 import { CreateCommentTool } from './tools/create-comment.tool';
 // P6 read tools
-import { ListPagesTool } from './tools/list-pages.tool';
+// list_pages / get_comments removed in favor of list_space_pages / get_page_comments
+// (identical implementations — keeping the more descriptive names)
 import { ListChildPagesTool } from './tools/list-child-pages.tool';
 import { GetSpaceTool } from './tools/get-space.tool';
-import { GetCommentsTool } from './tools/get-comments.tool';
 import { SearchAttachmentsTool } from './tools/search-attachments.tool';
 import { ListWorkspaceMembersTool } from './tools/list-workspace-members.tool';
 import { GetCurrentUserTool } from './tools/get-current-user.tool';
@@ -50,6 +50,8 @@ import { MovePageToSpaceTool } from './tools/move-page-to-space.tool';
 import { CreateSpaceTool } from './tools/create-space.tool';
 import { UpdateSpaceTool } from './tools/update-space.tool';
 import { UpdateCommentTool } from './tools/update-comment.tool';
+import { DeletePageTool } from './tools/delete-page.tool';
+import { DeleteCommentTool } from './tools/delete-comment.tool';
 
 // AiChatRepo and AiChatMessageRepo are registered in the @Global() DatabaseModule
 // and are therefore available here without a local re-registration.
@@ -92,10 +94,8 @@ import { UpdateCommentTool } from './tools/update-comment.tool';
     MovePageTool,
     CreateCommentTool,
     // P6 read
-    ListPagesTool,
     ListChildPagesTool,
     GetSpaceTool,
-    GetCommentsTool,
     SearchAttachmentsTool,
     ListWorkspaceMembersTool,
     GetCurrentUserTool,
@@ -107,6 +107,8 @@ import { UpdateCommentTool } from './tools/update-comment.tool';
     CreateSpaceTool,
     UpdateSpaceTool,
     UpdateCommentTool,
+    DeletePageTool,
+    DeleteCommentTool,
   ],
   exports: [ChatToolRegistry],
 })

@@ -12,8 +12,11 @@ import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { McpService } from './mcp.service';
+import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
+import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+@RequireAiFeature('mcp')
 @Controller('mcp/stream')
 export class McpStreamController {
   private readonly logger = new Logger(McpStreamController.name);
