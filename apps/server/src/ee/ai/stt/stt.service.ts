@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -132,17 +131,25 @@ export class SttService {
       (context.kind === 'page' || context.kind === 'ask-ai') &&
       context.pageId
     ) {
-      const page = await this.pageRepo.findById(context.pageId, {
-        includeTextContent: true,
-      });
-      if (!page) {
-        throw new ForbiddenException('Page not found');
+      try {
+        const page = await this.pageRepo.findById(context.pageId, {
+          includeTextContent: true,
+        });
+        if (page && page.workspaceId === workspaceId) {
+          pageTitle = page.title ?? '';
+          excerpt = (page.textContent ?? '').slice(0, MAX_EXCERPT_CHARS);
+        } else {
+          // Page missing or cross-workspace. Don't fail transcription —
+          // just skip the page-context proper-noun hints. The raw
+          // transcript is still useful to the user.
+          this.logger.warn(
+            `STT page context unavailable kind=${context.kind} pageId=${context.pageId} ws=${workspaceId} found=${!!page}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown';
+        this.logger.warn(`STT page lookup error: ${msg}`);
       }
-      if (page.workspaceId !== workspaceId) {
-        throw new ForbiddenException('Page not in this workspace');
-      }
-      pageTitle = page.title ?? '';
-      excerpt = (page.textContent ?? '').slice(0, MAX_EXCERPT_CHARS);
     }
 
     const properNouns = [workspaceName, pageTitle].filter(Boolean).join(', ');

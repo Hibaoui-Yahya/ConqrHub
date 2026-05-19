@@ -17,6 +17,7 @@ import { DOMSerializer } from "@tiptap/pm/model";
 import { copyToClipboard, htmlToMarkdown } from "@docmost/editor-ext";
 import { useLocation } from "react-router-dom";
 import { MicButton } from "@/ee/voice-input/mic-button";
+import { extractPageSlugId } from "@/lib";
 
 interface EditorAiMenuProps {
   editor: Editor | null;
@@ -331,7 +332,9 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
                 compact
                 context={{
                   kind: "ask-ai",
-                  pageId: location.pathname.match(/\/p\/([^/]+)/)?.[1],
+                  pageId: extractPageSlugId(
+                    location.pathname.match(/\/p\/([^/]+)/)?.[1],
+                  ),
                 }}
                 onTranscript={(text) => {
                   setPrompt((p) => (p ? `${p} ${text}` : text));
