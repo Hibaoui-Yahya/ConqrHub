@@ -45,6 +45,12 @@ function makeInsight(overrides: Partial<InsightRow> = {}): InsightRow {
     expiresAt: null,
     retiredAt: null,
     spanAnchor: null,
+    authorName: 'Test User',
+    authorRole: 'admin',
+    authorDepartment: 'Engineering',
+    confidence: 'medium',
+    helpfulCount: 0,
+    notHelpfulCount: 0,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     deletedAt: null,
@@ -102,15 +108,28 @@ function makeEventEmitter(): jest.Mocked<EventEmitter2> {
   } as any;
 }
 
+function makeDb(
+  userProfile = { name: 'Test User', role: 'admin', department: 'Engineering' },
+): any {
+  return {
+    selectFrom: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    executeTakeFirst: jest.fn().mockResolvedValue(userProfile),
+  };
+}
+
 function makeSvc(
   repo: jest.Mocked<ExpertInsightsRepo>,
   ability: MongoAbility<ISpaceAbility>,
   emitter?: jest.Mocked<EventEmitter2>,
+  db?: any,
 ): ExpertInsightsService {
   return new ExpertInsightsService(
     repo,
     makeSpaceAbility(ability),
     emitter ?? makeEventEmitter(),
+    db ?? makeDb(),
   );
 }
 
@@ -182,6 +201,56 @@ describe('ExpertInsightsService', () => {
 
       const call = repo.create.mock.calls[0][0];
       expect(call.expiresAt).toEqual(new Date(expiresAt));
+    });
+
+    it('snapshots author name/role/department and defaults confidence to medium', async () => {
+      const ability = makeAbility(true, SpaceCaslAction.Manage, SpaceCaslSubject.Insight);
+      const repo = makeRepo();
+      const db = makeDb({ name: 'Test User', role: 'admin', department: 'Engineering' });
+      const svc = makeSvc(repo, ability, undefined, db);
+
+      await svc.create(
+        {
+          spaceId: SPACE_ID,
+          pageId: PAGE_ID,
+          insightType: 'warning',
+          title: 't',
+          body: 'b',
+        } as any,
+        mockUser,
+      );
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorName: 'Test User',
+          authorRole: 'admin',
+          authorDepartment: 'Engineering',
+          confidence: 'medium',
+        }),
+      );
+    });
+
+    it('uses confidence from the DTO when provided', async () => {
+      const ability = makeAbility(true, SpaceCaslAction.Manage, SpaceCaslSubject.Insight);
+      const repo = makeRepo();
+      const db = makeDb({ name: 'Test User', role: 'admin', department: 'Engineering' });
+      const svc = makeSvc(repo, ability, undefined, db);
+
+      await svc.create(
+        {
+          spaceId: SPACE_ID,
+          pageId: PAGE_ID,
+          insightType: 'recommendation',
+          title: 't',
+          body: 'b',
+          confidence: 'high',
+        } as any,
+        mockUser,
+      );
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ confidence: 'high' }),
+      );
     });
   });
 
