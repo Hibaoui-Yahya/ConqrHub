@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatToolRegistry } from '../chat/tools/chat-tool.registry';
 import { User, Workspace } from '@docmost/db/types/entity.types';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 
 export interface McpContext {
   user: User;
@@ -20,23 +21,26 @@ export class McpService {
     version: '0.80.1',
   };
 
-  private readonly transports = new Map<string, StreamableHTTPServerTransport>();
+  private readonly transport: StreamableHTTPServerTransport;
 
-  constructor(private readonly toolRegistry: ChatToolRegistry) {}
-
-  createTransport(ctx: McpContext): StreamableHTTPServerTransport {
-    const transport = new StreamableHTTPServerTransport({
+  constructor(private readonly toolRegistry: ChatToolRegistry) {
+    this.transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
-    transport.onmessage = async (message: JSONRPCMessage) => {
+    this.transport.onmessage = async (
+      message: JSONRPCMessage,
+      extra?: MessageExtraInfo,
+    ) => {
       try {
+        const ctx = extra?.authInfo?.extra as unknown as McpContext | undefined;
+
         if ('method' in message) {
           const result = await this.handleRequest(
             { method: message.method, params: (message as any).params },
-            ctx,
+            ctx ?? { user: {} as User, workspace: {} as Workspace },
           );
-          await transport.send({
+          await this.transport.send({
             jsonrpc: '2.0',
             id: (message as any).id,
             result,
@@ -44,7 +48,7 @@ export class McpService {
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Internal error';
-        await transport.send({
+        await this.transport.send({
           jsonrpc: '2.0',
           id: (message as any).id ?? 0,
           error: { code: -32603, message: errorMessage },
@@ -52,17 +56,9 @@ export class McpService {
       }
     };
 
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        this.transports.delete(transport.sessionId);
-      }
+    this.transport.onclose = () => {
+      this.logger.log('MCP stream transport closed');
     };
-
-    if (transport.sessionId) {
-      this.transports.set(transport.sessionId, transport);
-    }
-
-    return transport;
   }
 
   async handleStreamRequest(
@@ -71,20 +67,14 @@ export class McpService {
     ctx: McpContext,
     parsedBody?: unknown,
   ): Promise<void> {
-    const sessionId = this.extractSessionId(req);
+    (req as any).auth = {
+      token: '',
+      clientId: ctx.user.id,
+      scopes: [],
+      extra: ctx as unknown as Record<string, unknown>,
+    } as AuthInfo;
 
-    let transport = sessionId ? this.transports.get(sessionId) : undefined;
-
-    if (!transport) {
-      transport = this.createTransport(ctx);
-    }
-
-    await transport.handleRequest(req, res, parsedBody);
-  }
-
-  private extractSessionId(req: IncomingMessage): string | undefined {
-    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    return url.searchParams.get('sessionId') || undefined;
+    await this.transport.handleRequest(req, res, parsedBody);
   }
 
   async handleRequest(
