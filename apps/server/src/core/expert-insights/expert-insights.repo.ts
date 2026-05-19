@@ -3,11 +3,10 @@ import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { sql } from 'kysely';
 import {
+  ExpertInsightConfidence,
   ExpertInsightStatus,
   ExpertInsightType,
 } from '../../database/types/expert-insights.types';
-
-export type ExpertInsightConfidence = 'low' | 'medium' | 'high';
 
 export interface InsightRow {
   id: string;

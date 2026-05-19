@@ -252,6 +252,38 @@ describe('ExpertInsightsService', () => {
         expect.objectContaining({ confidence: 'high' }),
       );
     });
+
+    it('falls back to null snapshot fields when the user profile lookup returns nothing', async () => {
+      const ability = makeAbility(true, SpaceCaslAction.Manage, SpaceCaslSubject.Insight);
+      const repo = makeRepo();
+      const db = {
+        selectFrom: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        executeTakeFirst: jest.fn().mockResolvedValue(undefined),
+      };
+      const svc = makeSvc(repo, ability, undefined, db);
+
+      await svc.create(
+        {
+          spaceId: SPACE_ID,
+          pageId: PAGE_ID,
+          insightType: 'warning',
+          title: 't',
+          body: 'b',
+        } as any,
+        mockUser,
+      );
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorName: null,
+          authorRole: null,
+          authorDepartment: null,
+          confidence: 'medium',
+        }),
+      );
+    });
   });
 
   // -----------------------------------------------------------------------
