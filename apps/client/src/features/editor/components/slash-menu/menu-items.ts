@@ -81,7 +81,7 @@ const CommandGroups: SlashMenuGroupedItemsType = {
     },
     {
       title: "Voice dictation",
-      description: "Record and transcribe speech into text.",
+      description: "Record and transcribe speech into text. (Mod+Shift+V)",
       searchTerms: ["voice", "dictate", "mic", "speech", "stt"],
       icon: IconMicrophone,
       command: ({ editor, range }: CommandProps) => {

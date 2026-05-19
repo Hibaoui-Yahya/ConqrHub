@@ -76,6 +76,18 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
         },
       ],
       [
+        "mod+shift+V",
+        () => {
+          if (readOnly) return;
+          const pageSlug = window.location.pathname.match(/\/p\/([^/]+)/)?.[1];
+          window.dispatchEvent(
+            new CustomEvent("voice-dictate:open", {
+              detail: { pageSlug },
+            }),
+          );
+        },
+      ],
+      [
         "Escape",
         () => {
           const event = new CustomEvent("closeFindDialogFromEditor", {});
@@ -85,6 +97,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
       ],
     ],
     [],
+    true,
   );
 
   return (
