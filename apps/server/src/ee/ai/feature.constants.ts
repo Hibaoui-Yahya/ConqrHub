@@ -1,10 +1,10 @@
 /**
  * Per-surface workspace toggles for the AI subsystem. Stored under
- * workspace.settings.ai = { generative, search, chat, mcp }. Admins can
+ * workspace.settings.ai = { generative, search, chat, mcp, stt }. Admins can
  * disable any surface independently — defaults are documented per
  * surface in docs/architecture/ai-subsystem.md.
  */
-export type AiFeature = 'generative' | 'retrieval' | 'search' | 'chat' | 'mcp';
+export type AiFeature = 'generative' | 'retrieval' | 'search' | 'chat' | 'mcp' | 'stt';
 
 export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   generative: true,
@@ -12,6 +12,7 @@ export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   search: true,
   chat: true,
   mcp: false,
+  stt: true,
 };
 
 export const AI_FEATURE_KEY = 'aiFeature';
