@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatToolRegistry } from '../chat/tools/chat-tool.registry';
+import { User, Workspace } from '@docmost/db/types/entity.types';
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { randomUUID } from 'crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
 export interface McpContext {
-  workspaceId: string;
-  userId: string;
+  user: User;
+  workspace: Workspace;
 }
 
 @Injectable()
@@ -15,7 +20,72 @@ export class McpService {
     version: '0.80.1',
   };
 
+  private readonly transports = new Map<string, StreamableHTTPServerTransport>();
+
   constructor(private readonly toolRegistry: ChatToolRegistry) {}
+
+  createTransport(ctx: McpContext): StreamableHTTPServerTransport {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    transport.onmessage = async (message: JSONRPCMessage) => {
+      try {
+        if ('method' in message) {
+          const result = await this.handleRequest(
+            { method: message.method, params: (message as any).params },
+            ctx,
+          );
+          await transport.send({
+            jsonrpc: '2.0',
+            id: (message as any).id,
+            result,
+          } as JSONRPCMessage);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Internal error';
+        await transport.send({
+          jsonrpc: '2.0',
+          id: (message as any).id ?? 0,
+          error: { code: -32603, message: errorMessage },
+        } as JSONRPCMessage);
+      }
+    };
+
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        this.transports.delete(transport.sessionId);
+      }
+    };
+
+    if (transport.sessionId) {
+      this.transports.set(transport.sessionId, transport);
+    }
+
+    return transport;
+  }
+
+  async handleStreamRequest(
+    req: IncomingMessage,
+    res: ServerResponse,
+    ctx: McpContext,
+    parsedBody?: unknown,
+  ): Promise<void> {
+    const sessionId = this.extractSessionId(req);
+
+    let transport = sessionId ? this.transports.get(sessionId) : undefined;
+
+    if (!transport) {
+      transport = this.createTransport(ctx);
+    }
+
+    await transport.handleRequest(req, res, parsedBody);
+  }
+
+  private extractSessionId(req: IncomingMessage): string | undefined {
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    return url.searchParams.get('sessionId') || undefined;
+  }
 
   async handleRequest(
     request: { method: string; params?: any },
@@ -72,10 +142,10 @@ export class McpService {
       throw new Error(`Tool not found: ${params.name}`);
     }
 
-    const user = { id: ctx.userId, workspaceId: ctx.workspaceId };
+    const toolCtx = { user: ctx.user, workspaceId: ctx.workspace.id };
 
     try {
-      const result = await tool.execute(params.arguments ?? {}, { user, workspaceId: ctx.workspaceId } as any);
+      const result = await tool.execute(params.arguments ?? {}, toolCtx as any);
 
       const text = result === undefined || result === null
         ? 'null'

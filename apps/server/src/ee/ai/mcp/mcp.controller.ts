@@ -29,8 +29,8 @@ export class McpController {
   ) {
     try {
       const result = await this.mcpService.handleRequest(body, {
-        workspaceId: workspace.id,
-        userId: user.id,
+        user,
+        workspace,
       });
 
       return {

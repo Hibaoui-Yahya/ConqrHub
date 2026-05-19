@@ -1,0 +1,68 @@
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
+import { z } from 'zod';
+import { SpaceService } from '../../../../core/space/services/space.service';
+import SpaceAbilityFactory from '../../../../core/casl/abilities/space-ability.factory';
+import {
+  SpaceCaslAction,
+  SpaceCaslSubject,
+} from '../../../../core/casl/interfaces/space-ability.type';
+import { ChatTool, ChatToolContext } from './chat-tool.types';
+import { ChatToolRegistry } from './chat-tool.registry';
+
+@Injectable()
+export class GetSpaceTool implements ChatTool, OnModuleInit {
+  readonly name = 'get_space';
+  readonly description =
+    'Get details of a specific ConqrHub space: its name, slug, description, and creation date.';
+  readonly parameters = z.object({
+    spaceId: z.string().describe('The UUID of the space'),
+  });
+
+  constructor(
+    private readonly spaceService: SpaceService,
+    private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly registry: ChatToolRegistry,
+  ) {}
+
+  onModuleInit(): void {
+    this.registry.register(this);
+  }
+
+  async execute(
+    args: { spaceId: string },
+    ctx: ChatToolContext,
+  ): Promise<{
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    createdAt: string;
+  }> {
+    try {
+      const ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
+      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+        throw new ForbiddenException(
+          `You do not have access to space ${args.spaceId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+    }
+
+    const space = await this.spaceService.getSpaceInfo(args.spaceId, ctx.workspaceId);
+    if (!space) throw new NotFoundException('Space not found');
+
+    return {
+      id: space.id,
+      name: space.name ?? 'Untitled',
+      slug: space.slug,
+      description: (space as any).description ?? null,
+      createdAt: space.createdAt?.toISOString?.() ?? new Date().toISOString(),
+    };
+  }
+}

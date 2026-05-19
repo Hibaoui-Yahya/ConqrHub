@@ -1,8 +1,8 @@
 # MCP Tools Reference
 
-> **Status: planned (Enterprise).** The `@modelcontextprotocol/sdk` dependency is in `apps/server/package.json`, the `Feature.MCP` flag is defined, and the `/mcp` route is reserved (excluded from Swagger in `apps/server/src/main.ts`). The endpoint handlers and tool implementations live in the EE submodule and are not present in the OSS bundle. Treat the tool list below as the contract the EE module will satisfy on launch.
+> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 22 tools that external AI clients can invoke against the workspace. The `@modelcontextprotocol/sdk` is used for transport. AI Chat uses the same tool set. Use `mcp-remote` or the `/mcp` URL directly to connect AI clients (Claude Desktop, Claude Code, VS Code, Cursor).
 
-The Model Context Protocol (`Feature.MCP`, Enterprise) endpoint at `/mcp` will expose 20 tools that external AI clients can invoke against the workspace. AI Chat will use the same tool set.
+The Model Context Protocol (`Feature.MCP`, Enterprise) endpoint at `/mcp` exposes 22 tools that external AI clients can invoke against the workspace. AI Chat uses the same tool set.
 
 **Authentication:** Bearer API key (`Feature.API_KEYS`).
 **Authorization:** Every call goes through the same permission checks as a logged-in REST request — the API key represents a user with their access scope.

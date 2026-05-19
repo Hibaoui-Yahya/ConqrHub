@@ -6,6 +6,8 @@ import { EnvironmentModule } from '../../../integrations/environment/environment
 import { PageModule } from '../../../core/page/page.module';
 import { SpaceModule } from '../../../core/space/space.module';
 import { CommentModule } from '../../../core/comment/comment.module';
+import { WorkspaceModule } from '../../../core/workspace/workspace.module';
+import { UserModule } from '../../../core/user/user.module';
 import { AiChatController } from './ai-chat.controller';
 import { AiChatStreamController } from './ai-chat-stream.controller';
 import { AiChatService } from './ai-chat.service';
@@ -13,6 +15,7 @@ import { AiChatStreamService } from './ai-chat-stream.service';
 import { AiChatTitleService } from './ai-chat-title.service';
 import { ChatToolRegistry } from './tools/chat-tool.registry';
 import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.factory';
+import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
 // P4 tools
 import { SearchPagesTool } from './tools/search-pages.tool';
 import { RagRetrieveTool } from './tools/rag-retrieve.tool';
@@ -31,6 +34,22 @@ import { UpdatePageTitleTool } from './tools/update-page-title.tool';
 import { UpdatePageContentTool } from './tools/update-page-content.tool';
 import { MovePageTool } from './tools/move-page.tool';
 import { CreateCommentTool } from './tools/create-comment.tool';
+// P6 read tools
+import { ListPagesTool } from './tools/list-pages.tool';
+import { ListChildPagesTool } from './tools/list-child-pages.tool';
+import { GetSpaceTool } from './tools/get-space.tool';
+import { GetCommentsTool } from './tools/get-comments.tool';
+import { SearchAttachmentsTool } from './tools/search-attachments.tool';
+import { ListWorkspaceMembersTool } from './tools/list-workspace-members.tool';
+import { GetCurrentUserTool } from './tools/get-current-user.tool';
+// P6 write tools
+import { UpdatePageTool } from './tools/update-page.tool';
+import { DuplicatePageTool } from './tools/duplicate-page.tool';
+import { CopyPageToSpaceTool } from './tools/copy-page-to-space.tool';
+import { MovePageToSpaceTool } from './tools/move-page-to-space.tool';
+import { CreateSpaceTool } from './tools/create-space.tool';
+import { UpdateSpaceTool } from './tools/update-space.tool';
+import { UpdateCommentTool } from './tools/update-comment.tool';
 
 // AiChatRepo and AiChatMessageRepo are registered in the @Global() DatabaseModule
 // and are therefore available here without a local re-registration.
@@ -43,6 +62,8 @@ import { CreateCommentTool } from './tools/create-comment.tool';
     PageModule,
     SpaceModule,
     CommentModule,
+    WorkspaceModule,
+    UserModule,
   ],
   controllers: [AiChatController, AiChatStreamController],
   providers: [
@@ -51,6 +72,7 @@ import { CreateCommentTool } from './tools/create-comment.tool';
     AiChatTitleService,
     ChatToolRegistry,
     SpaceAbilityFactory,
+    WorkspaceAbilityFactory,
     // P4
     SearchPagesTool,
     RagRetrieveTool,
@@ -69,6 +91,22 @@ import { CreateCommentTool } from './tools/create-comment.tool';
     UpdatePageContentTool,
     MovePageTool,
     CreateCommentTool,
+    // P6 read
+    ListPagesTool,
+    ListChildPagesTool,
+    GetSpaceTool,
+    GetCommentsTool,
+    SearchAttachmentsTool,
+    ListWorkspaceMembersTool,
+    GetCurrentUserTool,
+    // P6 write
+    UpdatePageTool,
+    DuplicatePageTool,
+    CopyPageToSpaceTool,
+    MovePageToSpaceTool,
+    CreateSpaceTool,
+    UpdateSpaceTool,
+    UpdateCommentTool,
   ],
   exports: [ChatToolRegistry],
 })
