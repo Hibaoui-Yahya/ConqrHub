@@ -30,7 +30,10 @@ import {
   StartMeetingDto,
 } from './dto/meeting.dto';
 
-const MAX_CHUNK_BYTES = 10 * 1024 * 1024; // 10 MB — 30-60s chunks fit easily.
+// 25 MB — matches the Mistral /v1/audio/transcriptions limit. The
+// recorder uploads the entire meeting as one file at stop, so the
+// limit equates to roughly 50 minutes of 64 kbps audio per source.
+const MAX_CHUNK_BYTES = 25 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
   'audio/webm',
   'audio/ogg',

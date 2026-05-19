@@ -7,28 +7,31 @@ import {
 } from "../services/meeting-service";
 import type { MeetingSource } from "../types/meeting.types";
 
-const CHUNK_INTERVAL_MS = 30_000;
-const MAX_MEETING_MS = 60 * 60 * 1000; // 1 hour hard cap (sanity).
+const MAX_MEETING_MS = 60 * 60 * 1000; // 1 hour hard cap.
+// Mistral's audio_transcriptions endpoint rejects chunked WebM
+// because only the first chunk has the EBML header. We record the
+// entire session as one continuous Blob in memory and upload it once
+// on stop. At ~64kbps this is roughly 28 MB per hour per stream,
+// which fits comfortably in browser memory.
+const PREFERRED_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/mp4",
+];
 
 export type RecorderState =
   | "idle"
   | "requesting"
   | "recording"
-  | "stopping"
+  | "uploading"
   | "completed"
   | "error";
-
-interface LiveSegment {
-  source: MeetingSource;
-  text: string;
-  startMs: number;
-  sequence: number;
-}
 
 interface UseMeetingRecorderOptions {
   captureSystem: boolean;
   title?: string;
-  onChunk?: (seg: LiveSegment) => void;
   onError?: (err: Error) => void;
   onCompleted?: (meetingId: string) => void;
   onCancelled?: () => void;
@@ -37,19 +40,13 @@ interface UseMeetingRecorderOptions {
 interface StreamSlot {
   stream: MediaStream;
   recorder: MediaRecorder;
-  sequence: number;
-  chunkStartMs: number;
+  chunks: Blob[];
+  mime: string;
 }
 
 function pickAudioMime(): string {
   if (typeof MediaRecorder === "undefined") return "";
-  for (const m of [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-    "audio/ogg",
-    "audio/mp4",
-  ]) {
+  for (const m of PREFERRED_MIME_TYPES) {
     if (MediaRecorder.isTypeSupported(m)) return m;
   }
   return "";
@@ -66,7 +63,6 @@ export function isSystemAudioSupported(): boolean {
 export function useMeetingRecorder({
   captureSystem,
   title,
-  onChunk,
   onError,
   onCompleted,
   onCancelled,
@@ -80,10 +76,6 @@ export function useMeetingRecorder({
   const meetingIdRef = useRef<string | null>(null);
   const micSlotRef = useRef<StreamSlot | null>(null);
   const sysSlotRef = useRef<StreamSlot | null>(null);
-  // Tracks in-flight chunk uploads so stop() can wait for them.
-  const pendingUploadsRef = useRef<Set<Promise<unknown>>>(new Set());
-  const onChunkRef = useRef(onChunk);
-  onChunkRef.current = onChunk;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const onCompletedRef = useRef(onCompleted);
@@ -96,7 +88,7 @@ export function useMeetingRecorder({
     try {
       if (slot.recorder.state !== "inactive") slot.recorder.stop();
     } catch {
-      // recorder might already be stopped
+      // already stopped
     }
     for (const t of slot.stream.getTracks()) t.stop();
   };
@@ -112,45 +104,11 @@ export function useMeetingRecorder({
     sysSlotRef.current = null;
   }, []);
 
-  const wireRecorder = (slot: StreamSlot, source: MeetingSource) => {
+  const wireRecorder = (slot: StreamSlot) => {
     slot.recorder.ondataavailable = (event) => {
-      if (!event.data || event.data.size === 0) return;
-      const seq = slot.sequence;
-      const start = slot.chunkStartMs;
-      const blob = event.data;
-      slot.sequence += 1;
-      slot.chunkStartMs += CHUNK_INTERVAL_MS;
-      const mid = meetingIdRef.current;
-      if (!mid) return;
-
-      // Track the promise so stop() can await it. This is the
-      // difference between "transcript missing the last sentence" and
-      // "transcript includes the full meeting".
-      const task = (async () => {
-        try {
-          const res = await uploadMeetingChunk(mid, blob, {
-            source,
-            sequence: seq,
-            startMs: start,
-            durationMs: CHUNK_INTERVAL_MS,
-          });
-          if (res.text) {
-            onChunkRef.current?.({
-              source,
-              text: res.text,
-              startMs: start,
-              sequence: seq,
-            });
-          }
-        } catch (err) {
-          console.warn(
-            `[meeting] chunk upload failed source=${source} seq=${seq}`,
-            err,
-          );
-        }
-      })();
-      pendingUploadsRef.current.add(task);
-      task.finally(() => pendingUploadsRef.current.delete(task));
+      if (event.data && event.data.size > 0) {
+        slot.chunks.push(event.data);
+      }
     };
   };
 
@@ -173,22 +131,17 @@ export function useMeetingRecorder({
           throw new Error("System audio capture not supported in this browser");
         }
         sysStream = await navigator.mediaDevices.getDisplayMedia({
-          // Video required by the spec even if we only want audio; pause /
-          // hide on the user side. Some browsers reject audio:true alone.
           video: true,
           audio: true,
         } as MediaStreamConstraints);
 
         const audioTracks = sysStream.getAudioTracks();
         if (audioTracks.length === 0) {
-          // User shared a screen but did not tick "Share audio".
           for (const t of sysStream.getTracks()) t.stop();
           throw new Error(
             "No system audio. Re-share and check 'Share tab audio' or 'Share system audio'.",
           );
         }
-        // Drop video tracks immediately to save bandwidth — we only
-        // wanted audio. Video had to be requested to satisfy the API.
         for (const t of sysStream.getVideoTracks()) t.stop();
         sysStream = new MediaStream(audioTracks);
       }
@@ -197,34 +150,26 @@ export function useMeetingRecorder({
       meetingIdRef.current = startResp.id;
       setMeetingId(startResp.id);
 
-      const micRecorder = mime
-        ? new MediaRecorder(micStream, { mimeType: mime })
-        : new MediaRecorder(micStream);
-      const micSlot: StreamSlot = {
-        stream: micStream,
-        recorder: micRecorder,
-        sequence: 0,
-        chunkStartMs: 0,
-      };
-      micSlotRef.current = micSlot;
-      wireRecorder(micSlot, "mic");
-
-      if (sysStream) {
-        const sysRecorder = mime
-          ? new MediaRecorder(sysStream, { mimeType: mime })
-          : new MediaRecorder(sysStream);
-        const sysSlot: StreamSlot = {
-          stream: sysStream,
-          recorder: sysRecorder,
-          sequence: 0,
-          chunkStartMs: 0,
+      const buildSlot = (stream: MediaStream): StreamSlot => {
+        const recorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime })
+          : new MediaRecorder(stream);
+        const slot: StreamSlot = {
+          stream,
+          recorder,
+          chunks: [],
+          mime: recorder.mimeType || mime || "audio/webm",
         };
-        sysSlotRef.current = sysSlot;
-        wireRecorder(sysSlot, "system");
-        sysRecorder.start(CHUNK_INTERVAL_MS);
-      }
+        wireRecorder(slot);
+        // NO timeslice argument — keeps the WebM container valid as a
+        // single continuous stream. ondataavailable fires once on
+        // recorder.stop().
+        recorder.start();
+        return slot;
+      };
 
-      micRecorder.start(CHUNK_INTERVAL_MS);
+      micSlotRef.current = buildSlot(micStream);
+      if (sysStream) sysSlotRef.current = buildSlot(sysStream);
 
       startedAtRef.current = Date.now();
       setElapsedMs(0);
@@ -238,9 +183,6 @@ export function useMeetingRecorder({
       }, 500);
     } catch (err) {
       cleanupAll();
-      // If the meeting row was created before the failure, mark it as
-      // a stale orphan by deleting it. Otherwise the list pollutes
-      // with empty 'recording' rows that nobody can stop.
       const orphan = meetingIdRef.current;
       meetingIdRef.current = null;
       setMeetingId(null);
@@ -258,38 +200,57 @@ export function useMeetingRecorder({
 
   const stop = useCallback(async () => {
     if (state !== "recording" && state !== "requesting") return;
-    setState("stopping");
+    setState("uploading");
     try {
-      // Trigger one last dataavailable for any partial chunk.
+      const totalDurationMs = Date.now() - startedAtRef.current;
+
+      // Stop both recorders and wait for the final ondataavailable
+      // (no timeslice means there's exactly one ondataavailable event
+      // per recorder, fired when stop() is called).
       const flush = (slot: StreamSlot | null) =>
         new Promise<void>((resolve) => {
           if (!slot || slot.recorder.state === "inactive") {
             resolve();
             return;
           }
-          slot.recorder.addEventListener("stop", () => resolve(), {
-            once: true,
-          });
+          slot.recorder.addEventListener(
+            "stop",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
           try {
             slot.recorder.stop();
           } catch {
             resolve();
           }
         });
-
       await Promise.all([flush(micSlotRef.current), flush(sysSlotRef.current)]);
-
-      // Wait for every chunk upload (including the final one flushed
-      // by recorder.stop) to complete. Without this, stopMeeting()
-      // would assemble the transcript before the last chunk's segment
-      // row exists in the DB and the user would lose the last 0-30s
-      // of audio.
-      while (pendingUploadsRef.current.size > 0) {
-        await Promise.allSettled(Array.from(pendingUploadsRef.current));
-      }
 
       const mid = meetingIdRef.current;
       if (!mid) throw new Error("No meeting in progress");
+
+      const uploadSlot = async (
+        slot: StreamSlot | null,
+        source: MeetingSource,
+      ) => {
+        if (!slot || slot.chunks.length === 0) return;
+        const blob = new Blob(slot.chunks, { type: slot.mime });
+        if (blob.size === 0) return;
+        await uploadMeetingChunk(mid, blob, {
+          source,
+          sequence: 0,
+          startMs: 0,
+          durationMs: totalDurationMs,
+        });
+      };
+
+      await Promise.all([
+        uploadSlot(micSlotRef.current, "mic"),
+        uploadSlot(sysSlotRef.current, "system"),
+      ]);
+
       await stopMeeting(mid);
       cleanupAll();
       setState("completed");
@@ -303,17 +264,11 @@ export function useMeetingRecorder({
     }
   }, [cleanupAll, state]);
 
-  /**
-   * Discard the current recording. Stops the streams without flushing,
-   * tells the server to delete the meeting row, leaves no transcript
-   * behind.
-   */
   const cancel = useCallback(async () => {
     if (state !== "recording" && state !== "requesting") return;
     const mid = meetingIdRef.current;
-    setState("stopping");
+    setState("uploading");
     cleanupAll();
-    pendingUploadsRef.current.clear();
     meetingIdRef.current = null;
     setMeetingId(null);
     setElapsedMs(0);
@@ -321,8 +276,7 @@ export function useMeetingRecorder({
       try {
         await deleteMeeting(mid);
       } catch {
-        // Best-effort cleanup. The row will sit in 'recording' status
-        // until the user manually deletes it from the list.
+        // best-effort
       }
     }
     setState("idle");

@@ -34,7 +34,7 @@ export class ChunkMetaDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  @Max(5 * 60 * 1000)
+  @Max(60 * 60 * 1000)
   durationMs!: number;
 }
 
