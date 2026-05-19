@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
@@ -20,14 +21,17 @@ export class ChunkMetaDto {
   @IsIn(['mic', 'system'])
   source!: 'mic' | 'system';
 
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   sequence!: number;
 
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   startMs!: number;
 
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(5 * 60 * 1000)
@@ -36,12 +40,14 @@ export class ChunkMetaDto {
 
 export class ListMeetingsQueryDto {
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
   limit?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   offset?: number;
