@@ -25,7 +25,7 @@ import DOMPurify from "dompurify";
 import { getAppName } from "@/lib/config";
 import { useAiGenerateMutation } from "@/ee/ai/queries/ai-query";
 import { AiAction } from "@/ee/ai/types/ai.types";
-import { getMeeting } from "../services/meeting-service";
+import { getMeeting, saveAiOutput } from "../services/meeting-service";
 import type { Meeting, MeetingSegment } from "../types/meeting.types";
 
 const SUMMARY_PROMPT =
@@ -69,6 +69,7 @@ export default function MeetingViewPage() {
     decisions: "",
   });
   const [aiLoading, setAiLoading] = useState<Preset | null>(null);
+  const [activeTab, setActiveTab] = useState<string | null>("transcript");
 
   const generate = useAiGenerateMutation();
 
@@ -79,6 +80,12 @@ export default function MeetingViewPage() {
       .then((d) => {
         setMeeting(d.meeting);
         setSegments(d.segments);
+        const persisted = d.meeting.aiOutputs ?? {};
+        setAiOutputs({
+          summary: persisted.summary ?? "",
+          actions: persisted.actions ?? "",
+          decisions: persisted.decisions ?? "",
+        });
       })
       .catch((err) => {
         notifications.show({
@@ -102,6 +109,7 @@ export default function MeetingViewPage() {
     const presetCfg = PRESETS.find((p) => p.id === preset);
     if (!presetCfg) return;
     setAiLoading(preset);
+    setActiveTab(preset);
     try {
       const res = await generate.mutateAsync({
         action: AiAction.CUSTOM,
@@ -109,6 +117,17 @@ export default function MeetingViewPage() {
         prompt: presetCfg.prompt,
       });
       setAiOutputs((prev) => ({ ...prev, [preset]: res.content }));
+      try {
+        await saveAiOutput(meeting.id, preset, res.content);
+      } catch (err) {
+        // Persistence failure is non-fatal — the user still sees the
+        // output in this session. Toast quietly so they know it
+        // won't survive a refresh.
+        notifications.show({
+          color: "yellow",
+          message: t("Could not save AI output. It will not persist."),
+        });
+      }
     } catch (err: any) {
       notifications.show({
         color: "red",
@@ -193,12 +212,18 @@ export default function MeetingViewPage() {
           ))}
         </Group>
 
-        <Tabs defaultValue="transcript">
+        <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>
             <Tabs.Tab value="transcript">{t("Transcript")}</Tabs.Tab>
             {(["summary", "actions", "decisions"] as Preset[]).map((p) =>
-              aiOutputs[p] ? (
-                <Tabs.Tab key={p} value={p}>
+              aiOutputs[p] || aiLoading === p ? (
+                <Tabs.Tab
+                  key={p}
+                  value={p}
+                  rightSection={
+                    aiLoading === p ? <Loader size="xs" /> : null
+                  }
+                >
                   {t(PRESETS.find((x) => x.id === p)!.label)}
                 </Tabs.Tab>
               ) : null,
@@ -241,16 +266,28 @@ export default function MeetingViewPage() {
           </Tabs.Panel>
 
           {(["summary", "actions", "decisions"] as Preset[]).map((p) =>
-            aiOutputs[p] ? (
+            aiOutputs[p] || aiLoading === p ? (
               <Tabs.Panel key={p} value={p} pt="sm">
-                <Paper p="md" withBorder>
-                  <TypographyStylesProvider>
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: renderMarkdown(aiOutputs[p]),
-                      }}
-                    />
-                  </TypographyStylesProvider>
+                <Paper p="md" withBorder mih={120}>
+                  {aiLoading === p && !aiOutputs[p] ? (
+                    <Stack align="center" justify="center" py="md" gap="xs">
+                      <Loader size="sm" />
+                      <Text size="sm" c="dimmed">
+                        {t(
+                          "Generating {{label}}…",
+                          { label: t(PRESETS.find((x) => x.id === p)!.label) },
+                        )}
+                      </Text>
+                    </Stack>
+                  ) : (
+                    <TypographyStylesProvider>
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: renderMarkdown(aiOutputs[p]),
+                        }}
+                      />
+                    </TypographyStylesProvider>
+                  )}
                 </Paper>
               </Tabs.Panel>
             ) : null,

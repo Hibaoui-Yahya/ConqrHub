@@ -25,6 +25,7 @@ export class MeetingRepo {
     'endedAt',
     'durationMs',
     'settings',
+    'aiOutputs',
     'createdAt',
     'updatedAt',
     'deletedAt',

@@ -136,6 +136,24 @@ export class MeetingService {
     await this.meetingRepo.softDelete(meetingId, workspaceId);
   }
 
+  async saveAiOutput(
+    meetingId: string,
+    workspaceId: string,
+    userId: string,
+    key: 'summary' | 'actions' | 'decisions',
+    value: string,
+  ): Promise<Meeting> {
+    const meeting = await this.meetingRepo.findById(meetingId, workspaceId);
+    if (!meeting || meeting.userId !== userId) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const existing = (meeting.aiOutputs as Record<string, string> | null) ?? {};
+    const next = { ...existing, [key]: value };
+    return (await this.meetingRepo.update(meetingId, workspaceId, {
+      aiOutputs: next as never,
+    })) as Meeting;
+  }
+
   private async requireRecording(
     meetingId: string,
     workspaceId: string,

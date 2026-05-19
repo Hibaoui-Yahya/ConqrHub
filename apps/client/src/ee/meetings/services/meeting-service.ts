@@ -68,3 +68,15 @@ export async function listMeetings(
 export async function deleteMeeting(meetingId: string): Promise<void> {
   await api.delete(`/ai/meeting/${meetingId}`);
 }
+
+export async function saveAiOutput(
+  meetingId: string,
+  key: "summary" | "actions" | "decisions",
+  value: string,
+): Promise<Meeting> {
+  const body = await api.post(`/ai/meeting/${meetingId}/ai-output`, {
+    key,
+    value,
+  });
+  return unwrap<Meeting>(body);
+}

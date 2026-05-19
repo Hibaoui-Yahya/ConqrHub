@@ -191,4 +191,27 @@ export class MeetingController {
   ) {
     await this.meetingService.softDelete(meetingId, workspace.id, user.id);
   }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/ai-output')
+  async saveAiOutput(
+    @Param('id') meetingId: string,
+    @Body() body: { key: 'summary' | 'actions' | 'decisions'; value: string },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    if (!['summary', 'actions', 'decisions'].includes(body?.key)) {
+      throw new BadRequestException('Invalid key');
+    }
+    if (typeof body?.value !== 'string' || body.value.length > 64_000) {
+      throw new BadRequestException('Invalid value');
+    }
+    return this.meetingService.saveAiOutput(
+      meetingId,
+      workspace.id,
+      user.id,
+      body.key,
+      body.value,
+    );
+  }
 }

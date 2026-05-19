@@ -77,6 +77,8 @@ export function useMeetingRecorder({
   const meetingIdRef = useRef<string | null>(null);
   const micSlotRef = useRef<StreamSlot | null>(null);
   const sysSlotRef = useRef<StreamSlot | null>(null);
+  // Tracks in-flight chunk uploads so stop() can wait for them.
+  const pendingUploadsRef = useRef<Set<Promise<unknown>>>(new Set());
   const onChunkRef = useRef(onChunk);
   onChunkRef.current = onChunk;
   const onErrorRef = useRef(onError);
@@ -106,7 +108,7 @@ export function useMeetingRecorder({
   }, []);
 
   const wireRecorder = (slot: StreamSlot, source: MeetingSource) => {
-    slot.recorder.ondataavailable = async (event) => {
+    slot.recorder.ondataavailable = (event) => {
       if (!event.data || event.data.size === 0) return;
       const seq = slot.sequence;
       const start = slot.chunkStartMs;
@@ -115,26 +117,35 @@ export function useMeetingRecorder({
       slot.chunkStartMs += CHUNK_INTERVAL_MS;
       const mid = meetingIdRef.current;
       if (!mid) return;
-      try {
-        const res = await uploadMeetingChunk(mid, blob, {
-          source,
-          sequence: seq,
-          startMs: start,
-          durationMs: CHUNK_INTERVAL_MS,
-        });
-        if (res.text) {
-          onChunkRef.current?.({
+
+      // Track the promise so stop() can await it. This is the
+      // difference between "transcript missing the last sentence" and
+      // "transcript includes the full meeting".
+      const task = (async () => {
+        try {
+          const res = await uploadMeetingChunk(mid, blob, {
             source,
-            text: res.text,
-            startMs: start,
             sequence: seq,
+            startMs: start,
+            durationMs: CHUNK_INTERVAL_MS,
           });
+          if (res.text) {
+            onChunkRef.current?.({
+              source,
+              text: res.text,
+              startMs: start,
+              sequence: seq,
+            });
+          }
+        } catch (err) {
+          console.warn(
+            `[meeting] chunk upload failed source=${source} seq=${seq}`,
+            err,
+          );
         }
-      } catch (err) {
-        // Network blip: drop this chunk, keep recording. A future
-        // refinement could queue failed chunks for retry.
-        console.warn(`[meeting] chunk upload failed source=${source} seq=${seq}`, err);
-      }
+      })();
+      pendingUploadsRef.current.add(task);
+      task.finally(() => pendingUploadsRef.current.delete(task));
     };
   };
 
@@ -254,10 +265,14 @@ export function useMeetingRecorder({
 
       await Promise.all([flush(micSlotRef.current), flush(sysSlotRef.current)]);
 
-      // Wait one tick to allow any in-flight uploads to settle. Good
-      // enough for MVP; a tighter implementation would track pending
-      // uploads explicitly.
-      await new Promise((r) => setTimeout(r, 200));
+      // Wait for every chunk upload (including the final one flushed
+      // by recorder.stop) to complete. Without this, stopMeeting()
+      // would assemble the transcript before the last chunk's segment
+      // row exists in the DB and the user would lose the last 0-30s
+      // of audio.
+      while (pendingUploadsRef.current.size > 0) {
+        await Promise.allSettled(Array.from(pendingUploadsRef.current));
+      }
 
       const mid = meetingIdRef.current;
       if (!mid) throw new Error("No meeting in progress");

@@ -13,6 +13,7 @@ export interface Meeting {
   endedAt: string | null;
   durationMs: number | null;
   settings: Record<string, unknown> | null;
+  aiOutputs: Partial<Record<"summary" | "actions" | "decisions", string>> | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

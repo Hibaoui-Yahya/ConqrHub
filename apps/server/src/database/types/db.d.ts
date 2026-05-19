@@ -672,6 +672,7 @@ export interface Meetings {
   endedAt: Timestamp | null;
   durationMs: Generated<number | null>;
   settings: Generated<Json | null>;
+  aiOutputs: Generated<Json | null>;
   createdAt: Generated<Timestamp>;
   updatedAt: Generated<Timestamp>;
   deletedAt: Timestamp | null;
