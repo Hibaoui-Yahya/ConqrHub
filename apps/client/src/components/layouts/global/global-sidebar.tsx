@@ -7,6 +7,7 @@ import {
   IconLayoutGrid,
   IconSettings,
   IconUserPlus,
+  IconMicrophone,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import classes from "./global-sidebar.module.css";
@@ -24,6 +25,7 @@ import { AvatarIconType } from "@/features/attachments/types/attachment.types";
 const mainNavItems = [
   { label: "Home", icon: IconHome, path: "/home" },
   { label: "AI Chat", icon: IconSparkles, path: "/ai" },
+  { label: "Meetings", icon: IconMicrophone, path: "/meetings" },
   { label: "Favorites", icon: IconStar, path: "/favorites" },
   { label: "Spaces", icon: IconLayoutGrid, path: "/spaces" },
 ];

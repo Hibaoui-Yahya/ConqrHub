@@ -504,6 +504,20 @@ export class WorkspaceService {
         );
       }
 
+      if (typeof updateWorkspaceDto.aiMeeting !== 'undefined') {
+        const prev = settingsBefore?.ai?.meeting ?? true;
+        if (prev !== updateWorkspaceDto.aiMeeting) {
+          before.aiMeeting = prev;
+          after.aiMeeting = updateWorkspaceDto.aiMeeting;
+        }
+        await this.workspaceRepo.updateAiSettings(
+          workspaceId,
+          'meeting',
+          updateWorkspaceDto.aiMeeting,
+          trx,
+        );
+      }
+
       delete updateWorkspaceDto.restrictApiToAdmins;
       delete updateWorkspaceDto.aiSearch;
       delete updateWorkspaceDto.generativeAi;
@@ -512,6 +526,7 @@ export class WorkspaceService {
       delete updateWorkspaceDto.allowMemberTemplates;
       delete updateWorkspaceDto.aiChat;
       delete updateWorkspaceDto.aiStt;
+      delete updateWorkspaceDto.aiMeeting;
 
       await this.workspaceRepo.updateWorkspace(
         updateWorkspaceDto,

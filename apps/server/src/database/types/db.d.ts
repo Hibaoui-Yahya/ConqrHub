@@ -15,6 +15,10 @@ export type ExpertInsightType = "correction" | "notice" | "recommendation" | "wa
 
 export type ExpertInsightVoteKind = "helpful" | "not_helpful";
 
+export type MeetingStatus = "recording" | "finalizing" | "completed" | "failed";
+
+export type MeetingSource = "mic" | "system";
+
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
@@ -657,6 +661,33 @@ export interface Workspaces {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface Meetings {
+  id: Generated<string>;
+  workspaceId: string;
+  userId: string;
+  title: string;
+  status: Generated<MeetingStatus>;
+  transcript: string | null;
+  startedAt: Generated<Timestamp>;
+  endedAt: Timestamp | null;
+  durationMs: Generated<number | null>;
+  settings: Generated<Json | null>;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+}
+
+export interface MeetingSegments {
+  id: Generated<string>;
+  meetingId: string;
+  source: MeetingSource;
+  sequence: number;
+  text: string;
+  startMs: number;
+  durationMs: number;
+  createdAt: Generated<Timestamp>;
+}
+
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
@@ -677,6 +708,8 @@ export interface DB {
   fileTasks: FileTasks;
   groups: Groups;
   groupUsers: GroupUsers;
+  meetings: Meetings;
+  meetingSegments: MeetingSegments;
   notifications: Notifications;
   pageAccess: PageAccess;
   pageBrokenLinks: PageBrokenLinks;

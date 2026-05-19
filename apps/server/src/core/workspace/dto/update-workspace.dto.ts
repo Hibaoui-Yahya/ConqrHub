@@ -50,6 +50,10 @@ export class UpdateWorkspaceDto extends PartialType(CreateWorkspaceDto) {
   aiStt: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  aiMeeting: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   trashRetentionDays: number;

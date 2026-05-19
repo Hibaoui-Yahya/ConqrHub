@@ -9,6 +9,7 @@ import { RagModule } from './rag/rag.module';
 import { AiChatModule } from './chat/ai-chat.module';
 import { McpModule } from './mcp/mcp.module';
 import { SttModule } from './stt/stt.module';
+import { MeetingModule } from './meeting/meeting.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { SttModule } from './stt/stt.module';
     AiChatModule,
     McpModule,
     SttModule,
+    MeetingModule,
   ],
   controllers: [AiGenerateController],
   providers: [AiGenerateService, WorkspaceAiToggleGuard],

@@ -4,7 +4,14 @@
  * disable any surface independently — defaults are documented per
  * surface in docs/architecture/ai-subsystem.md.
  */
-export type AiFeature = 'generative' | 'retrieval' | 'search' | 'chat' | 'mcp' | 'stt';
+export type AiFeature =
+  | 'generative'
+  | 'retrieval'
+  | 'search'
+  | 'chat'
+  | 'mcp'
+  | 'stt'
+  | 'meeting';
 
 export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   generative: true,
@@ -13,6 +20,7 @@ export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   chat: true,
   mcp: false,
   stt: true,
+  meeting: true,
 };
 
 export const AI_FEATURE_KEY = 'aiFeature';

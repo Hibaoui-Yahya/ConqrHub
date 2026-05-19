@@ -32,6 +32,8 @@ import {
   Watchers,
   Audit as _Audit,
   Templates,
+  Meetings,
+  MeetingSegments,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -207,3 +209,13 @@ export type UpdatableAudit = Updateable<Omit<_Audit, 'id'>>;
 export type Template = Selectable<Templates>;
 export type InsertableTemplate = Insertable<Templates>;
 export type UpdatableTemplate = Updateable<Omit<Templates, 'id'>>;
+
+// Meeting
+export type Meeting = Selectable<Meetings>;
+export type InsertableMeeting = Insertable<Meetings>;
+export type UpdatableMeeting = Updateable<Omit<Meetings, 'id'>>;
+
+// Meeting Segment
+export type MeetingSegment = Selectable<MeetingSegments>;
+export type InsertableMeetingSegment = Insertable<MeetingSegments>;
+export type UpdatableMeetingSegment = Updateable<Omit<MeetingSegments, 'id'>>;

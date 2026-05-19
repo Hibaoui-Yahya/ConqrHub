@@ -8,5 +8,6 @@ import { SttService } from './stt.service';
   imports: [EnvironmentModule, AiProviderModule],
   controllers: [SttController],
   providers: [SttService],
+  exports: [SttService],
 })
 export class SttModule {}

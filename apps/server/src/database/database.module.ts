@@ -28,6 +28,7 @@ import { PageListener } from '@docmost/db/listeners/page.listener';
 import { ExpertInsightsListener } from '@docmost/db/listeners/expert-insights.listener';
 import { AiChatRepo } from '@docmost/db/repos/ai-chat/ai-chat.repo';
 import { AiChatMessageRepo } from '@docmost/db/repos/ai-chat/ai-chat-message.repo';
+import { MeetingRepo } from '@docmost/db/repos/meeting/meeting.repo';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { normalizePostgresUrl } from '../common/helpers';
@@ -93,6 +94,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     ExpertInsightsListener,
     AiChatRepo,
     AiChatMessageRepo,
+    MeetingRepo,
   ],
   exports: [
     WorkspaceRepo,
@@ -116,6 +118,7 @@ import { normalizePostgresUrl } from '../common/helpers';
     TemplateRepo,
     AiChatRepo,
     AiChatMessageRepo,
+    MeetingRepo,
   ],
 })
 export class DatabaseModule implements OnApplicationBootstrap {
