@@ -34,4 +34,8 @@ export class CreateInsightDto {
   @IsOptional()
   @IsObject()
   spanAnchor?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsEnum(['low', 'medium', 'high'])
+  confidence?: 'low' | 'medium' | 'high';
 }

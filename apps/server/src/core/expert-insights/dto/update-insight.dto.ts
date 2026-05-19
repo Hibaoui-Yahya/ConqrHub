@@ -31,6 +31,10 @@ export class UpdateInsightDto {
   @IsOptional()
   @IsObject()
   spanAnchor?: Record<string, unknown> | null;
+
+  @IsOptional()
+  @IsEnum(['low', 'medium', 'high'])
+  confidence?: 'low' | 'medium' | 'high';
 }
 
 export class InsightIdDto {

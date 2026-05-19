@@ -8,6 +8,10 @@ export type ExpertInsightType =
 
 export type ExpertInsightStatus = 'draft' | 'published' | 'retired';
 
+export type ExpertInsightConfidence = 'low' | 'medium' | 'high';
+
+export type ExpertInsightVoteKind = 'helpful' | 'not_helpful';
+
 export interface ExpertInsights {
   id: Generated<string>;
   workspaceId: string;
@@ -23,9 +27,24 @@ export interface ExpertInsights {
   expiresAt: Timestamp | null;
   retiredAt: Timestamp | null;
   spanAnchor: Json | null;
+  authorName: string | null;
+  authorRole: string | null;
+  authorDepartment: string | null;
+  confidence: Generated<ExpertInsightConfidence>;
+  helpfulCount: Generated<number>;
+  notHelpfulCount: Generated<number>;
   /** Generated tsvector — read-only. */
-  tsv: string | null;
+  tsv: Generated<string | null>;
   createdAt: Generated<Timestamp>;
   updatedAt: Generated<Timestamp>;
   deletedAt: Timestamp | null;
+}
+
+export interface ExpertInsightVotes {
+  id: Generated<string>;
+  insightId: string;
+  userId: string;
+  vote: ExpertInsightVoteKind;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
 }

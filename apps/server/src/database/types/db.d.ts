@@ -5,6 +5,16 @@
 
 import type { ColumnType } from "kysely";
 
+export type AiSourceKind = "expert_insight" | "external_document" | "page";
+
+export type ExpertInsightConfidence = "high" | "low" | "medium";
+
+export type ExpertInsightStatus = "draft" | "published" | "retired";
+
+export type ExpertInsightType = "correction" | "notice" | "recommendation" | "warning";
+
+export type ExpertInsightVoteKind = "helpful" | "not_helpful";
+
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
@@ -52,6 +62,23 @@ export interface AiChats {
   workspaceId: string;
 }
 
+export interface AiEmbeddings {
+  chunkIndex: number;
+  chunkText: string;
+  contentHash: string;
+  createdAt: Generated<Timestamp>;
+  dim: number;
+  embedding: string;
+  id: Generated<string>;
+  metadata: Json | null;
+  model: string;
+  sourceId: string;
+  sourceKind: AiSourceKind;
+  spaceId: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
 export interface ApiKeys {
   createdAt: Generated<Timestamp>;
   creatorId: string;
@@ -74,6 +101,7 @@ export interface Attachments {
   filePath: string;
   fileSize: Int8 | null;
   id: Generated<string>;
+  insightId: string | null;
   mimeType: string | null;
   pageId: string | null;
   spaceId: string | null;
@@ -197,6 +225,65 @@ export interface Comments {
   workspaceId: string;
 }
 
+export interface DocHealthAlertSubscriptions {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  lastFiredAt: Timestamp | null;
+  spaceId: string | null;
+  threshold: number;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface DocHealthSnapshots {
+  capturedAt: Timestamp;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  pageCount: number;
+  score: number | null;
+  scoredPageCount: number;
+  signals: Json;
+  spaceId: string | null;
+  workspaceId: string;
+}
+
+export interface ExpertInsights {
+  authorDepartment: string | null;
+  authorName: string | null;
+  authorRole: string | null;
+  body: string;
+  confidence: Generated<ExpertInsightConfidence>;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  deletedAt: Timestamp | null;
+  expiresAt: Timestamp | null;
+  helpfulCount: Generated<number>;
+  id: Generated<string>;
+  insightType: ExpertInsightType;
+  notHelpfulCount: Generated<number>;
+  pageId: string;
+  publishedAt: Timestamp | null;
+  publishedBy: string | null;
+  retiredAt: Timestamp | null;
+  spaceId: string;
+  spanAnchor: Json | null;
+  status: Generated<ExpertInsightStatus>;
+  title: string;
+  tsv: Generated<string | null>;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface ExpertInsightVotes {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  insightId: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  vote: ExpertInsightVoteKind;
+}
+
 export interface Favorites {
   createdAt: Generated<Timestamp>;
   id: Generated<string>;
@@ -248,52 +335,6 @@ export interface GroupUsers {
   userId: string;
 }
 
-export interface DocHealthAlertSubscriptions {
-  createdAt: Generated<Timestamp>;
-  id: Generated<string>;
-  lastFiredAt: Timestamp | null;
-  spaceId: string | null;
-  threshold: number;
-  updatedAt: Generated<Timestamp>;
-  userId: string;
-  workspaceId: string;
-}
-
-export interface DocHealthSnapshots {
-  capturedAt: Timestamp;
-  createdAt: Generated<Timestamp>;
-  id: Generated<string>;
-  pageCount: number;
-  score: number | null;
-  scoredPageCount: number;
-  signals: Json;
-  spaceId: string | null;
-  workspaceId: string;
-}
-
-export interface PageBrokenLinks {
-  createdAt: Generated<Timestamp>;
-  httpStatus: number | null;
-  id: Generated<string>;
-  kind: string;
-  lastCheckedAt: Timestamp;
-  pageId: string;
-  reason: string;
-  spaceId: string;
-  targetUrl: string;
-  workspaceId: string;
-}
-
-export interface PageDuplicates {
-  createdAt: Generated<Timestamp>;
-  detectedAt: Timestamp;
-  duplicateOfPageId: string;
-  id: Generated<string>;
-  pageId: string;
-  similarity: number;
-  workspaceId: string;
-}
-
 export interface Notifications {
   actorId: string | null;
   archivedAt: Timestamp | null;
@@ -319,6 +360,29 @@ export interface PageAccess {
   pageId: string;
   spaceId: string;
   updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface PageBrokenLinks {
+  createdAt: Generated<Timestamp>;
+  httpStatus: number | null;
+  id: Generated<string>;
+  kind: string;
+  lastCheckedAt: Timestamp;
+  pageId: string;
+  reason: string;
+  spaceId: string;
+  targetUrl: string;
+  workspaceId: string;
+}
+
+export interface PageDuplicates {
+  createdAt: Generated<Timestamp>;
+  detectedAt: Timestamp;
+  duplicateOfPageId: string;
+  id: Generated<string>;
+  pageId: string;
+  similarity: number;
   workspaceId: string;
 }
 
@@ -499,6 +563,7 @@ export interface Users {
   createdAt: Generated<Timestamp>;
   deactivatedAt: Timestamp | null;
   deletedAt: Timestamp | null;
+  department: string | null;
   email: string;
   emailVerifiedAt: Timestamp | null;
   hasGeneratedPassword: Generated<boolean>;
@@ -567,7 +632,7 @@ export interface WorkspaceInvitations {
 }
 
 export interface Workspaces {
-  auditRetentionDays: Generated<number>;
+  auditRetentionDays: Int8 | null;
   billingEmail: string | null;
   createdAt: Generated<Timestamp>;
   customDomain: string | null;
@@ -587,7 +652,7 @@ export interface Workspaces {
   settings: Json | null;
   status: string | null;
   stripeCustomerId: string | null;
-  trashRetentionDays: Generated<number>;
+  trashRetentionDays: Int8 | null;
   trialEndAt: Timestamp | null;
   updatedAt: Generated<Timestamp>;
 }
@@ -595,6 +660,7 @@ export interface Workspaces {
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
+  aiEmbeddings: AiEmbeddings;
   apiKeys: ApiKeys;
   attachments: Attachments;
   audit: Audit;
@@ -605,6 +671,8 @@ export interface DB {
   comments: Comments;
   docHealthAlertSubscriptions: DocHealthAlertSubscriptions;
   docHealthSnapshots: DocHealthSnapshots;
+  expertInsights: ExpertInsights;
+  expertInsightVotes: ExpertInsightVotes;
   favorites: Favorites;
   fileTasks: FileTasks;
   groups: Groups;
