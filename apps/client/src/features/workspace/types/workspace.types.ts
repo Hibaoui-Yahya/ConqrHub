@@ -28,6 +28,7 @@ export interface IWorkspace {
   trashRetentionDays?: number;
   restrictApiToAdmins?: boolean;
   allowMemberTemplates?: boolean;
+  aiStt?: boolean;
 }
 
 export interface IWorkspaceSettings {
@@ -46,6 +47,7 @@ export interface IWorkspaceAiSettings {
   generative?: boolean;
   mcp?: boolean;
   chat?: boolean;
+  stt?: boolean;
 }
 
 export interface IWorkspaceSharingSettings {
