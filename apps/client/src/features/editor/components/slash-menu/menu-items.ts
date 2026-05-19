@@ -380,16 +380,6 @@ const CommandGroups: SlashMenuGroupedItemsType = {
         editor.chain().focus().deleteRange(range).toggleCallout().run(),
     },
     {
-      title: "Voice dictation",
-      description: "Record and transcribe speech into text.",
-      searchTerms: ["voice", "dictate", "mic", "speech", "stt"],
-      icon: IconMicrophone,
-      command: ({ editor, range }: CommandProps) => {
-        editor.chain().focus().deleteRange(range).run();
-        window.dispatchEvent(new CustomEvent("voice-dictate:open"));
-      },
-    },
-    {
       title: "Math inline",
       description: "Insert inline math equation.",
       searchTerms: [
