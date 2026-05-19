@@ -20,6 +20,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
+import { modals } from "@mantine/modals";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -99,6 +100,23 @@ export function MeetingRecorder() {
     setLines([]);
     void start();
   }, [consent, start, t]);
+
+  const onCancelClick = useCallback(() => {
+    modals.openConfirmModal({
+      title: t("Discard recording?"),
+      centered: true,
+      children: (
+        <Text size="sm">
+          {t(
+            "This will stop recording and delete everything captured so far. The transcript will not be saved.",
+          )}
+        </Text>
+      ),
+      labels: { confirm: t("Discard"), cancel: t("Keep recording") },
+      confirmProps: { color: "red" },
+      onConfirm: () => void cancel(),
+    });
+  }, [cancel, t]);
 
   const isRecording = state === "recording";
   const isStopping = state === "stopping";
@@ -199,7 +217,7 @@ export function MeetingRecorder() {
               <>
                 <Button
                   variant="default"
-                  onClick={() => void cancel()}
+                  onClick={onCancelClick}
                   leftSection={<IconX size={16} />}
                 >
                   {t("Cancel")}

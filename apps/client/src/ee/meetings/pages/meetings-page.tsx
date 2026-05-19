@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { IconTrash, IconEye } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
+import { modals } from "@mantine/modals";
 import { getAppName } from "@/lib/config";
 import { MeetingRecorder } from "../components/meeting-recorder";
 import {
@@ -57,17 +58,33 @@ export default function MeetingsPage() {
     void load();
   }, []);
 
-  const onDelete = async (id: string) => {
-    if (!confirm(t("Delete this meeting transcript?"))) return;
-    try {
-      await deleteMeeting(id);
-      setItems((prev) => prev.filter((m) => m.id !== id));
-    } catch (err: any) {
-      notifications.show({
-        color: "red",
-        message: err?.response?.data?.message ?? t("Failed to delete"),
-      });
-    }
+  const onDelete = (id: string, title: string) => {
+    modals.openConfirmModal({
+      title: t("Delete meeting"),
+      centered: true,
+      children: (
+        <Text size="sm">
+          {t(
+            "Are you sure you want to delete '{{title}}'? The transcript and any AI outputs will be removed. This cannot be undone.",
+            { title },
+          )}
+        </Text>
+      ),
+      labels: { confirm: t("Delete"), cancel: t("Cancel") },
+      confirmProps: { color: "red" },
+      onConfirm: async () => {
+        try {
+          await deleteMeeting(id);
+          setItems((prev) => prev.filter((m) => m.id !== id));
+          notifications.show({ color: "teal", message: t("Meeting deleted") });
+        } catch (err: any) {
+          notifications.show({
+            color: "red",
+            message: err?.response?.data?.message ?? t("Failed to delete"),
+          });
+        }
+      },
+    });
   };
 
   return (
@@ -147,7 +164,7 @@ export default function MeetingsPage() {
                           <ActionIcon
                             variant="subtle"
                             color="red"
-                            onClick={() => onDelete(m.id)}
+                            onClick={() => onDelete(m.id, m.title)}
                           >
                             <IconTrash size={16} />
                           </ActionIcon>
