@@ -342,11 +342,11 @@ Open `apps/server/src/core/expert-insights/dto/create-insight.dto.ts`. Add insid
 
 ```ts
 @IsOptional()
-@IsIn(['low', 'medium', 'high'])
+@IsEnum(['low', 'medium', 'high'])
 confidence?: 'low' | 'medium' | 'high';
 ```
 
-If the file does not already import `IsIn` and `IsOptional` from `class-validator`, add them to the existing import. Do not introduce new top-level imports if equivalents exist.
+The existing file already imports `IsEnum` and `IsOptional` from `class-validator` — no new imports needed.
 
 - [ ] **Step 4.2: Add `confidence` to `UpdateInsightDto`**
 
