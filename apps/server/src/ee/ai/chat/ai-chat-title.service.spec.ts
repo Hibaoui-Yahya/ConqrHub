@@ -38,7 +38,7 @@ describe('AiChatTitleService.generate()', () => {
     expect(ai.generate).toHaveBeenCalledTimes(1);
     const { system, prompt, temperature, maxOutputTokens } =
       (ai.generate as jest.Mock).mock.calls[0][0];
-    expect(system).toContain('4-6 word title');
+    expect(system).toContain('4 to 6 word title');
     expect(prompt).toBe('How does authentication work?');
     expect(temperature).toBe(0.3);
     expect(maxOutputTokens).toBe(24);
