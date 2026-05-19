@@ -7,6 +7,8 @@ import {
   ExpertInsightType,
 } from '../../database/types/expert-insights.types';
 
+export type ExpertInsightConfidence = 'low' | 'medium' | 'high';
+
 export interface InsightRow {
   id: string;
   workspaceId: string;
@@ -22,6 +24,13 @@ export interface InsightRow {
   expiresAt: Date | null;
   retiredAt: Date | null;
   spanAnchor: unknown;
+  // Snapshot at create-time. Immutable.
+  authorName: string | null;
+  authorRole: string | null;
+  authorDepartment: string | null;
+  confidence: ExpertInsightConfidence;
+  helpfulCount: number;
+  notHelpfulCount: number;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -35,6 +44,11 @@ export interface CreateInsightInput {
   title: string;
   body: string;
   createdBy: string;
+  // Snapshot — resolved by the service before the call.
+  authorName: string | null;
+  authorRole: string | null;
+  authorDepartment: string | null;
+  confidence: ExpertInsightConfidence;
   expiresAt?: Date | null;
   spanAnchor?: unknown;
 }
@@ -43,6 +57,7 @@ export interface UpdateInsightInput {
   insightType?: ExpertInsightType;
   title?: string;
   body?: string;
+  confidence?: ExpertInsightConfidence;
   expiresAt?: Date | null;
   spanAnchor?: unknown;
 }
@@ -62,6 +77,10 @@ export class ExpertInsightsRepo {
         title: input.title,
         body: input.body,
         createdBy: input.createdBy,
+        authorName: input.authorName,
+        authorRole: input.authorRole,
+        authorDepartment: input.authorDepartment,
+        confidence: input.confidence,
         expiresAt: input.expiresAt ?? null,
         spanAnchor: input.spanAnchor
           ? sql`${JSON.stringify(input.spanAnchor)}::jsonb`
@@ -105,6 +124,7 @@ export class ExpertInsightsRepo {
     if (input.insightType !== undefined) updates.insightType = input.insightType;
     if (input.title !== undefined) updates.title = input.title;
     if (input.body !== undefined) updates.body = input.body;
+    if (input.confidence !== undefined) updates.confidence = input.confidence;
     if ('expiresAt' in input) updates.expiresAt = input.expiresAt ?? null;
     if ('spanAnchor' in input) {
       updates.spanAnchor = input.spanAnchor
