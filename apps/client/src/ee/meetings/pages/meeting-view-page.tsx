@@ -86,6 +86,14 @@ export default function MeetingViewPage() {
           actions: persisted.actions ?? "",
           decisions: persisted.decisions ?? "",
         });
+        // If the user has already generated something, open that tab
+        // on refresh instead of dropping them back on the raw
+        // transcript — the AI output is usually what they want to
+        // read.
+        const firstWithOutput = (
+          ["summary", "actions", "decisions"] as Preset[]
+        ).find((k) => persisted[k]);
+        if (firstWithOutput) setActiveTab(firstWithOutput);
       })
       .catch((err) => {
         notifications.show({

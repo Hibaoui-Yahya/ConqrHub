@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   Group,
+  Loader,
   Paper,
   ScrollArea,
   Stack,
@@ -16,6 +17,7 @@ import {
   IconPlayerStopFilled,
   IconMicrophone,
   IconCheck,
+  IconX,
 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
@@ -52,7 +54,7 @@ export function MeetingRecorder() {
 
   const sysSupported = useMemo(() => isSystemAudioSupported(), []);
 
-  const { state, elapsedMs, start, stop } = useMeetingRecorder({
+  const { state, elapsedMs, start, stop, cancel } = useMeetingRecorder({
     captureSystem,
     title: title.trim() || undefined,
     onChunk: (seg) =>
@@ -77,6 +79,13 @@ export function MeetingRecorder() {
       });
       navigate(`/meetings/${id}`);
     },
+    onCancelled: () => {
+      setLines([]);
+      notifications.show({
+        color: "gray",
+        message: t("Recording cancelled. Nothing was saved."),
+      });
+    },
   });
 
   const onStart = useCallback(() => {
@@ -92,6 +101,7 @@ export function MeetingRecorder() {
   }, [consent, start, t]);
 
   const isRecording = state === "recording";
+  const isStopping = state === "stopping";
   const isBusy =
     state === "requesting" || state === "stopping" || state === "recording";
 
@@ -172,8 +182,8 @@ export function MeetingRecorder() {
             />
           </Alert>
 
-          <Group justify="flex-end">
-            {!isRecording ? (
+          <Group justify="flex-end" gap="xs">
+            {!isRecording && !isStopping && (
               <Button
                 onClick={onStart}
                 disabled={!consent || isBusy}
@@ -184,14 +194,33 @@ export function MeetingRecorder() {
                   ? t("Starting...")
                   : t("Start recording")}
               </Button>
-            ) : (
+            )}
+            {isRecording && (
+              <>
+                <Button
+                  variant="default"
+                  onClick={() => void cancel()}
+                  leftSection={<IconX size={16} />}
+                >
+                  {t("Cancel")}
+                </Button>
+                <Button
+                  onClick={() => void stop()}
+                  leftSection={<IconPlayerStopFilled size={16} />}
+                  color="red"
+                  variant="filled"
+                >
+                  {t("Stop & save")}
+                </Button>
+              </>
+            )}
+            {isStopping && (
               <Button
-                onClick={() => void stop()}
-                leftSection={<IconPlayerStopFilled size={16} />}
                 color="red"
-                variant="filled"
+                disabled
+                leftSection={<Loader size="xs" color="white" />}
               >
-                {t("Stop & save")}
+                {t("Stopping & saving…")}
               </Button>
             )}
           </Group>

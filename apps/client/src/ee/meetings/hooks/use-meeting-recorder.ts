@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  deleteMeeting,
   startMeeting,
   stopMeeting,
   uploadMeetingChunk,
@@ -30,6 +31,7 @@ interface UseMeetingRecorderOptions {
   onChunk?: (seg: LiveSegment) => void;
   onError?: (err: Error) => void;
   onCompleted?: (meetingId: string) => void;
+  onCancelled?: () => void;
 }
 
 interface StreamSlot {
@@ -67,6 +69,7 @@ export function useMeetingRecorder({
   onChunk,
   onError,
   onCompleted,
+  onCancelled,
 }: UseMeetingRecorderOptions) {
   const [state, setState] = useState<RecorderState>("idle");
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -85,6 +88,8 @@ export function useMeetingRecorder({
   onErrorRef.current = onError;
   const onCompletedRef = useRef(onCompleted);
   onCompletedRef.current = onCompleted;
+  const onCancelledRef = useRef(onCancelled);
+  onCancelledRef.current = onCancelled;
 
   const cleanupStream = (slot: StreamSlot | null) => {
     if (!slot) return;
@@ -233,8 +238,17 @@ export function useMeetingRecorder({
       }, 500);
     } catch (err) {
       cleanupAll();
+      // If the meeting row was created before the failure, mark it as
+      // a stale orphan by deleting it. Otherwise the list pollutes
+      // with empty 'recording' rows that nobody can stop.
+      const orphan = meetingIdRef.current;
       meetingIdRef.current = null;
       setMeetingId(null);
+      if (orphan) {
+        deleteMeeting(orphan).catch(() => {
+          /* best-effort cleanup */
+        });
+      }
       setState("error");
       onErrorRef.current?.(
         err instanceof Error ? err : new Error("Failed to start recording"),
@@ -289,6 +303,32 @@ export function useMeetingRecorder({
     }
   }, [cleanupAll, state]);
 
+  /**
+   * Discard the current recording. Stops the streams without flushing,
+   * tells the server to delete the meeting row, leaves no transcript
+   * behind.
+   */
+  const cancel = useCallback(async () => {
+    if (state !== "recording" && state !== "requesting") return;
+    const mid = meetingIdRef.current;
+    setState("stopping");
+    cleanupAll();
+    pendingUploadsRef.current.clear();
+    meetingIdRef.current = null;
+    setMeetingId(null);
+    setElapsedMs(0);
+    if (mid) {
+      try {
+        await deleteMeeting(mid);
+      } catch {
+        // Best-effort cleanup. The row will sit in 'recording' status
+        // until the user manually deletes it from the list.
+      }
+    }
+    setState("idle");
+    onCancelledRef.current?.();
+  }, [cleanupAll, state]);
+
   useEffect(() => cleanupAll, [cleanupAll]);
 
   return {
@@ -297,5 +337,6 @@ export function useMeetingRecorder({
     elapsedMs,
     start,
     stop,
+    cancel,
   };
 }
