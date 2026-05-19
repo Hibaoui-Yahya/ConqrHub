@@ -36,12 +36,12 @@ export async function up(db: Kysely<any>): Promise<void> {
   // add new workspace columns
   await db.schema
     .alterTable('workspaces')
-    .addColumn('audit_retention_days', 'int8', (col) => col)
+    .addColumn('audit_retention_days', 'integer', (col) => col)
     .execute();
 
   await db.schema
     .alterTable('workspaces')
-    .addColumn('trash_retention_days', 'int8', (col) => col)
+    .addColumn('trash_retention_days', 'integer', (col) => col)
     .execute();
 }
 

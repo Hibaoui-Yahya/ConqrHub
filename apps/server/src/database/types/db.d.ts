@@ -632,7 +632,7 @@ export interface WorkspaceInvitations {
 }
 
 export interface Workspaces {
-  auditRetentionDays: Int8 | null;
+  auditRetentionDays: number | null;
   billingEmail: string | null;
   createdAt: Generated<Timestamp>;
   customDomain: string | null;
@@ -652,7 +652,7 @@ export interface Workspaces {
   settings: Json | null;
   status: string | null;
   stripeCustomerId: string | null;
-  trashRetentionDays: Int8 | null;
+  trashRetentionDays: number | null;
   trialEndAt: Timestamp | null;
   updatedAt: Generated<Timestamp>;
 }
