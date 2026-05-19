@@ -10,6 +10,7 @@ import {
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
+import { SkipTransform } from '../../../common/decorators/skip-transform.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { McpService } from './mcp.service';
 
@@ -20,6 +21,7 @@ export class McpController {
 
   constructor(private readonly mcpService: McpService) {}
 
+  @SkipTransform()
   @HttpCode(HttpStatus.OK)
   @Post()
   async handle(
