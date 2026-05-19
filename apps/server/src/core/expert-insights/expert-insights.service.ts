@@ -17,6 +17,8 @@ import {
 } from '../casl/interfaces/space-ability.type';
 import SpaceAbilityFactory from '../casl/abilities/space-ability.factory';
 import { ExpertInsightStatus } from '../../database/types/expert-insights.types';
+import { InjectKysely } from 'nestjs-kysely';
+import { KyselyDB } from '@docmost/db/types/kysely.types';
 
 @Injectable()
 export class ExpertInsightsService {
@@ -24,6 +26,7 @@ export class ExpertInsightsService {
     private readonly repo: ExpertInsightsRepo,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly eventEmitter: EventEmitter2,
+    @InjectKysely() private readonly db: KyselyDB,
   ) {}
 
   async create(dto: CreateInsightDto, user: User) {
@@ -31,6 +34,12 @@ export class ExpertInsightsService {
     if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Insight)) {
       throw new ForbiddenException('You cannot create insights in this space');
     }
+
+    const profile = await (this.db as any)
+      .selectFrom('users')
+      .select(['name', 'role', 'department'])
+      .where('id', '=', user.id)
+      .executeTakeFirst();
 
     const insight = await this.repo.create({
       workspaceId: user.workspaceId,
@@ -40,6 +49,10 @@ export class ExpertInsightsService {
       title: dto.title,
       body: dto.body,
       createdBy: user.id,
+      authorName: profile?.name ?? null,
+      authorRole: profile?.role ?? null,
+      authorDepartment: profile?.department ?? null,
+      confidence: dto.confidence ?? 'medium',
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       spanAnchor: dto.spanAnchor,
     });
@@ -104,6 +117,7 @@ export class ExpertInsightsService {
       insightType: dto.insightType,
       title: dto.title,
       body: dto.body,
+      confidence: dto.confidence,
       expiresAt:
         'expiresAt' in dto
           ? dto.expiresAt
