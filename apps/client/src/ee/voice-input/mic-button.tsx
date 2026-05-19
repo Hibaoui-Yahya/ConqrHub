@@ -16,6 +16,7 @@ interface Props {
   onTranscript: (text: string) => void;
   disabled?: boolean;
   className?: string;
+  compact?: boolean;
 }
 
 function formatElapsed(ms: number): string {
@@ -30,6 +31,7 @@ export function MicButton({
   onTranscript,
   disabled,
   className,
+  compact,
 }: Props) {
   const { t } = useTranslation();
   const hasAi = useHasFeature(Feature.AI);
@@ -89,21 +91,27 @@ export function MicButton({
 
   if (!hasAi || !sttEnabled || !supported) return null;
 
+  const baseClass = compact
+    ? `${classes.button} ${classes.compact}`
+    : classes.button;
+
   if (state === "recording") {
     return (
       <div className={`${classes.group} ${className ?? ""}`}>
         <button
           type="button"
-          className={`${classes.button} ${classes.recording}`}
+          className={`${baseClass} ${classes.recording}`}
           onClick={stop}
           aria-label={t("Stop recording")}
         >
           <span className={classes.dot} />
-          <span className={classes.timer}>{formatElapsed(elapsedMs)}</span>
+          {!compact && (
+            <span className={classes.timer}>{formatElapsed(elapsedMs)}</span>
+          )}
         </button>
         <button
           type="button"
-          className={classes.button}
+          className={baseClass}
           onClick={cancel}
           aria-label={t("Cancel recording")}
         >
@@ -117,7 +125,7 @@ export function MicButton({
     return (
       <button
         type="button"
-        className={`${classes.button} ${classes.transcribing} ${className ?? ""}`}
+        className={`${baseClass} ${classes.transcribing} ${className ?? ""}`}
         disabled
         aria-label={t("Transcribing")}
       >
@@ -129,7 +137,7 @@ export function MicButton({
   return (
     <button
       type="button"
-      className={`${classes.button} ${className ?? ""}`}
+      className={`${baseClass} ${className ?? ""}`}
       onClick={start}
       disabled={disabled}
       aria-label={t("Record voice")}

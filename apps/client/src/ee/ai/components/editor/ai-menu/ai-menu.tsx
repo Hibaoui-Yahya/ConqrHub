@@ -328,6 +328,7 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
             onChange={(e) => setPrompt(e.currentTarget.value)}
             leftSection={
               <MicButton
+                compact
                 context={{
                   kind: "ask-ai",
                   pageId: location.pathname.match(/\/p\/([^/]+)/)?.[1],
@@ -338,7 +339,7 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
                 }}
               />
             }
-            leftSectionWidth={48}
+            leftSectionWidth={32}
             rightSection={
               <ActionIcon
                 disabled={!prompt || isLoading}

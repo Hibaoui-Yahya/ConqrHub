@@ -58,3 +58,18 @@
   display: inline-flex;
   gap: 4px;
 }
+
+/* Compact variant for inline use inside another input's leftSection. */
+.compact {
+  border: none;
+  padding: 0;
+  height: 24px;
+  width: 24px;
+  background: transparent;
+  color: var(--mantine-color-gray-6);
+}
+
+.compact:hover:not(:disabled) {
+  background: var(--mantine-color-gray-1);
+  color: var(--mantine-color-gray-9);
+}
