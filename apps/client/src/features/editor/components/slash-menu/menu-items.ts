@@ -95,6 +95,16 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       },
     },
     {
+      title: "Meeting",
+      description: "Record a meeting and get a transcript + AI summary.",
+      searchTerms: ["meeting", "meet", "record", "transcript", "call"],
+      icon: IconMicrophone,
+      command: ({ editor, range }: CommandProps) => {
+        editor.chain().focus().deleteRange(range).run();
+        window.location.href = "/meetings";
+      },
+    },
+    {
       title: "Heading 1",
       description: "Big section heading.",
       searchTerms: ["title", "big", "large"],
