@@ -1,7 +1,6 @@
 import {
   Anchor,
   Group,
-  List,
   Text,
   Switch,
   TextInput,
@@ -22,6 +21,7 @@ import { useUpgradeLabel } from "@/ee/hooks/use-upgrade-label";
 import { getAppUrl } from "@/lib/config.ts";
 import { IconCheck, IconCopy, IconInfoCircle } from "@tabler/icons-react";
 import { CopyButton } from "@/components/common/copy-button.tsx";
+import McpSetupSnippets from "@/ee/ai/components/mcp-setup-snippets.tsx";
 
 export default function McpSettings() {
   const { t } = useTranslation();
@@ -112,42 +112,8 @@ export default function McpSettings() {
             )}
           </Text>
 
-          <div>
-            <Text size="sm" fw={500} mt="md" mb={4}>
-              {t("Supported tools")}
-            </Text>
-            <List size="sm" spacing={2}>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  search_pages, get_page, create_page, update_page
-                </Text>
-              </List.Item>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  list_pages, list_child_pages, duplicate_page
-                </Text>
-              </List.Item>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  copy_page_to_space, move_page, move_page_to_space
-                </Text>
-              </List.Item>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  get_space, list_spaces, create_space, update_space
-                </Text>
-              </List.Item>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  get_comments, create_comment, update_comment
-                </Text>
-              </List.Item>
-              <List.Item>
-                <Text size="sm" c="dimmed" span>
-                  search_attachments, list_workspace_members, get_current_user
-                </Text>
-              </List.Item>
-            </List>
+          <div style={{ marginTop: "var(--mantine-spacing-lg)" }}>
+            <McpSetupSnippets mcpUrl={mcpUrl} />
           </div>
         </div>
       )}
