@@ -90,22 +90,6 @@ async function bootstrap() {
       whitelist: true,
       stopAtFirstError: true,
       transform: true,
-      exceptionFactory: (errors) => {
-        const pipeLogger = new Logger('ValidationPipe');
-        pipeLogger.warn(
-          `Validation failed: ${JSON.stringify(
-            errors.map((e) => ({
-              property: e.property,
-              constraints: e.constraints,
-              valuePreview:
-                typeof e.value === 'string'
-                  ? e.value.slice(0, 80)
-                  : typeof e.value,
-            })),
-          )}`,
-        );
-        return new (require('@nestjs/common').BadRequestException)(errors);
-      },
     }),
   );
 

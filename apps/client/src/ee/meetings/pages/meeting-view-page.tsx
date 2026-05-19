@@ -119,14 +119,21 @@ export default function MeetingViewPage() {
     setAiLoading(preset);
     setActiveTab(preset);
     try {
-      const res = await generate.mutateAsync({
+      const res = (await generate.mutateAsync({
         action: AiAction.CUSTOM,
         content: meeting.transcript,
         prompt: presetCfg.prompt,
-      });
-      setAiOutputs((prev) => ({ ...prev, [preset]: res.content }));
+      })) as { content?: string; text?: string };
+      // Server returns { text, action, usage } on /ai/generate but the
+      // shared AiContentResponse type still says `content`. Accept
+      // either so we work regardless of which gets fixed first.
+      const output = (res.text ?? res.content ?? "").trim();
+      if (!output) {
+        throw new Error(t("AI returned an empty response"));
+      }
+      setAiOutputs((prev) => ({ ...prev, [preset]: output }));
       try {
-        await saveAiOutput(meeting.id, preset, res.content);
+        await saveAiOutput(meeting.id, preset, output);
       } catch (err) {
         // Persistence failure is non-fatal — the user still sees the
         // output in this session. Toast quietly so they know it
