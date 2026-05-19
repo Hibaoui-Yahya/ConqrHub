@@ -79,7 +79,9 @@ export function useVoiceInput({ onComplete, onError, onAutoStop }: Options) {
         onAutoStop?.();
         try {
           recorder.stop();
-        } catch {}
+        } catch {
+          // Recorder may already be stopped; ignore.
+        }
       }, MAX_DURATION_MS);
     } catch (err) {
       cleanup();
@@ -93,7 +95,9 @@ export function useVoiceInput({ onComplete, onError, onAutoStop }: Options) {
     if (!r || state !== "recording") return;
     try {
       r.stop();
-    } catch {}
+    } catch {
+      // Recorder may already be stopped; ignore.
+    }
   }, [state]);
 
   const cancel = useCallback(() => {
@@ -102,7 +106,9 @@ export function useVoiceInput({ onComplete, onError, onAutoStop }: Options) {
     if (r && r.state !== "inactive") {
       try {
         r.stop();
-      } catch {}
+      } catch {
+        // Recorder may already be stopped; ignore.
+      }
     } else {
       cleanup();
       setState("idle");

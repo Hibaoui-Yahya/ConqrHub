@@ -29,6 +29,7 @@ import {
 import { useAtom } from "jotai";
 import useCollaborationUrl from "@/features/editor/hooks/use-collaboration-url";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
+import { VoiceDictateModal } from "@/ee/voice-input/components/voice-dictate-modal";
 import {
   pageEditorAtom,
   yjsConnectionStatusAtom,
@@ -105,7 +106,14 @@ export default function PageEditor({
     yjsConnectionStatusAtom,
   );
   const menuContainerRef = useRef(null);
+  const [voiceDictateOpen, setVoiceDictateOpen] = useState(false);
   const { data: collabQuery, refetch: refetchCollabToken } = useCollabToken();
+
+  useEffect(() => {
+    const handler = () => setVoiceDictateOpen(true);
+    window.addEventListener("voice-dictate:open", handler);
+    return () => window.removeEventListener("voice-dictate:open", handler);
+  }, []);
   const { isIdle, resetIdle } = useIdle(FIVE_MINUTES, { initialState: false });
   const documentState = useDocumentVisibility();
   const { pageSlug } = useParams();
@@ -435,6 +443,15 @@ export default function PageEditor({
         {showReadOnlyCommentPopup && (
           <CommentDialog editor={editor} pageId={pageId} readOnly />
         )}
+        <VoiceDictateModal
+          opened={voiceDictateOpen}
+          onClose={() => setVoiceDictateOpen(false)}
+          context={{ kind: "page", pageId: slugId }}
+          onTranscript={(text) => {
+            editor?.commands.insertContent(text);
+            editor?.commands.focus("end");
+          }}
+        />
       </div>
       <div
         onClick={() => editor.commands.focus("end")}
