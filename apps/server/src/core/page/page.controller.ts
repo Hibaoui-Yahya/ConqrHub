@@ -364,6 +364,11 @@ export class PageController {
       if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
         throw new ForbiddenException();
       }
+    } else if (targetUserId !== user.id) {
+      // Without a space scope, only allow listing pages created by the caller.
+      // Otherwise any workspace member could enumerate every page authored by
+      // anyone else in the workspace.
+      throw new ForbiddenException();
     }
 
     return this.pageService.getCreatedByPages(targetUserId, user.id, pagination, dto.spaceId);
@@ -376,22 +381,24 @@ export class PageController {
     @Body() pagination: PaginationOptions,
     @AuthUser() user: User,
   ) {
-    if (deletedPageDto.spaceId) {
-      const ability = await this.spaceAbility.createForUser(
-        user,
-        deletedPageDto.spaceId,
-      );
-
-      if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException();
-      }
-
-      return this.pageService.getDeletedSpacePages(
-        deletedPageDto.spaceId,
-        user.id,
-        pagination,
-      );
+    if (!deletedPageDto.spaceId) {
+      throw new BadRequestException('spaceId is required');
     }
+
+    const ability = await this.spaceAbility.createForUser(
+      user,
+      deletedPageDto.spaceId,
+    );
+
+    if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException();
+    }
+
+    return this.pageService.getDeletedSpacePages(
+      deletedPageDto.spaceId,
+      user.id,
+      pagination,
+    );
   }
 
   @HttpCode(HttpStatus.OK)

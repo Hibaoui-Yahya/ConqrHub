@@ -93,7 +93,54 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors();
+  // Lock CORS to the configured app origin (and its subdomains when
+  // SUBDOMAIN_HOST is set). The previous wide-open `origin: *` with
+  // credentialed cookies allowed any site to ride a logged-in session.
+  //
+  // Fail-open guard: if APP_URL is missing/unparseable in production we
+  // log a loud warning and accept any origin rather than hard-rejecting
+  // every browser request. A misconfigured prod that 100%-blocks users is
+  // a worse outcome than a misconfigured prod that's permissive — the
+  // operator gets a clear log line to fix the env var.
+  const corsLogger = new Logger('CORS');
+  const rawAppUrl = process.env.APP_URL;
+  let allowedOrigin: string | null = null;
+  if (rawAppUrl) {
+    try {
+      allowedOrigin = new URL(rawAppUrl).origin;
+    } catch {
+      corsLogger.warn(
+        `APP_URL is set but unparseable: "${rawAppUrl}". CORS is permissive — fix APP_URL.`,
+      );
+    }
+  } else {
+    corsLogger.warn(
+      'APP_URL is not set. CORS is permissive — set APP_URL to lock down origins.',
+    );
+  }
+  const subdomainHost = process.env.SUBDOMAIN_HOST;
+  app.enableCors({
+    credentials: true,
+    origin: (origin, cb) => {
+      // Same-origin (Postman, curl, server-to-server) requests come with
+      // no Origin header — allow those.
+      if (!origin) return cb(null, true);
+      // Fail-open: no parseable APP_URL → accept any origin.
+      if (!allowedOrigin) return cb(null, true);
+      if (origin === allowedOrigin) return cb(null, true);
+      if (subdomainHost) {
+        try {
+          const host = new URL(origin).host;
+          if (host === subdomainHost || host.endsWith('.' + subdomainHost)) {
+            return cb(null, true);
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      return cb(new Error('Origin not allowed by CORS'), false);
+    },
+  });
   app.useGlobalInterceptors(new TransformHttpResponseInterceptor(reflector));
   app.enableShutdownHooks();
 

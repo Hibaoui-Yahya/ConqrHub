@@ -81,11 +81,15 @@ export class CollaborationGateway {
   }
 
   private serializeRequest(request: IncomingMessage): SerializedHTTPRequest {
+    // The Redis-sync extension keys per-connection state on the
+    // `sec-websocket-key` header. That header is client-supplied, so two
+    // colliding clients can hijack each other's slot. Override it with a
+    // server-generated id so identity is ours, not theirs.
     return {
       method: request.method ?? 'GET',
       url: request.url ?? '/',
       headers: {
-        'sec-websocket-key': request.headers['sec-websocket-key'] ?? '',
+        'sec-websocket-key': nanoid(),
         'sec-websocket-protocol':
           request.headers['sec-websocket-protocol'] ?? '',
       },

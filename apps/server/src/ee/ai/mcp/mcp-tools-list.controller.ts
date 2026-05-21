@@ -1,8 +1,11 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { McpService } from './mcp.service';
+import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
+import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+@RequireAiFeature('mcp')
 @Controller('ai/mcp')
 export class McpToolsListController {
   constructor(private readonly mcpService: McpService) {}

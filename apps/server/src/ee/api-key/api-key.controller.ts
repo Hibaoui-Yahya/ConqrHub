@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
   Logger,
+  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -12,6 +14,12 @@ import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { ApiKeyService } from './api-key.service';
+import { ApiKeyRepo } from './api-key.repo';
+import WorkspaceAbilityFactory from '../../core/casl/abilities/workspace-ability.factory';
+import {
+  WorkspaceCaslAction,
+  WorkspaceCaslSubject,
+} from '../../core/casl/interfaces/workspace-ability.type';
 import {
   IsDateString,
   IsOptional,
@@ -66,7 +74,32 @@ class RevokeApiKeyDto {
 export class ApiKeyController {
   private readonly logger = new Logger(ApiKeyController.name);
 
-  constructor(private readonly apiKeyService: ApiKeyService) {}
+  constructor(
+    private readonly apiKeyService: ApiKeyService,
+    private readonly apiKeyRepo: ApiKeyRepo,
+    private readonly workspaceAbility: WorkspaceAbilityFactory,
+  ) {}
+
+  private async assertCanManageOrOwn(
+    apiKeyId: string,
+    user: User,
+    workspace: Workspace,
+  ) {
+    const apiKey = await this.apiKeyRepo.findById(apiKeyId, workspace.id);
+    if (!apiKey) {
+      throw new NotFoundException('API key not found');
+    }
+    if (apiKey.creatorId === user.id) {
+      return apiKey;
+    }
+    const ability = this.workspaceAbility.createForUser(user, workspace);
+    if (ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.API)) {
+      throw new ForbiddenException(
+        'You can only manage API keys that you created',
+      );
+    }
+    return apiKey;
+  }
 
   @HttpCode(HttpStatus.OK)
   @Post()
@@ -75,11 +108,20 @@ export class ApiKeyController {
     @AuthWorkspace() workspace: Workspace,
     @AuthUser() user: User,
   ) {
+    if (dto.adminView) {
+      const ability = this.workspaceAbility.createForUser(user, workspace);
+      if (
+        ability.cannot(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.API)
+      ) {
+        throw new ForbiddenException();
+      }
+    }
+
     const items = await this.apiKeyService.list({
       workspaceId: workspace.id,
       cursor: dto.cursor,
       limit: 20,
-      creatorId: dto.adminView ? undefined : user.id,
+      creatorId: dto.adminView ? dto.creatorId : user.id,
     });
 
     return {
@@ -115,8 +157,10 @@ export class ApiKeyController {
   @Post('update')
   async update(
     @Body() dto: UpdateApiKeyDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    await this.assertCanManageOrOwn(dto.apiKeyId, user, workspace);
     await this.apiKeyService.update(dto.apiKeyId, workspace.id, dto.name);
   }
 
@@ -124,8 +168,10 @@ export class ApiKeyController {
   @Post('revoke')
   async revoke(
     @Body() dto: RevokeApiKeyDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    await this.assertCanManageOrOwn(dto.apiKeyId, user, workspace);
     await this.apiKeyService.revoke(dto.apiKeyId, workspace.id);
   }
 }

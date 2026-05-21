@@ -52,13 +52,15 @@ export class BacklinkRepo {
   async updateBacklink(
     updatableBacklink: UpdatableBacklink,
     backlinkId: string,
+    workspaceId: string,
     trx?: KyselyTransaction,
   ) {
     const db = dbOrTx(this.db, trx);
     return db
-      .updateTable('userTokens')
+      .updateTable('backlinks')
       .set(updatableBacklink)
       .where('id', '=', backlinkId)
+      .where('workspaceId', '=', workspaceId)
       .execute();
   }
 
