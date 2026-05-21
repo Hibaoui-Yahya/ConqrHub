@@ -55,21 +55,27 @@ export class GetPageCommentsTool implements ChatTool, OnModuleInit {
     createdAt: string;
   }[]> {
     const page = await this.pageService.findById(args.pageId);
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page || page.workspaceId !== ctx.workspaceId) {
+      throw new NotFoundException('Page not found');
+    }
 
     let ability;
     try {
       ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
+    } catch {
+      throw new ForbiddenException('You do not have access to this page');
     }
-    if (ability?.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
       throw new ForbiddenException('You do not have access to this page');
     }
 
-    const { items } = await this.commentService.findByPageId(args.pageId, {
-      limit: args.limit ?? 20,
-    } as any);
+    const { items } = await this.commentService.findByPageId(
+      args.pageId,
+      ctx.workspaceId,
+      {
+        limit: args.limit ?? 20,
+      } as any,
+    );
 
     return items.map((c: any) => ({
       id: c.id,

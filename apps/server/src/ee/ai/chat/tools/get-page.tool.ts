@@ -53,19 +53,20 @@ export class GetPageTool implements ChatTool, OnModuleInit {
     updatedAt: string;
   }> {
     const page = await this.pageService.findById(args.pageId, true);
-    if (!page) {
+    if (!page || page.workspaceId !== ctx.workspaceId) {
       throw new NotFoundException(
         `Page not found for id "${args.pageId}". Pass either the page UUID or the short slugId returned by search_pages / list_pages.`,
       );
     }
 
+    let ability;
     try {
-      const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException('You do not have access to this page');
-      }
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
+      ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
+    } catch {
+      throw new ForbiddenException('You do not have access to this page');
+    }
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException('You do not have access to this page');
     }
 
     const raw = page.content as any;

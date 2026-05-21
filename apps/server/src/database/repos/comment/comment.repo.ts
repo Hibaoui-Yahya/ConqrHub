@@ -17,9 +17,9 @@ import { jsonObjectFrom } from 'kysely/helpers/postgres';
 export class CommentRepo {
   constructor(@InjectKysely() private readonly db: KyselyDB) {}
 
-  // todo, add workspaceId
   async findById(
     commentId: string,
+    workspaceId: string,
     opts?: { includeCreator: boolean; includeResolvedBy: boolean },
   ): Promise<Comment> {
     return await this.db
@@ -28,16 +28,22 @@ export class CommentRepo {
       .$if(opts?.includeCreator, (qb) => qb.select(this.withCreator))
       .$if(opts?.includeResolvedBy, (qb) => qb.select(this.withResolvedBy))
       .where('id', '=', commentId)
+      .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
   }
 
-  async findPageComments(pageId: string, pagination: PaginationOptions) {
+  async findPageComments(
+    pageId: string,
+    workspaceId: string,
+    pagination: PaginationOptions,
+  ) {
     const query = this.db
       .selectFrom('comments')
       .selectAll('comments')
       .select((eb) => this.withCreator(eb))
       .select((eb) => this.withResolvedBy(eb))
-      .where('pageId', '=', pageId);
+      .where('pageId', '=', pageId)
+      .where('workspaceId', '=', workspaceId);
 
     return executeWithCursorPagination(query, {
       perPage: pagination.limit,
@@ -51,6 +57,7 @@ export class CommentRepo {
   async updateComment(
     updatableComment: UpdatableComment,
     commentId: string,
+    workspaceId: string,
     trx?: KyselyTransaction,
   ) {
     const db = dbOrTx(this.db, trx);
@@ -58,6 +65,7 @@ export class CommentRepo {
       .updateTable('comments')
       .set(updatableComment)
       .where('id', '=', commentId)
+      .where('workspaceId', '=', workspaceId)
       .execute();
   }
 
@@ -91,8 +99,12 @@ export class CommentRepo {
     ).as('resolvedBy');
   }
 
-  async deleteComment(commentId: string): Promise<void> {
-    await this.db.deleteFrom('comments').where('id', '=', commentId).execute();
+  async deleteComment(commentId: string, workspaceId: string): Promise<void> {
+    await this.db
+      .deleteFrom('comments')
+      .where('id', '=', commentId)
+      .where('workspaceId', '=', workspaceId)
+      .execute();
   }
 
   async hasChildren(commentId: string): Promise<boolean> {

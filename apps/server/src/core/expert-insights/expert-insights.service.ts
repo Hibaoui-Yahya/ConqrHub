@@ -68,7 +68,7 @@ export class ExpertInsightsService {
 
   async findByPage(dto: QueryInsightsDto, user: User) {
     const insight = await this.repo
-      .findByPage(dto.pageId)
+      .findByPage(dto.pageId, user.workspaceId)
       .then((rows) => rows[0]);
 
     if (!insight) {
@@ -94,11 +94,11 @@ export class ExpertInsightsService {
         ? undefined
         : 'published';
 
-    return this.repo.findByPage(dto.pageId, status);
+    return this.repo.findByPage(dto.pageId, user.workspaceId, status);
   }
 
   async update(dto: UpdateInsightDto, user: User) {
-    const existing = await this.repo.findById(dto.insightId);
+    const existing = await this.repo.findById(dto.insightId, user.workspaceId);
     if (!existing) throw new NotFoundException('Insight not found');
 
     const ability = await this.spaceAbility.createForUser(
@@ -137,7 +137,7 @@ export class ExpertInsightsService {
   }
 
   async publish(dto: InsightIdDto, user: User) {
-    const existing = await this.repo.findById(dto.insightId);
+    const existing = await this.repo.findById(dto.insightId, user.workspaceId);
     if (!existing) throw new NotFoundException('Insight not found');
 
     const ability = await this.spaceAbility.createForUser(
@@ -164,7 +164,7 @@ export class ExpertInsightsService {
   }
 
   async retire(dto: InsightIdDto, user: User) {
-    const existing = await this.repo.findById(dto.insightId);
+    const existing = await this.repo.findById(dto.insightId, user.workspaceId);
     if (!existing) throw new NotFoundException('Insight not found');
 
     const ability = await this.spaceAbility.createForUser(
@@ -191,7 +191,7 @@ export class ExpertInsightsService {
   }
 
   async delete(dto: InsightIdDto, user: User) {
-    const existing = await this.repo.findById(dto.insightId);
+    const existing = await this.repo.findById(dto.insightId, user.workspaceId);
     if (!existing) throw new NotFoundException('Insight not found');
 
     const ability = await this.spaceAbility.createForUser(

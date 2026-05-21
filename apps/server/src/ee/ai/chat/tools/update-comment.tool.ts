@@ -43,7 +43,10 @@ export class UpdateCommentTool implements ChatTool, OnModuleInit {
     id: string;
     updatedAt: string;
   }> {
-    const comment = await this.commentService.findById(args.commentId);
+    const comment = await this.commentService.findById(
+      args.commentId,
+      ctx.workspaceId,
+    );
 
     const pmContent = {
       type: 'doc',

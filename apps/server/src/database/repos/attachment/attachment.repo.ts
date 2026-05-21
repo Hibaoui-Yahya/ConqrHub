@@ -33,6 +33,7 @@ export class AttachmentRepo {
 
   async findById(
     attachmentId: string,
+    workspaceId: string,
     opts?: {
       trx?: KyselyTransaction;
     },
@@ -43,11 +44,13 @@ export class AttachmentRepo {
       .selectFrom('attachments')
       .select(this.baseFields)
       .where('id', '=', attachmentId)
+      .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
   }
 
   async findByIdWithContent(
     attachmentId: string,
+    workspaceId: string,
     opts?: {
       trx?: KyselyTransaction;
     },
@@ -58,6 +61,7 @@ export class AttachmentRepo {
       .selectFrom('attachments')
       .select([...this.baseFields, 'textContent'])
       .where('id', '=', attachmentId)
+      .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
   }
 
