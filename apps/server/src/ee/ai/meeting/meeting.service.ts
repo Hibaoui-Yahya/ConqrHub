@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { MeetingRepo } from '@docmost/db/repos/meeting/meeting.repo';
 import { Meeting, MeetingSegment } from '@docmost/db/types/entity.types';
 import { SttService } from '../stt/stt.service';
@@ -89,6 +94,22 @@ export class MeetingService {
       workspaceId,
       userId,
     );
+
+    // Step 1: atomically flip the meeting into the 'stopping' state. From
+    // this point forward `requireRecording` rejects new ingestChunk calls
+    // with 409, so any chunk that has not yet entered the STT call will
+    // never reach the segments table. (See ingestChunk for the gate.)
+    await this.meetingRepo.update(meetingId, workspaceId, {
+      status: 'stopping' as never,
+    });
+
+    // Step 2: give in-flight chunks (already past the gate, currently in
+    // the STT round-trip) a short grace window to settle and write their
+    // segment. We then re-read segments AFTER the grace period so the
+    // assembled transcript captures them.
+    const IN_FLIGHT_GRACE_MS = 1500;
+    await new Promise((resolve) => setTimeout(resolve, IN_FLIGHT_GRACE_MS));
+
     const segments = await this.meetingRepo.listSegments(meeting.id);
     const transcript = this.assembleTranscript(segments);
 
@@ -164,7 +185,10 @@ export class MeetingService {
       throw new NotFoundException('Meeting not found');
     }
     if (meeting.status !== 'recording') {
-      throw new NotFoundException('Meeting is not in recording state');
+      // 409 — the resource exists but is not in a recordable state. A 404
+      // here would make clients unable to distinguish "no such meeting"
+      // from "meeting already stopped" (e.g. on a retried stop call).
+      throw new ConflictException('Meeting is not in recording state');
     }
     return meeting;
   }

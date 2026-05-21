@@ -10,10 +10,23 @@ import { SessionActivityService } from '../../session/session-activity.service';
 import { FastifyRequest } from 'fastify';
 import { extractBearerTokenFromHeader, isUserDisabled } from '../../../common/helpers';
 import { ModuleRef } from '@nestjs/core';
+import { RedisService } from '@nestjs-labs/nestjs-ioredis';
+import type { Redis } from 'ioredis';
+import type { User, Workspace } from '@docmost/db/types/entity.types';
+
+// Short cache TTL. Trades up to N seconds of stale state (e.g., a freshly
+// revoked session) for ~3× fewer DB hits per authenticated request under load.
+const JWT_VALIDATE_CACHE_TTL_SECONDS = 30;
+
+interface CachedAuthResult {
+  user: User;
+  workspace: Workspace;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   private logger = new Logger('JwtStrategy');
+  private readonly redis: Redis;
 
   constructor(
     private userRepo: UserRepo,
@@ -22,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private sessionActivityService: SessionActivityService,
     private readonly environmentService: EnvironmentService,
     private moduleRef: ModuleRef,
+    private readonly redisService: RedisService,
   ) {
     super({
       jwtFromRequest: (req: FastifyRequest) => {
@@ -31,9 +45,29 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       secretOrKey: environmentService.getAppSecret(),
       passReqToCallback: true,
     });
+    this.redis = this.redisService.getOrThrow();
   }
 
-  async validate(req: any, payload: JwtPayload | JwtApiKeyPayload) {
+  /**
+   * Cache key derived from a per-token identifier. Prefer the standard `jti`
+   * claim when present; fall back to sessionId/apiKeyId/sub so we always
+   * have a token-scoped key.
+   */
+  private cacheKey(
+    payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
+  ): string {
+    const id =
+      payload.jti ??
+      (payload as JwtPayload).sessionId ??
+      (payload as JwtApiKeyPayload).apiKeyId ??
+      payload.sub;
+    return `jwt:auth:${payload.workspaceId}:${id}`;
+  }
+
+  async validate(
+    req: any,
+    payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
+  ) {
     if (!payload.workspaceId) {
       throw new UnauthorizedException();
     }
@@ -48,6 +82,32 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     if (payload.type !== JwtType.ACCESS) {
       throw new UnauthorizedException();
+    }
+
+    const key = this.cacheKey(payload);
+
+    // Cache hit → skip workspace + user + session DB lookups entirely.
+    // We still keep session-activity tracking because that operation is
+    // already throttled and async (not on the hot path).
+    try {
+      const cached = await this.redis.get(key);
+      if (cached) {
+        const parsed = JSON.parse(cached) as CachedAuthResult;
+        const sessionId = (payload as JwtPayload).sessionId;
+        if (sessionId) {
+          req.raw.sessionId = sessionId;
+          this.sessionActivityService.trackActivity(
+            sessionId,
+            payload.sub,
+            payload.workspaceId,
+          );
+        }
+        return parsed;
+      }
+    } catch (err) {
+      // Redis unreachable / parse error — fall through to authoritative DB
+      // lookups so auth still works when the cache layer is down.
+      this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
     }
 
     const workspace = await this.workspaceRepo.findById(payload.workspaceId);
@@ -69,6 +129,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       }
       req.raw.sessionId = sessionId;
       this.sessionActivityService.trackActivity(sessionId, payload.sub, payload.workspaceId);
+    }
+
+    // Best-effort cache write; never let a Redis hiccup fail the request.
+    try {
+      await this.redis.set(
+        key,
+        JSON.stringify({ user, workspace } satisfies CachedAuthResult),
+        'EX',
+        JWT_VALIDATE_CACHE_TTL_SECONDS,
+      );
+    } catch (err) {
+      this.logger.debug(`JWT cache write failed: ${(err as Error).message}`);
     }
 
     return { user, workspace };

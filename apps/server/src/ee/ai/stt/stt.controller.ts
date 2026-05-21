@@ -78,7 +78,9 @@ export class SttController {
       throw new BadRequestException('No audio file provided');
     }
 
-    const mime = (fileData.mimetype ?? '').toLowerCase();
+    // Strip any "; codecs=opus" / "; charset=..." parameters Chrome and
+    // Firefox routinely attach to MediaRecorder output before allowlist check.
+    const mime = (fileData.mimetype ?? '').toLowerCase().split(';')[0].trim();
     if (!ALLOWED_MIME.has(mime)) {
       throw new UnsupportedMediaTypeException(`Unsupported audio mime: ${mime}`);
     }
