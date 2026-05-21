@@ -105,8 +105,10 @@ export class UserSessionRepo {
   async deleteByUserId(
     userId: string,
     workspaceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
-    await this.db
+    const db = dbOrTx(this.db, trx);
+    await db
       .deleteFrom('userSessions')
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)
@@ -140,23 +142,25 @@ export class UserSessionRepo {
   }
 
   async trimExcessSessions(maxPerUser: number): Promise<void> {
-    const overflowed = await this.db
-      .selectFrom('userSessions')
-      .select(['userId', 'workspaceId'])
-      .groupBy(['userId', 'workspaceId'])
-      .having(sql`COUNT(*)`, '>', maxPerUser)
-      .execute();
-
-    for (const { userId, workspaceId } of overflowed) {
-      await sql`
-        DELETE FROM user_sessions
-        WHERE id IN (
-          SELECT id FROM user_sessions
-          WHERE user_id = ${userId} AND workspace_id = ${workspaceId}
-          ORDER BY last_active_at DESC
-          OFFSET ${maxPerUser}
-        )
-      `.execute(this.db);
-    }
+    // Single-statement window-function delete: rank each user's sessions
+    // by last_active_at DESC and drop everything past `maxPerUser`. Previous
+    // implementation was O(N) round-trips (one DELETE per overflowed user)
+    // and could exhaust the connection pool on workspaces with many users.
+    await sql`
+      DELETE FROM user_sessions
+      WHERE id IN (
+        SELECT id
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY user_id, workspace_id
+              ORDER BY last_active_at DESC
+            ) AS rn
+          FROM user_sessions
+        ) ranked
+        WHERE ranked.rn > ${maxPerUser}
+      )
+    `.execute(this.db);
   }
 }

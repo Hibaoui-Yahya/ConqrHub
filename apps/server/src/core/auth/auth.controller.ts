@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import {
@@ -84,19 +85,29 @@ export class AuthController {
         res,
       );
 
+      // mfaResult === null/undefined => MFA module loaded but no MFA configured
+      // for this workspace and credentials were NOT verified by the MFA path.
+      // Fall through to plain login below — this is the only path that may
+      // call authService.login.
       if (mfaResult) {
-        // If user has MFA enabled OR workspace enforces MFA, require MFA verification
+        // MFA module took ownership of credential verification. From here we
+        // must NEVER call authService.login again (doing so re-runs bcrypt
+        // and creates a second session for the same request).
         if (mfaResult.userHasMfa || mfaResult.requiresMfaSetup) {
           return {
             userHasMfa: mfaResult.userHasMfa,
             requiresMfaSetup: mfaResult.requiresMfaSetup,
             isMfaEnforced: mfaResult.isMfaEnforced,
           };
-        } else if (mfaResult.authToken) {
-          // User doesn't have MFA and workspace doesn't require it
+        }
+        if (mfaResult.authToken) {
           this.setAuthCookie(res, mfaResult.authToken);
           return;
         }
+        // MFA returned a truthy result we don't recognize. Credentials were
+        // already consumed by MFA; refuse rather than silently re-logging in.
+        this.logger.warn('Unexpected mfaResult shape; refusing fallback login');
+        throw new UnauthorizedException();
       }
     }
 

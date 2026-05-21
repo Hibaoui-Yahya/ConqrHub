@@ -174,22 +174,35 @@ export class UserRepo {
     });
   }
 
-  async updatePreference(
+  /**
+   * Per-key setters for users.settings.preferences.* — replaces the old
+   * generic updatePreference method that interpolated a caller-supplied
+   * string as a SQL identifier via sql.raw().
+   */
+  private updatePreferenceKey<TValue extends string | boolean>(
     userId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    key: string,
+    value: TValue,
   ) {
-    return await this.db
+    return this.db
       .updateTable('users')
       .set({
         settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb) 
-                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(key)}, ${sql.lit(value)}))`,
         updatedAt: new Date(),
       })
       .where('id', '=', userId)
       .returning(this.baseFields)
       .executeTakeFirst();
+  }
+
+  setFullPageWidth(userId: string, value: boolean) {
+    return this.updatePreferenceKey(userId, 'fullPageWidth', value);
+  }
+
+  setPageEditMode(userId: string, value: string) {
+    return this.updatePreferenceKey(userId, 'pageEditMode', value);
   }
 
   async updateNotificationSetting(

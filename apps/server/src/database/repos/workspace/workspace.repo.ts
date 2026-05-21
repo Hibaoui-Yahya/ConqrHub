@@ -157,97 +157,133 @@ export class WorkspaceRepo {
   }
 
   async getActiveUserCount(workspaceId: string): Promise<number> {
-    const users = await this.db
+    // Push the active-user filter into SQL — the previous implementation
+    // streamed every user row in the workspace back to Node and filtered
+    // in JS, which on a large workspace allocated megabytes per call and
+    // wasted a round-trip per row scanned.
+    const row = await this.db
       .selectFrom('users')
-      .select(['id', 'deactivatedAt', 'deletedAt'])
+      .select((eb) => eb.fn.countAll().as('count'))
       .where('workspaceId', '=', workspaceId)
-      .execute();
+      .where('deletedAt', 'is', null)
+      .where('deactivatedAt', 'is', null)
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
 
-    const activeUsers = users.filter(
-      (user) => user.deletedAt === null && user.deactivatedAt === null,
+  /**
+   * Per-key setters for settings.* — replaces the old generic
+   * updateApiSettings/updateAiSettings/etc. methods that interpolated a
+   * caller-supplied string as a SQL identifier via sql.raw(). One method
+   * per allowed (section, key) tuple — no string parameter survives to
+   * the SQL layer.
+   */
+  private updateSettingsSection<TValue extends string | boolean>(
+    workspaceId: string,
+    section: string,
+    key: string,
+    value: TValue,
+    trx?: KyselyTransaction,
+  ) {
+    const db = dbOrTx(this.db, trx);
+    return db
+      .updateTable('workspaces')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(section)}, COALESCE(settings->${sql.lit(section)}, '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(key)}, ${sql.lit(value)}))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', workspaceId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
+  // api.*
+  setApiRestrictToAdmins(
+    workspaceId: string,
+    value: boolean,
+    trx?: KyselyTransaction,
+  ) {
+    return this.updateSettingsSection(
+      workspaceId,
+      'api',
+      'restrictToAdmins',
+      value,
+      trx,
     );
-
-    return activeUsers.length;
   }
 
-  async updateApiSettings(
+  // ai.*
+  setAiSearch(
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    value: boolean,
     trx?: KyselyTransaction,
   ) {
-    const db = dbOrTx(this.db, trx);
-    return db
-      .updateTable('workspaces')
-      .set({
-        settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('api', COALESCE(settings->'api', '{}'::jsonb)
-                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
-        updatedAt: new Date(),
-      })
-      .where('id', '=', workspaceId)
-      .returning(this.baseFields)
-      .executeTakeFirst();
+    return this.updateSettingsSection(workspaceId, 'ai', 'search', value, trx);
   }
 
-  async updateAiSettings(
+  setAiGenerative(
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    value: boolean,
     trx?: KyselyTransaction,
   ) {
-    const db = dbOrTx(this.db, trx);
-    return db
-      .updateTable('workspaces')
-      .set({
-        settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('ai', COALESCE(settings->'ai', '{}'::jsonb)
-                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
-        updatedAt: new Date(),
-      })
-      .where('id', '=', workspaceId)
-      .returning(this.baseFields)
-      .executeTakeFirst();
+    return this.updateSettingsSection(
+      workspaceId,
+      'ai',
+      'generative',
+      value,
+      trx,
+    );
   }
 
-  async updateSharingSettings(
+  setAiMcp(workspaceId: string, value: boolean, trx?: KyselyTransaction) {
+    return this.updateSettingsSection(workspaceId, 'ai', 'mcp', value, trx);
+  }
+
+  setAiChat(workspaceId: string, value: boolean, trx?: KyselyTransaction) {
+    return this.updateSettingsSection(workspaceId, 'ai', 'chat', value, trx);
+  }
+
+  setAiStt(workspaceId: string, value: boolean, trx?: KyselyTransaction) {
+    return this.updateSettingsSection(workspaceId, 'ai', 'stt', value, trx);
+  }
+
+  setAiMeeting(
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    value: boolean,
     trx?: KyselyTransaction,
   ) {
-    const db = dbOrTx(this.db, trx);
-    return db
-      .updateTable('workspaces')
-      .set({
-        settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('sharing', COALESCE(settings->'sharing', '{}'::jsonb)
-                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
-        updatedAt: new Date(),
-      })
-      .where('id', '=', workspaceId)
-      .returning(this.baseFields)
-      .executeTakeFirst();
+    return this.updateSettingsSection(workspaceId, 'ai', 'meeting', value, trx);
   }
 
-  async updateTemplateSettings(
+  // sharing.*
+  setSharingDisabled(
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    value: boolean,
     trx?: KyselyTransaction,
   ) {
-    const db = dbOrTx(this.db, trx);
-    return db
-      .updateTable('workspaces')
-      .set({
-        settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('templates', COALESCE(settings->'templates', '{}'::jsonb)
-                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
-        updatedAt: new Date(),
-      })
-      .where('id', '=', workspaceId)
-      .returning(this.baseFields)
-      .executeTakeFirst();
+    return this.updateSettingsSection(
+      workspaceId,
+      'sharing',
+      'disabled',
+      value,
+      trx,
+    );
   }
 
+  // templates.*
+  setAllowMemberTemplates(
+    workspaceId: string,
+    value: boolean,
+    trx?: KyselyTransaction,
+  ) {
+    return this.updateSettingsSection(
+      workspaceId,
+      'templates',
+      'allowMemberTemplates',
+      value,
+      trx,
+    );
+  }
 }

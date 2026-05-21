@@ -395,9 +395,8 @@ export class WorkspaceService {
           before.restrictApiToAdmins = prev;
           after.restrictApiToAdmins = updateWorkspaceDto.restrictApiToAdmins;
         }
-        await this.workspaceRepo.updateApiSettings(
+        await this.workspaceRepo.setApiRestrictToAdmins(
           workspaceId,
-          'restrictToAdmins',
           updateWorkspaceDto.restrictApiToAdmins,
           trx,
         );
@@ -409,9 +408,8 @@ export class WorkspaceService {
           before.aiSearch = prev;
           after.aiSearch = updateWorkspaceDto.aiSearch;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiSearch(
           workspaceId,
-          'search',
           updateWorkspaceDto.aiSearch,
           trx,
         );
@@ -423,9 +421,8 @@ export class WorkspaceService {
           before.generativeAi = prev;
           after.generativeAi = updateWorkspaceDto.generativeAi;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiGenerative(
           workspaceId,
-          'generative',
           updateWorkspaceDto.generativeAi,
           trx,
         );
@@ -437,9 +434,8 @@ export class WorkspaceService {
           before.disablePublicSharing = prev;
           after.disablePublicSharing = updateWorkspaceDto.disablePublicSharing;
         }
-        await this.workspaceRepo.updateSharingSettings(
+        await this.workspaceRepo.setSharingDisabled(
           workspaceId,
-          'disabled',
           updateWorkspaceDto.disablePublicSharing,
           trx,
         );
@@ -454,9 +450,8 @@ export class WorkspaceService {
           before.mcpEnabled = prev;
           after.mcpEnabled = updateWorkspaceDto.mcpEnabled;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiMcp(
           workspaceId,
-          'mcp',
           updateWorkspaceDto.mcpEnabled,
           trx,
         );
@@ -468,9 +463,8 @@ export class WorkspaceService {
           before.allowMemberTemplates = prev;
           after.allowMemberTemplates = updateWorkspaceDto.allowMemberTemplates;
         }
-        await this.workspaceRepo.updateTemplateSettings(
+        await this.workspaceRepo.setAllowMemberTemplates(
           workspaceId,
-          'allowMemberTemplates',
           updateWorkspaceDto.allowMemberTemplates,
           trx,
         );
@@ -482,9 +476,8 @@ export class WorkspaceService {
           before.aiChat = prev;
           after.aiChat = updateWorkspaceDto.aiChat;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiChat(
           workspaceId,
-          'chat',
           updateWorkspaceDto.aiChat,
           trx,
         );
@@ -496,9 +489,8 @@ export class WorkspaceService {
           before.aiStt = prev;
           after.aiStt = updateWorkspaceDto.aiStt;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiStt(
           workspaceId,
-          'stt',
           updateWorkspaceDto.aiStt,
           trx,
         );
@@ -510,9 +502,8 @@ export class WorkspaceService {
           before.aiMeeting = prev;
           after.aiMeeting = updateWorkspaceDto.aiMeeting;
         }
-        await this.workspaceRepo.updateAiSettings(
+        await this.workspaceRepo.setAiMeeting(
           workspaceId,
-          'meeting',
           updateWorkspaceDto.aiMeeting,
           trx,
         );

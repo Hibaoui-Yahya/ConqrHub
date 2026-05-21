@@ -184,10 +184,9 @@ export class SpaceService {
           after.disablePublicSharing = updateSpaceDto.disablePublicSharing;
         }
 
-        await this.spaceRepo.updateSharingSettings(
+        await this.spaceRepo.setSharingDisabled(
           updateSpaceDto.spaceId,
           workspaceId,
-          'disabled',
           updateSpaceDto.disablePublicSharing,
           trx,
         );
@@ -204,10 +203,9 @@ export class SpaceService {
           after.allowViewerComments = updateSpaceDto.allowViewerComments;
         }
 
-        await this.spaceRepo.updateCommentSettings(
+        await this.spaceRepo.setAllowViewerComments(
           updateSpaceDto.spaceId,
           workspaceId,
-          'allowViewerComments',
           updateSpaceDto.allowViewerComments,
           trx,
         );

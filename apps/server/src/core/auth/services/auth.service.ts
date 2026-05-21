@@ -241,6 +241,10 @@ export class AuthService {
 
     const newPasswordHash = await hashPassword(passwordResetDto.newPassword);
 
+    // Password update, reset-token consumption, and existing-session
+    // invalidation must be atomic. A partial state (e.g. password updated,
+    // token consumed, but old sessions still valid) leaves a window in
+    // which a previously-stolen session can outlive the reset.
     await executeTx(this.db, async (trx) => {
       await this.userRepo.updateUser(
         {
@@ -257,9 +261,9 @@ export class AuthService {
         .where('userId', '=', user.id)
         .where('type', '=', UserTokenType.FORGOT_PASSWORD)
         .execute();
-    });
 
-    await this.userSessionRepo.deleteByUserId(user.id, workspace.id);
+      await this.userSessionRepo.deleteByUserId(user.id, workspace.id, trx);
+    });
 
     this.auditService.setActorId(user.id);
     this.auditService.log({
