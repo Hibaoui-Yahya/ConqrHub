@@ -468,123 +468,171 @@ export class FileImportTaskService {
     // Sort levels to process in order
     const sortedLevels = Array.from(pagesByLevel.keys()).sort((a, b) => a - b);
 
+    // Resume-safe import: wrap each page in its OWN transaction and persist
+    // the set of completed page IDs in fileTask.metadata. The previous
+    // single giant transaction (a) blocked autovacuum for the entire run,
+    // (b) hit statement_timeout / pool timeout on large zips, and
+    // (c) discarded every page if the last one failed. On retry, already-
+    // committed pages are skipped, so a partial failure resumes cleanly.
+    const existingMeta =
+      (fileTask.metadata as { processedPageIds?: string[] } | null) ?? null;
+    const alreadyProcessed = new Set<string>(
+      existingMeta?.processedPageIds ?? [],
+    );
+
+    const persistProgress = async () => {
+      try {
+        await this.db
+          .updateTable('fileTasks')
+          .set({
+            metadata: {
+              ...(existingMeta ?? {}),
+              processedPageIds: Array.from(alreadyProcessed),
+            } as any,
+            updatedAt: new Date(),
+          })
+          .where('id', '=', fileTask.id)
+          .execute();
+      } catch (err) {
+        this.logger.warn(
+          `Failed to persist import progress for fileTask ${fileTask.id}`,
+          err,
+        );
+      }
+    };
+
     try {
-      await executeTx(this.db, async (trx) => {
-        // Process pages level by level sequentially within the transaction
-        for (const level of sortedLevels) {
-          const levelPages = pagesByLevel.get(level)!;
+      for (const level of sortedLevels) {
+        const levelPages = pagesByLevel.get(level)!;
 
-          for (const [filePath, page] of levelPages) {
-            const absPath = path.join(extractDir, filePath);
-            let content = '';
+        for (const [filePath, page] of levelPages) {
+          if (alreadyProcessed.has(page.id)) {
+            // resumed run — this page is already committed
+            validPageIds.add(page.id);
+            totalPagesProcessed++;
+            continue;
+          }
 
-            // Check if file exists (placeholder pages won't have physical files)
-            try {
-              await fs.access(absPath);
-              content = await fs.readFile(absPath, 'utf-8');
+          const absPath = path.join(extractDir, filePath);
+          let content = '';
 
-              if (page.fileExtension.toLowerCase() === '.md') {
-                content = await markdownToHtml(content);
-              }
-            } catch (err: any) {
-              if (err?.code === 'ENOENT') {
-                // Use empty content, title will be the folder name
-                content = '';
-              } else {
-                throw err;
-              }
+          // Check if file exists (placeholder pages won't have physical files)
+          try {
+            await fs.access(absPath);
+            content = await fs.readFile(absPath, 'utf-8');
+
+            if (page.fileExtension.toLowerCase() === '.md') {
+              content = await markdownToHtml(content);
             }
+          } catch (err: any) {
+            if (err?.code === 'ENOENT') {
+              content = '';
+            } else {
+              throw err;
+            }
+          }
 
-            const htmlContent =
-              await this.importAttachmentService.processAttachments({
-                html: content,
-                pageRelativePath: page.filePath,
-                extractDir,
-                pageId: page.id,
-                fileTask,
-                attachmentCandidates,
-              });
-
-            const { html, backlinks, pageIcon } = await formatImportHtml({
-              html: htmlContent,
-              currentFilePath: page.filePath,
-              filePathToPageMetaMap: filePathToPageMetaMap,
-              creatorId: fileTask.creatorId,
-              sourcePageId: page.id,
-              workspaceId: fileTask.workspaceId,
-              spaceSlug: space?.slug,
+          const htmlContent =
+            await this.importAttachmentService.processAttachments({
+              html: content,
+              pageRelativePath: page.filePath,
+              extractDir,
+              pageId: page.id,
+              fileTask,
+              attachmentCandidates,
             });
 
-            const pmState = getProsemirrorContent(
-              await this.importService.processHTML(html),
-            );
-
-            const { title, prosemirrorJson } =
-              this.importService.extractTitleAndRemoveHeading(pmState);
-
-            const insertablePage: InsertablePage = {
-              id: page.id,
-              slugId: page.slugId,
-              title: title || page.name,
-              icon: page.icon || pageIcon || null,
-              content: prosemirrorJson,
-              textContent: jsonToText(prosemirrorJson),
-              ydoc: await this.importService.createYdoc(prosemirrorJson),
-              position: page.position!,
-              spaceId: fileTask.spaceId,
-              workspaceId: fileTask.workspaceId,
-              creatorId: fileTask.creatorId,
-              lastUpdatedById: fileTask.creatorId,
-              parentPageId: page.parentPageId,
-            };
-
-            await trx.insertInto('pages').values(insertablePage).execute();
-
-            // Track valid page IDs, titles, and collect backlinks
-            validPageIds.add(insertablePage.id);
-            pageTitles.set(insertablePage.id, insertablePage.title);
-            allBacklinks.push(...backlinks);
-            totalPagesProcessed++;
-
-            // Log progress periodically
-            if (totalPagesProcessed % 50 === 0) {
-              this.logger.debug(`Processed ${totalPagesProcessed} pages...`);
-            }
-          }
-        }
-
-        const filteredBacklinks = allBacklinks.filter(
-          ({ sourcePageId, targetPageId }) =>
-            validPageIds.has(sourcePageId) && validPageIds.has(targetPageId),
-        );
-
-        // Insert backlinks in batches
-        if (filteredBacklinks.length > 0) {
-          const BACKLINK_BATCH_SIZE = 100;
-          for (
-            let i = 0;
-            i < filteredBacklinks.length;
-            i += BACKLINK_BATCH_SIZE
-          ) {
-            const backlinkChunk = filteredBacklinks.slice(
-              i,
-              Math.min(i + BACKLINK_BATCH_SIZE, filteredBacklinks.length),
-            );
-            await this.backlinkRepo.insertBacklink(backlinkChunk, trx);
-          }
-        }
-
-        if (validPageIds.size > 0) {
-          this.eventEmitter.emit(EventName.PAGE_CREATED, {
-            pageIds: Array.from(validPageIds),
+          const { html, backlinks, pageIcon } = await formatImportHtml({
+            html: htmlContent,
+            currentFilePath: page.filePath,
+            filePathToPageMetaMap: filePathToPageMetaMap,
+            creatorId: fileTask.creatorId,
+            sourcePageId: page.id,
             workspaceId: fileTask.workspaceId,
+            spaceSlug: space?.slug,
           });
-        }
 
-        this.logger.log(
-          `Successfully imported ${totalPagesProcessed} pages with ${filteredBacklinks.length} backlinks`,
-        );
-      });
+          const pmState = getProsemirrorContent(
+            await this.importService.processHTML(html),
+          );
+
+          const { title, prosemirrorJson } =
+            this.importService.extractTitleAndRemoveHeading(pmState);
+
+          const insertablePage: InsertablePage = {
+            id: page.id,
+            slugId: page.slugId,
+            title: title || page.name,
+            icon: page.icon || pageIcon || null,
+            content: prosemirrorJson,
+            textContent: jsonToText(prosemirrorJson),
+            ydoc: await this.importService.createYdoc(prosemirrorJson),
+            position: page.position!,
+            spaceId: fileTask.spaceId,
+            workspaceId: fileTask.workspaceId,
+            creatorId: fileTask.creatorId,
+            lastUpdatedById: fileTask.creatorId,
+            parentPageId: page.parentPageId,
+          };
+
+          // Per-page transaction. onConflict-doNothing keeps resume safe
+          // even if metadata persistence raced ahead of the commit.
+          await executeTx(this.db, async (trx) => {
+            await trx
+              .insertInto('pages')
+              .values(insertablePage)
+              .onConflict((oc) => oc.column('id').doNothing())
+              .execute();
+          });
+
+          validPageIds.add(insertablePage.id);
+          pageTitles.set(insertablePage.id, insertablePage.title);
+          allBacklinks.push(...backlinks);
+          totalPagesProcessed++;
+          alreadyProcessed.add(insertablePage.id);
+
+          // Persist progress periodically. Per-page DB write would dominate
+          // the import cost; batching every 25 pages is plenty for resume.
+          if (totalPagesProcessed % 25 === 0) {
+            await persistProgress();
+            this.logger.debug(`Processed ${totalPagesProcessed} pages...`);
+          }
+        }
+      }
+
+      // final progress flush
+      await persistProgress();
+
+      const filteredBacklinks = allBacklinks.filter(
+        ({ sourcePageId, targetPageId }) =>
+          validPageIds.has(sourcePageId) && validPageIds.has(targetPageId),
+      );
+
+      if (filteredBacklinks.length > 0) {
+        const BACKLINK_BATCH_SIZE = 100;
+        for (
+          let i = 0;
+          i < filteredBacklinks.length;
+          i += BACKLINK_BATCH_SIZE
+        ) {
+          const backlinkChunk = filteredBacklinks.slice(
+            i,
+            Math.min(i + BACKLINK_BATCH_SIZE, filteredBacklinks.length),
+          );
+          await this.backlinkRepo.insertBacklink(backlinkChunk);
+        }
+      }
+
+      if (validPageIds.size > 0) {
+        this.eventEmitter.emit(EventName.PAGE_CREATED, {
+          pageIds: Array.from(validPageIds),
+          workspaceId: fileTask.workspaceId,
+        });
+      }
+
+      this.logger.log(
+        `Successfully imported ${totalPagesProcessed} pages with ${filteredBacklinks.length} backlinks`,
+      );
 
       if (validPageIds.size > 0) {
         const auditPayloads = Array.from(validPageIds).map((pageId) => ({

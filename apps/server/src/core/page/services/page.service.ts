@@ -15,12 +15,12 @@ import {
   executeWithCursorPagination,
 } from '@docmost/db/pagination/cursor-pagination';
 import { InjectKysely } from 'nestjs-kysely';
-import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 import { MovePageDto } from '../dto/move-page.dto';
 import { generateSlugId } from '../../../common/helpers';
 import { getPageTitle } from '../../../common/helpers';
-import { executeTx } from '@docmost/db/utils';
+import { dbOrTx, executeTx } from '@docmost/db/utils';
 import { AttachmentRepo } from '@docmost/db/repos/attachment/attachment.repo';
 import { v7 as uuid7 } from 'uuid';
 import {
@@ -39,7 +39,7 @@ import {
   CopyPageMapEntry,
   ICopyPageAttachment,
 } from '../dto/duplicate-page.dto';
-import { Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, Mark, Node as PMNode } from '@tiptap/pm/model';
 import { StorageService } from '../../../integrations/storage/storage.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -54,6 +54,42 @@ import {
 import { markdownToHtml } from '@docmost/editor-ext';
 import { WatcherService } from '../../watcher/watcher.service';
 import { sql } from 'kysely';
+
+/**
+ * Walks a ProseMirror tree and returns a new tree where any node for which
+ * `transform` returns a non-null result is rebuilt via `node.type.create()`
+ * with the requested attrs / marks. We never mutate `node.attrs` — those
+ * are frozen by ProseMirror in strict mode, so the original code's
+ * `node.attrs.foo = bar` pattern silently dropped on the floor in some
+ * environments and produced corrupt duplicates.
+ */
+function transformProseMirrorTree(
+  node: PMNode,
+  transform: (
+    node: PMNode,
+  ) => {
+    attrs?: Record<string, unknown> | null;
+    marks?: readonly Mark[] | null;
+  } | null,
+): PMNode {
+  const newChildren: PMNode[] = [];
+  for (let i = 0; i < node.childCount; i++) {
+    newChildren.push(transformProseMirrorTree(node.child(i), transform));
+  }
+
+  const change = transform(node);
+
+  if (change && (change.attrs || change.marks)) {
+    return node.type.create(
+      (change.attrs ?? node.attrs) as Record<string, unknown>,
+      Fragment.from(newChildren),
+      (change.marks ?? node.marks) as readonly Mark[],
+    );
+  }
+
+  if (node.isText) return node;
+  return node.copy(Fragment.from(newChildren));
+}
 
 @Injectable()
 export class PageService {
@@ -157,10 +193,17 @@ export class PageService {
     return page;
   }
 
-  async nextPagePosition(spaceId: string, parentPageId?: string) {
+  async nextPagePosition(
+    spaceId: string,
+    parentPageId?: string,
+    trx?: KyselyTransaction,
+  ) {
     let pagePosition: string;
 
-    const lastPageQuery = this.db
+    // Run inside the caller's transaction so concurrent moves don't see
+    // stale "last position" rows from a sibling that's mid-update.
+    const db = dbOrTx(this.db, trx);
+    const lastPageQuery = db
       .selectFrom('pages')
       .select(['position'])
       .where('spaceId', '=', spaceId)
@@ -401,6 +444,7 @@ export class PageService {
         const orphanPosition = await this.nextPagePosition(
           rootPage.spaceId,
           null,
+          trx,
         );
         await this.pageRepo.updatePage(
           { parentPageId: null, position: orphanPosition },
@@ -410,7 +454,7 @@ export class PageService {
       }
 
       // Update root page
-      const nextPosition = await this.nextPagePosition(spaceId);
+      const nextPosition = await this.nextPagePosition(spaceId, undefined, trx);
       await this.pageRepo.updatePage(
         { spaceId, parentPageId: null, position: nextPosition },
         rootPage.id,
@@ -535,6 +579,22 @@ export class PageService {
 
     const attachmentMap = new Map<string, ICopyPageAttachment>();
 
+    // Build a per-page attachmentId remap by scanning the source docs once.
+    // Done before the rewrite pass so the rewriter can use the lookup table.
+    pages.forEach((page) => {
+      const pageContent = getProsemirrorContent(page.content);
+      const attachmentIds = getAttachmentIds(pageContent);
+      for (const attachmentId of attachmentIds) {
+        if (attachmentMap.has(attachmentId)) continue;
+        attachmentMap.set(attachmentId, {
+          newPageId: pageMap.get(page.id)!.newPageId,
+          oldPageId: page.id,
+          oldAttachmentId: attachmentId,
+          newAttachmentId: uuid7(),
+        });
+      }
+    });
+
     const insertablePages: InsertablePage[] = await Promise.all(
       pages.map(async (page) => {
         const pageContent = getProsemirrorContent(page.content);
@@ -543,87 +603,89 @@ export class PageService {
         const doc = jsonToNode(pageContent);
         const prosemirrorDoc = removeMarkTypeFromDoc(doc, 'comment');
 
-        const attachmentIds = getAttachmentIds(prosemirrorDoc.toJSON());
+        // Walk the ProseMirror tree and rebuild any node whose attrs or
+        // marks need rewriting by calling `node.type.create(...)`. We never
+        // mutate `node.attrs` (frozen in strict mode — silently no-ops).
+        const transformedDoc = transformProseMirrorTree(
+          prosemirrorDoc,
+          (node) => {
+            let nextAttrs: Record<string, unknown> | null = null;
+            let nextMarks: readonly Mark[] | null = null;
 
-        if (attachmentIds.length > 0) {
-          attachmentIds.forEach((attachmentId: string) => {
-            const newPageId = pageFromMap.newPageId;
-            const newAttachmentId = uuid7();
-            attachmentMap.set(attachmentId, {
-              newPageId: newPageId,
-              oldPageId: page.id,
-              oldAttachmentId: attachmentId,
-              newAttachmentId: newAttachmentId,
-            });
-
-            prosemirrorDoc.descendants((node: PMNode) => {
-              if (isAttachmentNode(node.type.name)) {
-                if (node.attrs.attachmentId === attachmentId) {
-                  //@ts-ignore
-                  node.attrs.attachmentId = newAttachmentId;
-
-                  if (node.attrs.src) {
-                    //@ts-ignore
-                    node.attrs.src = node.attrs.src.replace(
-                      attachmentId,
-                      newAttachmentId,
-                    );
-                  }
-                  if (node.attrs.src) {
-                    //@ts-ignore
-                    node.attrs.src = node.attrs.src.replace(
-                      attachmentId,
-                      newAttachmentId,
-                    );
-                  }
-                }
-              }
-            });
-          });
-        }
-
-        // Update internal page links in mention nodes
-        prosemirrorDoc.descendants((node: PMNode) => {
-          if (
-            node.type.name === 'mention' &&
-            node.attrs.entityType === 'page'
-          ) {
-            const referencedPageId = node.attrs.entityId;
-
-            // Check if the referenced page is within the pages being copied
-            if (referencedPageId && pageMap.has(referencedPageId)) {
-              const mappedPage = pageMap.get(referencedPageId);
-              //@ts-ignore
-              node.attrs.entityId = mappedPage.newPageId;
-              //@ts-ignore
-              node.attrs.slugId = mappedPage.newSlugId;
-            }
-          }
-
-          // Update internal page links in link marks
-          for (const mark of node.marks) {
+            // attachmentId / src rewrites for attachment-style nodes
             if (
-              mark.type.name === 'link' &&
-              mark.attrs.internal &&
-              mark.attrs.href
+              isAttachmentNode(node.type.name) &&
+              node.attrs?.attachmentId &&
+              attachmentMap.has(node.attrs.attachmentId)
             ) {
-              const match = mark.attrs.href.match(INTERNAL_LINK_REGEX);
-              if (match) {
-                const slugId = extractPageSlugId(match[5]);
-                if (slugId && slugIdMap.has(slugId)) {
-                  const mappedPage = slugIdMap.get(slugId);
-                  //@ts-ignore
-                  mark.attrs.href = mark.attrs.href.replace(
-                    slugId,
-                    mappedPage.newSlugId,
-                  );
-                }
+              const oldId = node.attrs.attachmentId as string;
+              const mapped = attachmentMap.get(oldId)!;
+              const newId = mapped.newAttachmentId;
+              nextAttrs = { ...node.attrs, attachmentId: newId };
+              if (typeof node.attrs.src === 'string') {
+                nextAttrs.src = (node.attrs.src as string).replace(
+                  oldId,
+                  newId,
+                );
               }
             }
-          }
-        });
 
-        const prosemirrorJson = prosemirrorDoc.toJSON();
+            // mention -> page id remap when the referenced page is in scope
+            if (
+              node.type.name === 'mention' &&
+              node.attrs?.entityType === 'page' &&
+              node.attrs.entityId &&
+              pageMap.has(node.attrs.entityId)
+            ) {
+              const mapped = pageMap.get(node.attrs.entityId as string)!;
+              nextAttrs = {
+                ...(nextAttrs ?? node.attrs),
+                entityId: mapped.newPageId,
+                slugId: mapped.newSlugId,
+              };
+            }
+
+            // internal-link marks pointing to a copied page slug
+            const linkRewrites: Mark[] = [];
+            let marksChanged = false;
+            for (const mark of node.marks) {
+              if (
+                mark.type.name === 'link' &&
+                mark.attrs?.internal &&
+                typeof mark.attrs.href === 'string'
+              ) {
+                const match = (mark.attrs.href as string).match(
+                  INTERNAL_LINK_REGEX,
+                );
+                if (match) {
+                  const slugId = extractPageSlugId(match[5]);
+                  if (slugId && slugIdMap.has(slugId)) {
+                    const mapped = slugIdMap.get(slugId)!;
+                    linkRewrites.push(
+                      mark.type.create({
+                        ...mark.attrs,
+                        href: (mark.attrs.href as string).replace(
+                          slugId,
+                          mapped.newSlugId,
+                        ),
+                      }),
+                    );
+                    marksChanged = true;
+                    continue;
+                  }
+                }
+              }
+              linkRewrites.push(mark);
+            }
+            if (marksChanged) nextMarks = linkRewrites;
+
+            return nextAttrs || nextMarks
+              ? { attrs: nextAttrs, marks: nextMarks }
+              : null;
+          },
+        );
+
+        const prosemirrorJson = transformedDoc.toJSON();
 
         // Add "Copy of " prefix to the root page title only for duplicates in same space
         let title = page.title;
@@ -657,46 +719,46 @@ export class PageService {
       }),
     );
 
-    await this.db.insertInto('pages').values(insertablePages).execute();
-
+    // Wrap the entire bulk insert + attachment-record creation in a single
+    // transaction so a partial failure (constraint violation on one row,
+    // network blip, etc.) rolls back cleanly — without this, the tree of
+    // pages can land half-inserted and the source page ends up with
+    // orphaned duplicates that aren't reachable via the tree but still
+    // count against the workspace.
     const insertedPageIds = insertablePages.map((page) => page.id);
-    this.eventEmitter.emit(EventName.PAGE_CREATED, {
-      pageIds: insertedPageIds,
-      workspaceId: authUser.workspaceId,
-    });
+    const copiedFiles: string[] = [];
 
-    //TODO: best to handle this in a queue
-    const attachmentsIds = Array.from(attachmentMap.keys());
-    if (attachmentsIds.length > 0) {
-      const attachments = await this.db
-        .selectFrom('attachments')
-        .selectAll()
-        .where('id', 'in', attachmentsIds)
-        .where('workspaceId', '=', rootPage.workspaceId)
-        .execute();
+    try {
+      await executeTx(this.db, async (trx) => {
+        await trx.insertInto('pages').values(insertablePages).execute();
 
-      for (const attachment of attachments) {
-        try {
-          const pageAttachment = attachmentMap.get(attachment.id);
+        const attachmentsIds = Array.from(attachmentMap.keys());
+        if (attachmentsIds.length > 0) {
+          const attachments = await trx
+            .selectFrom('attachments')
+            .selectAll()
+            .where('id', 'in', attachmentsIds)
+            .where('workspaceId', '=', rootPage.workspaceId)
+            .execute();
 
-          // make sure the copied attachment belongs to the page it was copied from
-          if (attachment.pageId !== pageAttachment.oldPageId) {
-            continue;
-          }
+          for (const attachment of attachments) {
+            const pageAttachment = attachmentMap.get(attachment.id);
+            if (!pageAttachment) continue;
 
-          const newAttachmentId = pageAttachment.newAttachmentId;
+            // ensure the source attachment belongs to the page it was copied from
+            if (attachment.pageId !== pageAttachment.oldPageId) continue;
 
-          const newPageId = pageAttachment.newPageId;
+            const newAttachmentId = pageAttachment.newAttachmentId;
+            const newPageId = pageAttachment.newPageId;
+            const newPathFile = attachment.filePath.replace(
+              attachment.id,
+              newAttachmentId,
+            );
 
-          const newPathFile = attachment.filePath.replace(
-            attachment.id,
-            newAttachmentId,
-          );
-
-          try {
             await this.storageService.copy(attachment.filePath, newPathFile);
+            copiedFiles.push(newPathFile);
 
-            await this.db
+            await trx
               .insertInto('attachments')
               .values({
                 id: newAttachmentId,
@@ -712,18 +774,29 @@ export class PageService {
                 spaceId: spaceId,
               })
               .execute();
-          } catch (err) {
-            this.logger.error(
-              `Duplicate page: failed to copy attachment ${attachment.id}`,
-              err,
-            );
-            // Continue with other attachments even if one fails
           }
-        } catch (err) {
-          this.logger.error(err);
+        }
+      });
+    } catch (err) {
+      // Best-effort cleanup of any storage objects we copied before the
+      // transaction rolled back. DB rows are already gone (rollback).
+      for (const path of copiedFiles) {
+        try {
+          await this.storageService.delete(path);
+        } catch (cleanupErr) {
+          this.logger.warn(
+            `Failed to cleanup orphan storage path ${path} after duplicatePage rollback`,
+            cleanupErr,
+          );
         }
       }
+      throw err;
     }
+
+    this.eventEmitter.emit(EventName.PAGE_CREATED, {
+      pageIds: insertedPageIds,
+      workspaceId: authUser.workspaceId,
+    });
 
     const newPageId = pageMap.get(rootPage.id).newPageId;
     const duplicatedPage = await this.pageRepo.findById(newPageId, {
@@ -776,6 +849,10 @@ export class PageService {
   }
 
   async getPageBreadCrumbs(childPageId: string) {
+    // Cap recursion depth so a circular parent chain (caused by any bug in
+    // move/parent reassignment) cannot lock a connection running an
+    // unbounded recursive CTE.
+    const MAX_BREADCRUMB_DEPTH = 100;
     const ancestors = await this.db
       .withRecursive('page_ancestors', (db) =>
         db
@@ -789,6 +866,7 @@ export class PageService {
             'parentPageId',
             'spaceId',
             'deletedAt',
+            sql<number>`1`.as('depth'),
           ])
           .where('id', '=', childPageId)
           .where('deletedAt', 'is', null)
@@ -804,9 +882,11 @@ export class PageService {
                 'p.parentPageId',
                 'p.spaceId',
                 'p.deletedAt',
+                sql<number>`pa.depth + 1`.as('depth'),
               ])
               .innerJoin('page_ancestors as pa', 'pa.parentPageId', 'p.id')
-              .where('p.deletedAt', 'is', null),
+              .where('p.deletedAt', 'is', null)
+              .where(sql<boolean>`pa.depth < ${MAX_BREADCRUMB_DEPTH}`),
           ),
       )
       .selectFrom('page_ancestors')
@@ -943,7 +1023,21 @@ export class PageService {
 
     const pageIds = descendants.map((d) => d.id);
 
-    // Queue attachment deletion for all pages with unique job IDs to prevent duplicates
+    if (pageIds.length === 0) return;
+
+    // Delete the page rows first. If the queue push below crashes (or the
+    // process restarts), we don't end up with the rows still present but
+    // their files already gone — which would render the pages as broken
+    // 404s for every embedded attachment.
+    await this.db.deleteFrom('pages').where('id', 'in', pageIds).execute();
+
+    this.eventEmitter.emit(EventName.PAGE_DELETED, {
+      pageIds: pageIds,
+      workspaceId,
+    });
+
+    // Queue attachment cleanup as a post-commit side effect. Each job is
+    // idempotent (jobId per pageId) so retries are safe.
     for (const id of pageIds) {
       await this.attachmentQueue.add(
         QueueJob.DELETE_PAGE_ATTACHMENTS,
@@ -959,14 +1053,6 @@ export class PageService {
           },
         },
       );
-    }
-
-    if (pageIds.length > 0) {
-      await this.db.deleteFrom('pages').where('id', 'in', pageIds).execute();
-      this.eventEmitter.emit(EventName.PAGE_DELETED, {
-        pageIds: pageIds,
-        workspaceId,
-      });
     }
   }
 

@@ -277,7 +277,7 @@ export class RedisSyncExtension<TCE extends CustomEvents> implements Extension {
       const { promise, resolve, reject } = Promise.withResolvers();
       this.pendingReplies[replyId] = resolve;
       setTimeout(() => {
-        reject('TIMEOUT');
+        reject(new Error(`Custom event timeout (${eventName})`));
       }, this.customEventTTL);
       return promise as Promise<ReturnType<TCE[TName]>>;
     }
@@ -365,10 +365,10 @@ export class RedisSyncExtension<TCE extends CustomEvents> implements Extension {
 
   async afterUnloadDocument(data: afterUnloadDocumentPayload) {
     const { documentName } = data;
-    this.releaseLock(documentName);
+    await this.releaseLock(documentName);
     // Broadcast to cluster to immediately remove the cached redis value
     const msg: RSAMessageUnload = { type: 'unload', documentName };
-    this.pub.publish(this.msgChannel, this.pack(msg));
+    await this.pub.publish(this.msgChannel, this.pack(msg));
   }
 
   async onDestroy() {

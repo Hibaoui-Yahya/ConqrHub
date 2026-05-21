@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SearchDTO, SearchSuggestionDTO } from './dto/search.dto';
 import { SearchResponseDto } from './dto/search-response.dto';
 import { InjectKysely } from 'nestjs-kysely';
@@ -14,6 +14,8 @@ const tsquery = require('pg-tsquery')();
 
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private pageRepo: PageRepo,
@@ -122,8 +124,20 @@ export class SearchService {
       return { items: [] };
     }
 
-    //@ts-ignore
-    let results: any[] = await queryResults.execute();
+    let results: any[];
+    try {
+      //@ts-ignore
+      results = await queryResults.execute();
+    } catch (err: any) {
+      // tsquery special chars (!, &, |, parens) can produce invalid
+      // to_tsquery input and surface as Postgres syntax errors (42601).
+      // Surface as a 400 instead of letting it bubble as an unhandled 500.
+      if (err?.code === '42601') {
+        throw new BadRequestException('Invalid search query');
+      }
+      this.logger.error(err);
+      throw err;
+    }
 
     // Filter results by page-level permissions (if user is authenticated)
     if (opts.userId && results.length > 0) {

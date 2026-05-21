@@ -23,6 +23,11 @@ export const DUPLICATE_EXCERPT_CHARS = 1500;
 // to the next scan once high-similarity rows are addressed.
 export const DUPLICATE_MAX_PAIRS_PER_PAGE = 5;
 
+// Hard limit on pairs returned per single space-scoped scan to keep the
+// O(n²) pg_trgm cross-join bounded. Larger spaces produce a partial result
+// — strongest pairs first, the long tail rolls over on the next run.
+export const DUPLICATE_MAX_PAIRS_PER_SPACE_SCAN = 500;
+
 @Injectable()
 export class DuplicatesService {
   private readonly logger = new Logger(DuplicatesService.name);
@@ -40,18 +45,17 @@ export class DuplicatesService {
     );
   }
 
-  async scanWorkspace(workspaceId: string): Promise<{
-    pagesScanned: number;
-    pairsFound: number;
-  }> {
+  /**
+   * Run the duplicate scan for a single space (the typical job unit).
+   * Keeps the pg_trgm cross-join bounded to one space's pages and caps
+   * the returned pair count.
+   */
+  async scanSpace(
+    workspaceId: string,
+    spaceId: string,
+  ): Promise<{ pagesScanned: number; pairsFound: number }> {
     const threshold = this.threshold();
 
-    // pg_trgm `similarity()` over title + excerpt. We compare each page to
-    // every other page in the workspace once (p1.id < p2.id) and emit BOTH
-    // directions so a per-page lookup is a single index hit. The GIN
-    // trigram index installed by the migration makes this practical for
-    // workspaces with thousands of pages.
-    // Aliases come back camelCased by Kysely's CamelCasePlugin: page_a → pageA.
     const rows = await sql<{
       pageA: string;
       pageB: string;
@@ -64,6 +68,7 @@ export class DuplicatesService {
           substring(coalesce(p.text_content, '') FROM 1 FOR ${DUPLICATE_EXCERPT_CHARS}) AS body
         FROM pages p
         WHERE p.workspace_id = ${workspaceId}
+          AND p.space_id = ${spaceId}
           AND p.deleted_at IS NULL
       )
       SELECT
@@ -75,6 +80,8 @@ export class DuplicatesService {
         ON a.id < b.id
         AND a.body % b.body
       WHERE similarity(a.body, b.body) >= ${threshold}
+      ORDER BY similarity(a.body, b.body) DESC
+      LIMIT ${DUPLICATE_MAX_PAIRS_PER_SPACE_SCAN}
     `.execute(this.db);
 
     const now = new Date();
@@ -87,8 +94,6 @@ export class DuplicatesService {
       pushPair(pairsByPage, r.pageB, r.pageA, sim);
     }
 
-    // Per-page cap: keep the top-N strongest matches. Avoids one pathological
-    // page (e.g., a stub-template clone) blowing up the result table.
     const inserts: Array<{
       workspaceId: string;
       pageId: string;
@@ -111,13 +116,20 @@ export class DuplicatesService {
       }
     }
 
+    // Per-space replace — preserves rows for other spaces in the workspace.
     await this.db.transaction().execute(async (trx) => {
-      // Replace this workspace's rows transactionally — same pattern as
-      // BrokenLinksService. Resolving a duplicate (deleting/merging the
-      // other page) clears the row on the next scan.
       await trx
         .deleteFrom('pageDuplicates')
         .where('workspaceId', '=', workspaceId)
+        .where(
+          'pageId',
+          'in',
+          trx
+            .selectFrom('pages')
+            .select('id')
+            .where('spaceId', '=', spaceId)
+            .where('deletedAt', 'is', null),
+        )
         .execute();
       if (inserts.length > 0) {
         await trx.insertInto('pageDuplicates').values(inserts).execute();
@@ -128,6 +140,42 @@ export class DuplicatesService {
       pagesScanned: pairsByPage.size,
       pairsFound: inserts.length,
     };
+  }
+
+  /**
+   * Workspace-scoped wrapper that iterates over each space and runs the
+   * bounded per-space scan. The previous implementation issued a single
+   * pg_trgm cross-join across every page in the workspace (O(n²)), which
+   * could lock a DB connection for seconds on workspaces with thousands of
+   * pages. Per-space scoping bounds each scan to one space's footprint.
+   */
+  async scanWorkspace(workspaceId: string): Promise<{
+    pagesScanned: number;
+    pairsFound: number;
+  }> {
+    const spaces = await this.db
+      .selectFrom('spaces')
+      .select('id')
+      .where('workspaceId', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .execute();
+
+    let pagesScanned = 0;
+    let pairsFound = 0;
+    for (const s of spaces) {
+      try {
+        const r = await this.scanSpace(workspaceId, s.id);
+        pagesScanned += r.pagesScanned;
+        pairsFound += r.pairsFound;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unknown error';
+        this.logger.error(
+          `Failed duplicate scan for workspace=${workspaceId} space=${s.id}: ${message}`,
+        );
+      }
+    }
+    return { pagesScanned, pairsFound };
   }
 
   async scanAll(): Promise<{

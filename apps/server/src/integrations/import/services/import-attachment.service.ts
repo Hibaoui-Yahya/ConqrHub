@@ -921,6 +921,12 @@ export class ImportAttachmentService {
 
         const stat = await fs.stat(abs);
 
+        // Idempotent retry: if a prior attempt succeeded on storage upload
+        // but failed during DB insert (timeout / pool exhaustion), the
+        // outer retry would re-attempt the same primary key and trip a
+        // unique-constraint violation, permanently failing the attachment.
+        // doNothing() makes the insert a no-op on conflict so the same
+        // attachmentId is treated as already-imported.
         await this.db
           .insertInto('attachments')
           .values({
@@ -936,6 +942,7 @@ export class ImportAttachmentService {
             pageId,
             spaceId: fileTask.spaceId,
           })
+          .onConflict((oc) => oc.column('id').doNothing())
           .execute();
 
         // Queue PDF and DOCX files for indexing

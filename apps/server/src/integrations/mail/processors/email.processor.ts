@@ -1,7 +1,7 @@
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { QueueName } from '../../queue/constants';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { MailService } from '../mail.service';
 import { MailMessage } from '../interfaces/mail.message';
 import { NotificationRepo } from '@docmost/db/repos/notification/notification.repo';
@@ -19,7 +19,17 @@ export class EmailProcessor extends WorkerHost implements OnModuleDestroy {
   async process(job: Job<MailMessage, void>): Promise<void> {
     try {
       await this.mailService.sendEmail(job.data);
-    } catch (err) {
+    } catch (err: any) {
+      // Don't retry permanent delivery failures — retries on a bounced
+      // address just generate more sends to the same dead inbox and burn
+      // queue worker slots. Treat any 4xx as terminal.
+      // Postmark surfaces err.statusCode; nodemailer uses err.responseCode.
+      const status = err?.statusCode ?? err?.responseCode;
+      if (typeof status === 'number' && status >= 400 && status < 500) {
+        throw new UnrecoverableError(
+          `Permanent mail failure (${status}): ${err?.message ?? 'unknown'}`,
+        );
+      }
       throw err;
     }
 

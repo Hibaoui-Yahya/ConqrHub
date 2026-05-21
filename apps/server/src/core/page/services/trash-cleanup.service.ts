@@ -71,18 +71,22 @@ export class TrashCleanupService {
   }
 
   private async cleanupPage(pageId: string) {
-    // Get all descendants using recursive CTE (including the page itself)
+    // Only purge pages that are themselves in the trash. A trashed parent
+    // may legitimately have live children (e.g., a child was restored after
+    // the parent was trashed) — those must NOT be permanently deleted.
     const descendants = await this.db
       .withRecursive('page_descendants', (db) =>
         db
           .selectFrom('pages')
           .select(['id'])
           .where('id', '=', pageId)
+          .where('deletedAt', 'is not', null)
           .unionAll((exp) =>
             exp
               .selectFrom('pages as p')
               .select(['p.id'])
-              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId'),
+              .innerJoin('page_descendants as pd', 'pd.id', 'p.parentPageId')
+              .where('p.deletedAt', 'is not', null),
           ),
       )
       .selectFrom('page_descendants')
@@ -90,12 +94,25 @@ export class TrashCleanupService {
       .execute();
 
     const pageIds = descendants.map((d) => d.id);
+    if (pageIds.length === 0) return;
 
     this.logger.debug(
       `Cleaning up page ${pageId} with ${pageIds.length - 1} descendants`,
     );
 
-    // Queue attachment deletion for all pages with unique job IDs to prevent duplicates
+    // Delete page rows first, then enqueue attachment cleanup as a
+    // post-commit side effect. If we crashed between the queue push and
+    // the delete the file would be gone while the row remained, producing
+    // a broken page with dead attachment references.
+    try {
+      await this.db.deleteFrom('pages').where('id', 'in', pageIds).execute();
+    } catch (error) {
+      this.logger.warn(
+        `Error deleting pages, they may have been already deleted: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return;
+    }
+
     for (const id of pageIds) {
       await this.attachmentQueue.add(
         QueueJob.DELETE_PAGE_ATTACHMENTS,
@@ -110,17 +127,6 @@ export class TrashCleanupService {
             delay: 5000,
           },
         },
-      );
-    }
-
-    try {
-      if (pageIds.length > 0) {
-        await this.db.deleteFrom('pages').where('id', 'in', pageIds).execute();
-      }
-    } catch (error) {
-      // Log but don't throw - pages might have been deleted by another node
-      this.logger.warn(
-        `Error deleting pages, they may have been already deleted: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
