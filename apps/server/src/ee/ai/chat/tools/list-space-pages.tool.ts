@@ -53,15 +53,18 @@ export class ListSpacePagesTool implements ChatTool, OnModuleInit {
     args: { spaceId: string; parentPageId?: string; limit?: number },
     ctx: ChatToolContext,
   ): Promise<{ id: string; title: string | null; slugId: string; hasChildren: boolean }[]> {
+    let ability;
     try {
-      const ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
-      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException(
-          `You do not have access to space ${args.spaceId}`,
-        );
-      }
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
+      ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
+    } catch {
+      throw new ForbiddenException(
+        `You do not have access to space ${args.spaceId}`,
+      );
+    }
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException(
+        `You do not have access to space ${args.spaceId}`,
+      );
     }
 
     const { items } = await this.pageService.getSidebarPages(

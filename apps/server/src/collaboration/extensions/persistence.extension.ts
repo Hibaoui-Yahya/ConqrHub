@@ -85,7 +85,6 @@ export class PersistenceExtension implements Extension {
         tiptapExtensions,
       );
 
-      Y.encodeStateAsUpdate(ydoc);
       return ydoc;
     }
 

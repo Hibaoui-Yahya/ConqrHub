@@ -177,8 +177,8 @@ export class AttachmentController {
       throw new NotFoundException('Invalid file id');
     }
 
-    const attachment = await this.attachmentRepo.findById(fileId);
-    if (!attachment || attachment.workspaceId !== workspace.id) {
+    const attachment = await this.attachmentRepo.findById(fileId, workspace.id);
+    if (!attachment) {
       throw new NotFoundException();
     }
 
@@ -239,14 +239,20 @@ export class AttachmentController {
       throw new NotFoundException('File not found');
     }
 
-    const attachment = await this.attachmentRepo.findById(fileId);
+    const attachment = await this.attachmentRepo.findById(fileId, workspace.id);
     if (
       !attachment ||
-      attachment.workspaceId !== workspace.id ||
       !attachment.pageId ||
       !attachment.spaceId ||
       jwtPayload.pageId !== attachment.pageId
     ) {
+      throw new NotFoundException('File not found');
+    }
+
+    // Ensure the originating page is still live — a previously-issued
+    // attachment JWT must not outlive deletion of its page.
+    const page = await this.pageRepo.findById(attachment.pageId);
+    if (!page || page.deletedAt || page.workspaceId !== workspace.id) {
       throw new NotFoundException('File not found');
     }
 
@@ -342,6 +348,110 @@ export class AttachmentController {
     }
   }
 
+  private validateImgFileName(fileName: string | undefined): void {
+    if (!fileName) {
+      throw new BadRequestException('Invalid file name');
+    }
+    const ext = path.extname(fileName);
+    const filenameWithoutExt = path.basename(fileName, ext);
+    if (
+      !ext ||
+      !isValidUUID(filenameWithoutExt) ||
+      `${filenameWithoutExt}${ext}` !== fileName
+    ) {
+      throw new BadRequestException('Invalid file name');
+    }
+  }
+
+  private async streamImage(
+    res: FastifyReply,
+    filePath: string,
+    cacheControl: string,
+  ) {
+    try {
+      const fileStream = await this.storageService.readStream(filePath);
+      res.headers({
+        'Content-Type': getMimeType(filePath),
+        'Cache-Control': cacheControl,
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.send(fileStream);
+    } catch (err) {
+      throw new NotFoundException('File not found');
+    }
+  }
+
+  /**
+   * Public workspace / space icon endpoint.
+   *
+   * Serves only the two image kinds that are intentionally embedded in
+   * public surfaces (workspace logos, space icons). User avatars MUST use
+   * the protected `/attachments/img/user/:fileName` endpoint instead —
+   * the old combined endpoint leaked avatars to unauthenticated parties.
+   */
+  @Get('attachments/img/workspace/:fileName')
+  async getWorkspaceImage(
+    @Res() res: FastifyReply,
+    @AuthWorkspace() workspace: Workspace,
+    @Param('fileName') fileName?: string,
+  ) {
+    this.validateImgFileName(fileName);
+    // Try workspace icon path first, then space icon. Either is acceptable
+    // here — both are by-design public, both are scoped to the workspace.
+    const candidates = [
+      `${getAttachmentFolderPath(AttachmentType.WorkspaceIcon, workspace.id)}/${fileName}`,
+      `${getAttachmentFolderPath(AttachmentType.SpaceIcon, workspace.id)}/${fileName}`,
+    ];
+    for (const filePath of candidates) {
+      try {
+        const fileStream = await this.storageService.readStream(filePath);
+        res.headers({
+          'Content-Type': getMimeType(filePath),
+          'Cache-Control': 'public, max-age=86400',
+          'X-Content-Type-Options': 'nosniff',
+        });
+        return res.send(fileStream);
+      } catch {
+        // try next candidate
+      }
+    }
+    throw new NotFoundException('File not found');
+  }
+
+  /**
+   * Protected user-avatar endpoint. JwtAuthGuard ensures only authenticated
+   * workspace members can fetch avatar bytes, which may carry PII.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('attachments/img/user/:fileName')
+  async getUserAvatar(
+    @Res() res: FastifyReply,
+    @AuthWorkspace() workspace: Workspace,
+    @Param('fileName') fileName?: string,
+  ) {
+    this.validateImgFileName(fileName);
+    const filePath = `${getAttachmentFolderPath(AttachmentType.Avatar, workspace.id)}/${fileName}`;
+    return this.streamImage(res, filePath, 'private, max-age=86400');
+  }
+
+  /**
+   * Legacy combined endpoint serving WorkspaceIcon, SpaceIcon AND Avatar
+   * under a single path. Kept publicly-accessible for backwards
+   * compatibility with existing avatar URLs already embedded in page
+   * HTML/markdown and stored in public shares — breaking those URLs in
+   * this release would surface as silent missing-image regressions in
+   * customer content.
+   *
+   * The new endpoints (above) are the canonical paths going forward:
+   *   - workspace/space icons: GET /attachments/img/workspace/:fileName
+   *   - user avatars:          GET /attachments/img/user/:fileName  (auth-required)
+   *
+   * TODO: enforce auth on the Avatar variant of this legacy route after
+   * all existing embedded URLs are migrated to /attachments/img/user/:fileName.
+   * Target: next minor release. Tracked as a conscious security trade-off —
+   * user avatars remain publicly readable via the legacy URL pattern until
+   * then, matching the pre-audit behavior.
+   */
   @Get('attachments/img/:attachmentType/:fileName')
   async getLogoOrAvatar(
     @Res() res: FastifyReply,
@@ -356,34 +466,14 @@ export class AttachmentController {
       throw new BadRequestException('Invalid image attachment type');
     }
 
-    if (!fileName) {
-      throw new BadRequestException('Invalid file name');
-    }
-
-    const ext = path.extname(fileName);
-    const filenameWithoutExt = path.basename(fileName, ext);
-
-    if (
-      !ext ||
-      !isValidUUID(filenameWithoutExt) ||
-      `${filenameWithoutExt}${ext}` !== fileName
-    ) {
-      throw new BadRequestException('Invalid file name');
-    }
+    this.validateImgFileName(fileName);
 
     const filePath = `${getAttachmentFolderPath(attachmentType, workspace.id)}/${fileName}`;
-
-    try {
-      const fileStream = await this.storageService.readStream(filePath);
-      res.headers({
-        'Content-Type': getMimeType(filePath),
-        'Cache-Control': 'private, max-age=86400',
-      });
-      return res.send(fileStream);
-    } catch (err) {
-      // this.logger.error(err);
-      throw new NotFoundException('File not found');
-    }
+    const cacheControl =
+      attachmentType === AttachmentType.Avatar
+        ? 'private, max-age=86400'
+        : 'public, max-age=86400';
+    return this.streamImage(res, filePath, cacheControl);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -394,11 +484,13 @@ export class AttachmentController {
     @AuthWorkspace() workspace: Workspace,
     @AuthUser() user: User,
   ) {
-    const attachment = await this.attachmentRepo.findById(dto.attachmentId);
+    const attachment = await this.attachmentRepo.findById(
+      dto.attachmentId,
+      workspace.id,
+    );
     if (
       !attachment ||
       !attachment.pageId ||
-      attachment.workspaceId !== workspace.id ||
       attachment.type !== AttachmentType.File
     ) {
       throw new NotFoundException('File not found');
@@ -479,8 +571,12 @@ export class AttachmentController {
       'Content-Security-Policy',
       "base-uri 'none'; object-src 'self'; default-src 'self';",
     );
+    res.header('X-Content-Type-Options', 'nosniff');
 
-    if (!inlineFileExtensions.includes(attachment.fileExt)) {
+    // SVG files can carry inline JavaScript via <script> or <foreignObject>.
+    // Force download so they're never rendered inline from our origin.
+    const isSvg = attachment.fileExt === '.svg';
+    if (isSvg || !inlineFileExtensions.includes(attachment.fileExt)) {
       res.header(
         'Content-Disposition',
         `attachment; filename="${encodeURIComponent(attachment.fileName)}"`,
@@ -527,7 +623,6 @@ export class AttachmentController {
       'Cache-Control': `${cacheScope}, max-age=3600`,
     });
 
-    const isSvg = attachment.fileExt === '.svg';
     if (fileSize && !isSvg) {
       res.header('Content-Length', fileSize);
     }

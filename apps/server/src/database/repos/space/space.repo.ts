@@ -89,11 +89,17 @@ export class SpaceRepo {
       .executeTakeFirst();
   }
 
-  async updateSharingSettings(
+  /**
+   * Per-key setters for spaces.settings.* — replaces the old generic
+   * updateSharingSettings/updateCommentSettings methods that interpolated
+   * a caller-supplied string as a SQL identifier via sql.raw().
+   */
+  private updateSettingsSection<TValue extends string | boolean>(
     spaceId: string,
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    section: string,
+    key: string,
+    value: TValue,
     trx?: KyselyTransaction,
   ) {
     const db = dbOrTx(this.db, trx);
@@ -101,8 +107,8 @@ export class SpaceRepo {
       .updateTable('spaces')
       .set({
         settings: sql`COALESCE(settings, '{}'::jsonb)
-          || jsonb_build_object('sharing', COALESCE(settings->'sharing', '{}'::jsonb)
-          || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
+          || jsonb_build_object(${sql.lit(section)}, COALESCE(settings->${sql.lit(section)}, '{}'::jsonb)
+          || jsonb_build_object(${sql.lit(key)}, ${sql.lit(value)}))`,
         updatedAt: new Date(),
       })
       .where('id', '=', spaceId)
@@ -111,26 +117,36 @@ export class SpaceRepo {
       .executeTakeFirst();
   }
 
-  async updateCommentSettings(
+  setSharingDisabled(
     spaceId: string,
     workspaceId: string,
-    prefKey: string,
-    prefValue: string | boolean,
+    value: boolean,
     trx?: KyselyTransaction,
   ) {
-    const db = dbOrTx(this.db, trx);
-    return db
-      .updateTable('spaces')
-      .set({
-        settings: sql`COALESCE(settings, '{}'::jsonb)
-          || jsonb_build_object('comments', COALESCE(settings->'comments', '{}'::jsonb)
-          || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
-        updatedAt: new Date(),
-      })
-      .where('id', '=', spaceId)
-      .where('workspaceId', '=', workspaceId)
-      .returningAll()
-      .executeTakeFirst();
+    return this.updateSettingsSection(
+      spaceId,
+      workspaceId,
+      'sharing',
+      'disabled',
+      value,
+      trx,
+    );
+  }
+
+  setAllowViewerComments(
+    spaceId: string,
+    workspaceId: string,
+    value: boolean,
+    trx?: KyselyTransaction,
+  ) {
+    return this.updateSettingsSection(
+      spaceId,
+      workspaceId,
+      'comments',
+      'allowViewerComments',
+      value,
+      trx,
+    );
   }
 
   async insertSpace(

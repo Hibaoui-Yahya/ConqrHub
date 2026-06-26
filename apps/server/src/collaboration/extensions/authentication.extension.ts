@@ -59,6 +59,13 @@ export class AuthenticationExtension implements Extension {
       throw new NotFoundException('Page not found');
     }
 
+    if (page.workspaceId !== workspaceId) {
+      this.logger.warn(
+        `User ${user.id} attempted cross-workspace collab connect to ${pageId}`,
+      );
+      throw new UnauthorizedException();
+    }
+
     const userSpaceRoles = await this.spaceMemberRepo.getUserSpaceRoles(
       user.id,
       page.spaceId,

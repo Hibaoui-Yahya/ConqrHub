@@ -16,7 +16,36 @@ import { getSpaceRoomName, getUserRoomName } from './ws.utils';
 import * as cookie from 'cookie';
 
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: {
+    credentials: true,
+    // Fail-open guard: if APP_URL is missing/unparseable, accept any
+    // origin rather than blocking every WebSocket upgrade. See main.ts
+    // for the rationale.
+    origin: (origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) => {
+      if (!origin) return cb(null, true);
+      const rawAppUrl = process.env.APP_URL;
+      if (!rawAppUrl) return cb(null, true); // fail-open
+      let allowedOrigin: string | null = null;
+      try {
+        allowedOrigin = new URL(rawAppUrl).origin;
+      } catch {
+        return cb(null, true); // fail-open on unparseable APP_URL
+      }
+      if (origin === allowedOrigin) return cb(null, true);
+      const subdomainHost = process.env.SUBDOMAIN_HOST;
+      if (subdomainHost) {
+        try {
+          const host = new URL(origin).host;
+          if (host === subdomainHost || host.endsWith('.' + subdomainHost)) {
+            return cb(null, true);
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      return cb(new Error('Origin not allowed by CORS'));
+    },
+  },
   transports: ['websocket'],
 })
 export class WsGateway

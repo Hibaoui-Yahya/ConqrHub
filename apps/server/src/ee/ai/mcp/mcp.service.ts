@@ -53,35 +53,51 @@ export class McpService {
     '2024-11-05',
   ];
 
-  private readonly transport: StreamableHTTPServerTransport;
   private readonly jsonSchemaCache = new Map<string, unknown>();
 
-  constructor(private readonly toolRegistry: ChatToolRegistry) {
-    this.transport = new StreamableHTTPServerTransport({
+  constructor(private readonly toolRegistry: ChatToolRegistry) {}
+
+  /**
+   * Build a fresh StreamableHTTPServerTransport for a single request.
+   *
+   * The previous singleton transport accumulated internal session state
+   * (`_streamMapping`, `_requestToStreamMapping`, `_requestResponseMap`)
+   * across every concurrent caller — under load this is unbounded memory
+   * growth and a cross-session leak hazard. Per-request instantiation
+   * keeps each request's state isolated and lets the GC reclaim it when
+   * the response stream closes.
+   */
+  private buildTransport(ctx: McpContext): StreamableHTTPServerTransport {
+    const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
-    this.transport.onmessage = async (
+    transport.onmessage = async (
       message: JSONRPCMessage,
       extra?: MessageExtraInfo,
     ) => {
       try {
-        const ctx = extra?.authInfo?.extra as unknown as McpContext | undefined;
+        const messageCtx =
+          (extra?.authInfo?.extra as unknown as McpContext | undefined) ?? ctx;
 
         if ('method' in message) {
+          if (!messageCtx?.user?.id || !messageCtx?.workspace?.id) {
+            throw new Error('Unauthorized: missing session context');
+          }
           const result = await this.handleRequest(
             { method: message.method, params: (message as any).params },
-            ctx ?? { user: {} as User, workspace: {} as Workspace },
+            messageCtx,
           );
-          await this.transport.send({
+          await transport.send({
             jsonrpc: '2.0',
             id: (message as any).id,
             result,
           } as JSONRPCMessage);
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Internal error';
-        await this.transport.send({
+        const errorMessage =
+          err instanceof Error ? err.message : 'Internal error';
+        await transport.send({
           jsonrpc: '2.0',
           id: (message as any).id ?? 0,
           error: { code: -32603, message: errorMessage },
@@ -89,9 +105,11 @@ export class McpService {
       }
     };
 
-    this.transport.onclose = () => {
-      this.logger.log('MCP stream transport closed');
+    transport.onclose = () => {
+      this.logger.debug('MCP stream transport closed (per-request)');
     };
+
+    return transport;
   }
 
   async handleStreamRequest(
@@ -107,7 +125,25 @@ export class McpService {
       extra: ctx as unknown as Record<string, unknown>,
     } as AuthInfo;
 
-    await this.transport.handleRequest(req, res, parsedBody);
+    const transport = this.buildTransport(ctx);
+    try {
+      await transport.handleRequest(req, res, parsedBody);
+    } finally {
+      // Help the SDK release any internal stream-map entries it kept
+      // alive past the response — best-effort, since older SDK versions
+      // don't expose a close() method.
+      const maybeClose = (transport as unknown as { close?: () => unknown })
+        .close;
+      if (typeof maybeClose === 'function') {
+        try {
+          await maybeClose.call(transport);
+        } catch (err) {
+          this.logger.debug(
+            `MCP transport close error: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
   }
 
   async handleRequest(

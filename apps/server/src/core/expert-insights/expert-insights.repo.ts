@@ -89,23 +89,29 @@ export class ExpertInsightsRepo {
       .executeTakeFirstOrThrow();
   }
 
-  async findById(id: string): Promise<InsightRow | undefined> {
+  async findById(
+    id: string,
+    workspaceId: string,
+  ): Promise<InsightRow | undefined> {
     return (this.db as any)
       .selectFrom('expertInsights')
       .selectAll()
       .where('id', '=', id)
+      .where('workspaceId', '=', workspaceId)
       .where('deletedAt', 'is', null)
       .executeTakeFirst();
   }
 
   async findByPage(
     pageId: string,
+    workspaceId: string,
     status?: ExpertInsightStatus,
   ): Promise<InsightRow[]> {
     let query = (this.db as any)
       .selectFrom('expertInsights')
       .selectAll()
       .where('pageId', '=', pageId)
+      .where('workspaceId', '=', workspaceId)
       .where('deletedAt', 'is', null)
       .orderBy('createdAt', 'asc');
 

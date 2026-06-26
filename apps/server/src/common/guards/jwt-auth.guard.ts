@@ -46,17 +46,28 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const res = ctx.switchToHttp().getResponse();
 
       const workspaceId = user?.workspace?.id;
-      let workspaceIds = [];
+      let workspaceIds: string[] = [];
       try {
-        workspaceIds = req.cookies.joinedWorkspaces
+        const parsed = req.cookies.joinedWorkspaces
           ? JSON.parse(req.cookies.joinedWorkspaces)
           : [];
+        if (Array.isArray(parsed)) {
+          workspaceIds = parsed.filter((id) => typeof id === 'string');
+        }
       } catch (err) {
         /* empty */
       }
 
       if (!workspaceIds.includes(workspaceId)) {
         workspaceIds.push(workspaceId);
+      }
+
+      // Cap the list so the cookie can't grow past the 4 KB browser limit
+      // and silently break auth. Keep the most recent N (current entry is
+      // pushed to the end above).
+      const MAX_JOINED_WORKSPACES = 50;
+      if (workspaceIds.length > MAX_JOINED_WORKSPACES) {
+        workspaceIds = workspaceIds.slice(-MAX_JOINED_WORKSPACES);
       }
 
       res.setCookie('joinedWorkspaces', JSON.stringify(workspaceIds), {

@@ -51,19 +51,21 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
     isEmpty: boolean;
   }> {
     if (args.spaceId) {
+      let ability;
       try {
-        const ability = await this.spaceAbility.createForUser(
+        ability = await this.spaceAbility.createForUser(
           ctx.user,
           args.spaceId,
         );
-        if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-          throw new ForbiddenException(
-            `You do not have access to space ${args.spaceId}`,
-          );
-        }
-      } catch (err) {
-        if (err instanceof ForbiddenException) throw err;
-        // Space permissions lookup failed — proceed with workspace-scoped search
+      } catch {
+        throw new ForbiddenException(
+          `You do not have access to space ${args.spaceId}`,
+        );
+      }
+      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+        throw new ForbiddenException(
+          `You do not have access to space ${args.spaceId}`,
+        );
       }
     }
 

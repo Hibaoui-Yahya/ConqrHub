@@ -39,11 +39,16 @@ export class DeleteCommentTool implements ChatTool, OnModuleInit {
     args: { commentId: string },
     ctx: ChatToolContext,
   ): Promise<{ success: true; commentId: string }> {
-    const comment = await this.commentRepo.findById(args.commentId);
+    const comment = await this.commentRepo.findById(
+      args.commentId,
+      ctx.workspaceId,
+    );
     if (!comment) throw new NotFoundException('Comment not found');
 
     const page = await this.pageService.findById(comment.pageId);
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page || page.workspaceId !== ctx.workspaceId) {
+      throw new NotFoundException('Page not found');
+    }
 
     const isOwner = comment.creatorId === ctx.user.id;
     if (!isOwner) {
@@ -56,7 +61,7 @@ export class DeleteCommentTool implements ChatTool, OnModuleInit {
       }
     }
 
-    await this.commentRepo.deleteComment(comment.id);
+    await this.commentRepo.deleteComment(comment.id, ctx.workspaceId);
     return { success: true, commentId: args.commentId };
   }
 }

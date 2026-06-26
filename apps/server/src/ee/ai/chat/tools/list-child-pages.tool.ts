@@ -46,17 +46,22 @@ export class ListChildPagesTool implements ChatTool, OnModuleInit {
     ctx: ChatToolContext,
   ): Promise<{ id: string; title: string | null; slugId: string; hasChildren: boolean }[]> {
     const page = await this.pageService.findById(args.pageId);
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page || page.workspaceId !== ctx.workspaceId) {
+      throw new NotFoundException('Page not found');
+    }
 
+    let ability;
     try {
-      const ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
-      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException(
-          `You do not have access to page ${args.pageId}`,
-        );
-      }
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
+      ability = await this.spaceAbility.createForUser(ctx.user, page.spaceId);
+    } catch {
+      throw new ForbiddenException(
+        `You do not have access to page ${args.pageId}`,
+      );
+    }
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException(
+        `You do not have access to page ${args.pageId}`,
+      );
     }
 
     const { items } = await this.pageService.getSidebarPages(

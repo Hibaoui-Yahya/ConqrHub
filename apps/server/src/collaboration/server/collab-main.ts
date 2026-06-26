@@ -29,7 +29,45 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api', { exclude: ['/'] });
 
-  app.enableCors();
+  // Fail-open guard: if APP_URL is missing/unparseable, log loudly and
+  // accept any origin rather than locking out every browser connecting
+  // to the collab WebSocket. See main.ts for the rationale.
+  const corsLogger = new Logger('CollabCORS');
+  const rawAppUrl = process.env.APP_URL;
+  let allowedOrigin: string | null = null;
+  if (rawAppUrl) {
+    try {
+      allowedOrigin = new URL(rawAppUrl).origin;
+    } catch {
+      corsLogger.warn(
+        `APP_URL is set but unparseable: "${rawAppUrl}". Collab CORS is permissive.`,
+      );
+    }
+  } else {
+    corsLogger.warn(
+      'APP_URL is not set. Collab CORS is permissive — set APP_URL to lock down origins.',
+    );
+  }
+  const subdomainHost = process.env.SUBDOMAIN_HOST;
+  app.enableCors({
+    credentials: true,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (!allowedOrigin) return cb(null, true);
+      if (origin === allowedOrigin) return cb(null, true);
+      if (subdomainHost) {
+        try {
+          const host = new URL(origin).host;
+          if (host === subdomainHost || host.endsWith('.' + subdomainHost)) {
+            return cb(null, true);
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      return cb(new Error('Origin not allowed by CORS'), false);
+    },
+  });
 
   const reflector = app.get(Reflector);
   app.useGlobalInterceptors(new TransformHttpResponseInterceptor(reflector));

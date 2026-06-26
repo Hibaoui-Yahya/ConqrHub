@@ -46,17 +46,15 @@ export class UserService {
 
     // preference update
     if (typeof updateUserDto.fullPageWidth !== 'undefined') {
-      return this.userRepo.updatePreference(
+      return this.userRepo.setFullPageWidth(
         userId,
-        'fullPageWidth',
         updateUserDto.fullPageWidth,
       );
     }
 
     if (typeof updateUserDto.pageEditMode !== 'undefined') {
-      return this.userRepo.updatePreference(
+      return this.userRepo.setPageEditMode(
         userId,
-        'pageEditMode',
         updateUserDto.pageEditMode.toLowerCase(),
       );
     }

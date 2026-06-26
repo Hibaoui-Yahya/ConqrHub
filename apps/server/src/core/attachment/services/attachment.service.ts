@@ -62,6 +62,7 @@ export class AttachmentService {
     if (opts?.attachmentId) {
       const existingAttachment = await this.attachmentRepo.findById(
         opts.attachmentId,
+        workspaceId,
       );
       if (!existingAttachment) {
         throw new NotFoundException(
@@ -71,8 +72,7 @@ export class AttachmentService {
 
       if (
         existingAttachment.pageId !== pageId ||
-        existingAttachment.fileExt !== preparedFile.fileExtension ||
-        existingAttachment.workspaceId !== workspaceId
+        existingAttachment.fileExt !== preparedFile.fileExtension
       ) {
         throw new BadRequestException('File attachment does not match');
       }
@@ -133,8 +133,12 @@ export class AttachmentService {
         );
       }
     } catch (err) {
-      // delete uploaded file on error
+      // delete uploaded file on db write failure so storage doesn't leak
       this.logger.error(err);
+      await this.deleteRedundantFile(filePath);
+      throw err instanceof BadRequestException || err instanceof NotFoundException
+        ? err
+        : new BadRequestException('Failed to upload file');
     }
 
     return attachment;

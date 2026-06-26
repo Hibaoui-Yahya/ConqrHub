@@ -43,19 +43,22 @@ export class GetSpaceTool implements ChatTool, OnModuleInit {
     description: string | null;
     createdAt: string;
   }> {
-    try {
-      const ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
-      if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
-        throw new ForbiddenException(
-          `You do not have access to space ${args.spaceId}`,
-        );
-      }
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
-    }
-
     const space = await this.spaceService.getSpaceInfo(args.spaceId, ctx.workspaceId);
     if (!space) throw new NotFoundException('Space not found');
+
+    let ability;
+    try {
+      ability = await this.spaceAbility.createForUser(ctx.user, args.spaceId);
+    } catch {
+      throw new ForbiddenException(
+        `You do not have access to space ${args.spaceId}`,
+      );
+    }
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException(
+        `You do not have access to space ${args.spaceId}`,
+      );
+    }
 
     return {
       id: space.id,

@@ -311,6 +311,8 @@ export class AiChatStreamService {
     const toolCalls: AccumulatedToolCall[] = [];
     // Track partial tool call input accumulation.
     const partialToolInputs: Record<string, string> = {};
+    // Token usage from the model's finish part, surfaced on the done event.
+    let usage: { totalTokens?: number } | undefined;
 
     for await (const part of stream.fullStream) {
       switch (part.type) {
@@ -356,6 +358,34 @@ export class AiChatStreamService {
           break;
         }
 
+        case 'tool-error': {
+          // A tool's execute() threw. The SDK feeds the error back to the
+          // model so it can recover, but the client has already rendered a
+          // pending tool_call — without a matching tool_result it spins
+          // forever. Resolve it with an error payload so the UI settles, and
+          // record the error as the tool result for history replay.
+          const err = (part as any).error;
+          const errorResult = {
+            error: err instanceof Error ? err.message : String(err),
+          };
+          const tc = toolCalls.find((t) => t.id === (part as any).toolCallId);
+          if (tc) tc.result = errorResult;
+          sseWrite(reply, {
+            type: 'tool_result',
+            id: (part as any).toolCallId,
+            result: errorResult,
+          });
+          break;
+        }
+
+        case 'finish': {
+          const total = (part as any).totalUsage ?? (part as any).usage;
+          if (total && typeof total.totalTokens === 'number') {
+            usage = { totalTokens: total.totalTokens };
+          }
+          break;
+        }
+
         case 'error': {
           const message =
             part.error instanceof Error
@@ -364,8 +394,26 @@ export class AiChatStreamService {
           throw new Error(message);
         }
 
-        // finish and other parts are silently consumed.
+        // Other parts are silently consumed.
       }
+    }
+
+    // The model can finish a turn without emitting any visible text — most
+    // commonly when it only runs tools (e.g. a rag_retrieve / search_pages
+    // lookup) and stops, or returns an empty completion. Without a guard the
+    // user sees a blank assistant bubble and no error: "the first pass provides
+    // nothing". Surface a fallback so the turn is always actionable, and log
+    // the shape of the empty turn so the real trigger can be root-caused.
+    if (!textBuffer.trim()) {
+      this.logger.warn(
+        `Empty assistant turn: chatId=${chatId} newChat=${isNewChat} ` +
+          `toolCalls=${toolCalls.length} historyLen=${modelMessages.length}`,
+      );
+      const fallback = toolCalls.length
+        ? 'I looked up the workspace but could not put together an answer. Please rephrase or try again.'
+        : 'I could not generate a response. Please try again.';
+      textBuffer = fallback;
+      sseWrite(reply, { type: 'content', text: fallback });
     }
 
     // Compute confidence signals from grounded tool calls.
@@ -381,12 +429,13 @@ export class AiChatStreamService {
       toolCalls: toolCalls.length ? (toolCalls as unknown as any) : null,
       confidence: confidence ?? undefined,
       groundedSourceCount: groundedSourceCount || undefined,
-      metadata: null,
+      metadata: usage ? { tokenUsage: usage } : null,
     });
 
     sseWrite(reply, {
       type: 'done',
       messageId: assistantMsg.id,
+      ...(usage ? { usage } : {}),
     });
     reply.raw.write('data: [DONE]\n\n');
 

@@ -196,12 +196,10 @@ export class BrokenLinksService {
     failed: number;
     externalsChecked: number;
   }> {
-    const pages = (await this.db
-      .selectFrom('pages')
-      .select(['id', 'workspaceId', 'spaceId', 'content'])
-      .where('workspaceId', '=', workspaceId)
-      .where('deletedAt', 'is', null)
-      .execute()) as unknown as PageRow[];
+    // Stream pages in id-cursor batches instead of loading the full
+    // workspace into memory. A workspace with thousands of rich-content
+    // pages can otherwise OOM the Node process during this weekly cron.
+    const BATCH_SIZE = 200;
 
     // Phase 1: collect all unique external URLs across the workspace so we
     // can batch-check them once, even if 100 pages link to the same URL.
@@ -210,19 +208,24 @@ export class BrokenLinksService {
 
     if (this.linkChecker.isEnabled()) {
       const externalUrls = new Set<string>();
-      for (const p of pages) {
-        try {
-          const links = BrokenLinksService.extractLinks(p.content);
-          for (const l of links) {
-            if (l.kind === 'external') externalUrls.add(l.href);
+
+      for await (const batch of this.iteratePagesByCursor(
+        workspaceId,
+        BATCH_SIZE,
+      )) {
+        for (const p of batch) {
+          try {
+            const links = BrokenLinksService.extractLinks(p.content);
+            for (const l of links) {
+              if (l.kind === 'external') externalUrls.add(l.href);
+            }
+          } catch (err) {
+            const message =
+              err instanceof Error ? err.message : 'Unknown error';
+            this.logger.warn(
+              `Failed to extract links from page ${p.id}: ${message}`,
+            );
           }
-        } catch (err) {
-          // Don't let one malformed page block the whole batch.
-          const message =
-            err instanceof Error ? err.message : 'Unknown error';
-          this.logger.warn(
-            `Failed to extract links from page ${p.id}: ${message}`,
-          );
         }
       }
 
@@ -234,29 +237,64 @@ export class BrokenLinksService {
       }
     }
 
-    // Phase 2: per-page, validate internal slugs and pair external links
-    // with the batch-check results. Per-page failures don't stop the run.
+    // Phase 2: per-page (still in batches), validate internal slugs and
+    // pair external links with the batch-check results.
     let pagesScanned = 0;
     let pagesBroken = 0;
     let failed = 0;
-    for (const p of pages) {
-      try {
-        const result = await this.scanPage({
-          pageId: p.id,
-          workspaceId: p.workspaceId,
-          spaceId: p.spaceId,
-          content: p.content,
-          externalResults,
-        });
-        pagesScanned += 1;
-        if (result.broken > 0) pagesBroken += 1;
-      } catch (err) {
-        failed += 1;
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        this.logger.error(`Failed to scan page ${p.id}: ${message}`);
+
+    for await (const batch of this.iteratePagesByCursor(
+      workspaceId,
+      BATCH_SIZE,
+    )) {
+      for (const p of batch) {
+        try {
+          const result = await this.scanPage({
+            pageId: p.id,
+            workspaceId: p.workspaceId,
+            spaceId: p.spaceId,
+            content: p.content,
+            externalResults,
+          });
+          pagesScanned += 1;
+          if (result.broken > 0) pagesBroken += 1;
+        } catch (err) {
+          failed += 1;
+          const message =
+            err instanceof Error ? err.message : 'Unknown error';
+          this.logger.error(`Failed to scan page ${p.id}: ${message}`);
+        }
       }
     }
     return { pagesScanned, pagesBroken, failed, externalsChecked };
+  }
+
+  /**
+   * Yields pages of a workspace in id-cursor batches so we never hold the
+   * full workspace's content in memory at once.
+   */
+  private async *iteratePagesByCursor(
+    workspaceId: string,
+    batchSize: number,
+  ): AsyncGenerator<PageRow[], void, void> {
+    let cursor: string | null = null;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let query = this.db
+        .selectFrom('pages')
+        .select(['id', 'workspaceId', 'spaceId', 'content'])
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is', null)
+        .orderBy('id', 'asc')
+        .limit(batchSize);
+      if (cursor) query = query.where('id', '>', cursor);
+
+      const rows = (await query.execute()) as unknown as PageRow[];
+      if (rows.length === 0) return;
+      yield rows;
+      if (rows.length < batchSize) return;
+      cursor = rows[rows.length - 1].id;
+    }
   }
 
   async scanAll(): Promise<{
