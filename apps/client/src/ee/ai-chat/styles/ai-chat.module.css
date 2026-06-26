@@ -9,9 +9,11 @@
   display: flex;
   flex-direction: column;
   height: calc(100vh - 45px - 2 * var(--mantine-spacing-md));
-  max-width: 900px;
-  margin: 0 auto;
+  /* Full width so the scroll bar sits at the far right of the content area,
+     not in the middle. The conversation content itself is centered to a
+     readable column via per-message + composer max-widths below. */
   width: 100%;
+  min-width: 0;
 }
 
 .messageListWrapper {
@@ -35,6 +37,9 @@
      short chat doesn't leave a large empty gap; long chats still scroll. */
   display: flex;
   flex-direction: column;
+  /* Center the message column horizontally; the list itself stays full width
+     so its scrollbar sits at the far right. */
+  align-items: center;
 }
 
 .messageList > :first-child {
@@ -85,6 +90,13 @@
 
 .inputArea {
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-lg) var(--mantine-spacing-lg);
+}
+
+/* Keep the composer aligned with the (centered) message column. */
+.inputArea > * {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Empty state — clean, welcoming, centered */
