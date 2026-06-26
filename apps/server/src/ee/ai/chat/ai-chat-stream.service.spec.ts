@@ -445,6 +445,132 @@ describe('AiChatStreamService.send()', () => {
     });
   });
 
+  describe('empty model output (the "first pass provides nothing" bug)', () => {
+    it('emits a fallback content event when a tool-only turn produces no text', async () => {
+      // Model runs a lookup and then stops without composing an answer — the
+      // user would otherwise see a blank assistant bubble and no error.
+      const ai = makeAiProvider([
+        {
+          type: 'tool-call',
+          toolCallId: 'tc-1',
+          toolName: 'search_pages',
+          input: { query: 'auth' },
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'tc-1',
+          toolName: 'search_pages',
+          output: [{ id: 'p1' }],
+        },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 5 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const parsed = parseSseEvents(events);
+      const contentEvents = parsed.filter((e) => e.type === 'content');
+      expect(contentEvents.length).toBeGreaterThan(0);
+      expect(contentEvents.map((e) => e.text).join('')).not.toBe('');
+    });
+
+    it('persists the fallback text instead of a null assistant message', async () => {
+      const ai = makeAiProvider([
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 0 } },
+      ]);
+      const msgRepo = makeMessageRepo();
+      const { reply } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), msgRepo);
+
+      await svc.send(DTO, USER, reply);
+
+      const calls = (msgRepo.insert as jest.Mock).mock.calls;
+      const assistantMsg = calls.find((c: any[]) => c[0].role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      expect(typeof assistantMsg[0].content).toBe('string');
+      expect((assistantMsg[0].content as string).length).toBeGreaterThan(0);
+    });
+
+    it('still emits a done event after the fallback', async () => {
+      const ai = makeAiProvider([
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 0 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const parsed = parseSseEvents(events);
+      expect(parsed.find((e) => e.type === 'done')).toBeDefined();
+      expect(parsed[parsed.length - 1].type).toBe('__DONE__');
+    });
+  });
+
+  describe('tool errors', () => {
+    it('emits a tool_result so a failed tool does not leave the UI pending', async () => {
+      const ai = makeAiProvider([
+        {
+          type: 'tool-call',
+          toolCallId: 'tc-1',
+          toolName: 'search_pages',
+          input: { query: 'auth' },
+        },
+        {
+          type: 'tool-error',
+          toolCallId: 'tc-1',
+          toolName: 'search_pages',
+          error: new Error('search backend down'),
+        },
+        { type: 'text-delta', id: 't1', text: 'I hit an error searching.' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 7 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const parsed = parseSseEvents(events);
+      const toolResult = parsed.find((e) => e.type === 'tool_result');
+      expect(toolResult).toBeDefined();
+      expect(toolResult.id).toBe('tc-1');
+      expect(toolResult.result.error).toContain('search backend down');
+    });
+  });
+
+  describe('token usage', () => {
+    it('includes usage on the done event when the model reports it', async () => {
+      const ai = makeAiProvider([
+        { type: 'text-delta', id: 't1', text: 'Answer.' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 42 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const parsed = parseSseEvents(events);
+      const done = parsed.find((e) => e.type === 'done');
+      expect(done.usage).toEqual({ totalTokens: 42 });
+    });
+
+    it('persists tokenUsage metadata on the assistant message', async () => {
+      const ai = makeAiProvider([
+        { type: 'text-delta', id: 't1', text: 'Answer.' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 42 } },
+      ]);
+      const msgRepo = makeMessageRepo();
+      const { reply } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), msgRepo);
+
+      await svc.send(DTO, USER, reply);
+
+      const calls = (msgRepo.insert as jest.Mock).mock.calls;
+      const assistantMsg = calls.find((c: any[]) => c[0].role === 'assistant');
+      expect(assistantMsg[0].metadata).toEqual({ tokenUsage: { totalTokens: 42 } });
+    });
+  });
+
   describe('error in stream', () => {
     it('does not persist an assistant message when the stream raises an error part', async () => {
       const ai = makeAiProvider([
