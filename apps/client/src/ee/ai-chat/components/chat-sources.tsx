@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Badge } from "@mantine/core";
 import {
   IconChevronDown,
@@ -7,6 +8,7 @@ import {
   IconSparkles,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { buildPageUrl } from "@/features/page/page.utils.ts";
 import type { AiChatSource } from "../types/ai-chat.types";
 import classes from "../styles/chat-message.module.css";
 
@@ -68,22 +70,43 @@ export default function ChatSources({
 
       {hasSources && expanded && (
         <ul className={classes.sourcesList}>
-          {sources!.map((s) => (
-            <li key={s.sourceId} className={classes.sourceItem}>
-              {s.kind === "expert_insight" ? (
+          {sources!.map((s) => {
+            const icon =
+              s.kind === "expert_insight" ? (
                 <IconSparkles size={13} className={classes.sourceIcon} />
               ) : (
                 <IconFileText size={13} className={classes.sourceIcon} />
-              )}
-              {s.label && <span className={classes.sourceLabel}>{s.label}</span>}
-              <span className={classes.sourceTitle}>
-                {s.title || t("Untitled")}
-              </span>
+              );
+            const title = s.title || t("Untitled");
+            const score = (
               <span className={classes.sourceScore}>
                 {Math.round(s.score * 100)}%
               </span>
-            </li>
-          ))}
+            );
+            // Deep-link with a relative in-app path (stays on the current host)
+            // when we know the page's space + slug; otherwise plain text.
+            const linkable =
+              s.kind === "page" && s.spaceSlug && s.slugId;
+            return (
+              <li key={s.sourceId} className={classes.sourceItem}>
+                {icon}
+                {s.label && (
+                  <span className={classes.sourceLabel}>{s.label}</span>
+                )}
+                {linkable ? (
+                  <Link
+                    to={buildPageUrl(s.spaceSlug!, s.slugId!, s.title ?? undefined)}
+                    className={classes.sourceTitleLink}
+                  >
+                    {title}
+                  </Link>
+                ) : (
+                  <span className={classes.sourceTitle}>{title}</span>
+                )}
+                {score}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

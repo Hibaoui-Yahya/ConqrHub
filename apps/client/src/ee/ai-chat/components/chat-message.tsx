@@ -23,12 +23,29 @@ import CopyTextButton from "@/components/common/copy.tsx";
 
 const chatSanitizer = DOMPurify();
 chatSanitizer.addHook("afterSanitizeAttributes", (node) => {
-  if (node.tagName === "A") {
-    const href = node.getAttribute("href") || "";
-    if (href.startsWith("http://") || href.startsWith("https://")) {
-      node.setAttribute("target", "_blank");
-      node.setAttribute("rel", "noopener noreferrer");
+  if (node.tagName !== "A") return;
+  const href = node.getAttribute("href") || "";
+
+  // The model often links workspace pages with an absolute URL and guesses the
+  // wrong host (e.g. conqrhub.com instead of app.conqrhub.com). Any link whose
+  // path is an in-app page route (/s/... or /p/...) is rewritten to a relative
+  // path so it navigates within the current app host via the router — never
+  // bouncing to another domain. Host-agnostic, so it works for any deployment.
+  try {
+    const u = new URL(href, window.location.origin);
+    if (u.pathname.startsWith("/s/") || u.pathname.startsWith("/p/")) {
+      node.setAttribute("href", u.pathname + u.search + u.hash);
+      node.removeAttribute("target");
+      node.removeAttribute("rel");
+      return;
     }
+  } catch {
+    // Not a parseable URL — fall through.
+  }
+
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noopener noreferrer");
   }
 });
 
