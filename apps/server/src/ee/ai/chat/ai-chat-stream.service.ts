@@ -99,6 +99,63 @@ function computeConfidence(toolCalls: AccumulatedToolCall[]): {
   return { groundedSourceCount, confidence };
 }
 
+export interface ChatSource {
+  label: string;
+  title: string | null;
+  sourceId: string;
+  kind: string;
+  score: number;
+}
+
+/**
+ * Collects the grounded sources behind an answer (from rag_retrieve and
+ * search_pages tool results) for display under the message. Deduped by
+ * sourceId keeping the highest score, sorted most-relevant first.
+ */
+function buildSources(toolCalls: AccumulatedToolCall[]): ChatSource[] {
+  const byId = new Map<string, ChatSource>();
+
+  const consider = (s: ChatSource) => {
+    const existing = byId.get(s.sourceId);
+    if (!existing || s.score > existing.score) byId.set(s.sourceId, s);
+  };
+
+  for (const tc of toolCalls) {
+    if (tc.name === 'rag_retrieve' && tc.result && typeof tc.result === 'object') {
+      const r = tc.result as {
+        chunks?: Array<{
+          label?: string;
+          title?: string | null;
+          sourceId: string;
+          kind?: string;
+          score: number;
+        }>;
+      };
+      for (const c of r.chunks ?? []) {
+        consider({
+          label: c.label ?? '',
+          title: c.title ?? null,
+          sourceId: c.sourceId,
+          kind: c.kind ?? 'page',
+          score: c.score,
+        });
+      }
+    } else if (tc.name === 'search_pages' && Array.isArray(tc.result)) {
+      for (const item of tc.result as Array<{ id: string; title?: string | null }>) {
+        consider({
+          label: '',
+          title: item.title ?? null,
+          sourceId: item.id,
+          kind: 'page',
+          score: 0.75,
+        });
+      }
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => b.score - a.score);
+}
+
 function sseWrite(reply: FastifyReply, data: unknown): void {
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
 }
@@ -416,10 +473,12 @@ export class AiChatStreamService {
       sseWrite(reply, { type: 'content', text: fallback });
     }
 
-    // Compute confidence signals from grounded tool calls.
+    // Compute confidence signals + the grounded sources behind the answer.
     const { groundedSourceCount, confidence } = computeConfidence(toolCalls);
+    const sources = buildSources(toolCalls);
 
-    // Persist the assistant message.
+    // Persist the assistant message. Sources/confidence go into metadata so a
+    // re-opened chat shows the same grounding the live stream did.
     const assistantMsg = await this.messageRepo.insert({
       chatId,
       workspaceId: user.workspaceId,
@@ -429,13 +488,21 @@ export class AiChatStreamService {
       toolCalls: toolCalls.length ? (toolCalls as unknown as any) : null,
       confidence: confidence ?? undefined,
       groundedSourceCount: groundedSourceCount || undefined,
-      metadata: usage ? { tokenUsage: usage } : null,
+      metadata: {
+        ...(usage ? { tokenUsage: usage } : {}),
+        ...(confidence != null ? { confidence } : {}),
+        ...(groundedSourceCount ? { groundedSourceCount } : {}),
+        ...(sources.length ? { sources } : {}),
+      } as unknown as any,
     });
 
     sseWrite(reply, {
       type: 'done',
       messageId: assistantMsg.id,
       ...(usage ? { usage } : {}),
+      confidence,
+      groundedSourceCount,
+      sources,
     });
     reply.raw.write('data: [DONE]\n\n');
 

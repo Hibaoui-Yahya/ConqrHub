@@ -14,13 +14,20 @@ function makeRepo(results: SimilarityResult[] = []): jest.Mocked<Pick<EmbeddingR
   return { similaritySearch: jest.fn().mockResolvedValue(results) } as any;
 }
 
+// minScore 0 = no relevance filtering, preserving pre-threshold behavior.
+function makeEnv(minScore = 0): any {
+  return { getAiRagMinScore: jest.fn().mockReturnValue(minScore) };
+}
+
 function makeSvc(
   results: SimilarityResult[] = [],
   embedding: number[] = [0.1],
+  minScore = 0,
 ): RagRetrievalService {
   return new RagRetrievalService(
     makeAiProvider(embedding) as any,
     makeRepo(results) as any,
+    makeEnv(minScore) as any,
   );
 }
 
@@ -227,11 +234,39 @@ describe('RagRetrievalService.assembleContext()', () => {
     });
   });
 
+  describe('retrieve() — relevance floor', () => {
+    it('drops chunks scoring below the configured minimum', async () => {
+      const ai = makeAiProvider([0.1]);
+      const repo = makeRepo([
+        makeResult({ sourceKind: 'page', chunkText: 'strong', sourceId: 'p1', score: 0.9 }),
+        makeResult({ sourceKind: 'page', chunkText: 'weak', sourceId: 'p2', score: 0.3 }),
+      ]);
+      const svc = new RagRetrievalService(ai as any, repo as any, makeEnv(0.5) as any);
+
+      const ctx = await svc.retrieve({ question: 'Q', workspaceId: 'ws', spaceId: 'sp' });
+
+      expect(ctx.chunks.map((c) => c.sourceId)).toEqual(['p1']);
+    });
+
+    it('keeps all chunks when min score is 0 (filtering disabled)', async () => {
+      const ai = makeAiProvider([0.1]);
+      const repo = makeRepo([
+        makeResult({ sourceKind: 'page', chunkText: 'a', sourceId: 'p1', score: 0.9 }),
+        makeResult({ sourceKind: 'page', chunkText: 'b', sourceId: 'p2', score: 0.1 }),
+      ]);
+      const svc = new RagRetrievalService(ai as any, repo as any, makeEnv(0) as any);
+
+      const ctx = await svc.retrieve({ question: 'Q', workspaceId: 'ws', spaceId: 'sp' });
+
+      expect(ctx.chunks).toHaveLength(2);
+    });
+  });
+
   describe('retrieve() — integration with embedding and repo', () => {
     it('calls aiProvider.embed with the question', async () => {
       const ai = makeAiProvider([0.5, 0.6]);
       const repo = makeRepo([]);
-      const svc = new RagRetrievalService(ai as any, repo as any);
+      const svc = new RagRetrievalService(ai as any, repo as any, makeEnv() as any);
 
       await svc.retrieve({
         question: 'What is X?',
@@ -245,7 +280,7 @@ describe('RagRetrievalService.assembleContext()', () => {
     it('passes spaceId and pageId filter through to similaritySearch', async () => {
       const ai = makeAiProvider([0.1]);
       const repo = makeRepo([]);
-      const svc = new RagRetrievalService(ai as any, repo as any);
+      const svc = new RagRetrievalService(ai as any, repo as any, makeEnv() as any);
 
       await svc.retrieve({
         question: 'Q',
@@ -269,7 +304,7 @@ describe('RagRetrievalService.assembleContext()', () => {
       const queryVec = [0.3, 0.7, 0.1];
       const ai = makeAiProvider(queryVec);
       const repo = makeRepo([]);
-      const svc = new RagRetrievalService(ai as any, repo as any);
+      const svc = new RagRetrievalService(ai as any, repo as any, makeEnv() as any);
 
       await svc.retrieve({ question: 'Q', workspaceId: 'ws', spaceId: 'sp' });
 

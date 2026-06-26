@@ -139,17 +139,31 @@ export function useChatStream(
               );
               break;
             case "done": {
+              const doneEvent = event;
               setStreamingContent((currentContent) => {
                 setStreamingToolCalls((currentToolCalls) => {
                   const assistantMessage: AiChatMessage = {
-                    id: event.messageId,
+                    id: doneEvent.messageId,
                     chatId: currentChatIdRef.current || "",
                     role: "assistant",
                     content: currentContent || null,
                     toolCalls: currentToolCalls.length
                       ? currentToolCalls
                       : null,
-                    metadata: event.usage ? { tokenUsage: event.usage } : null,
+                    metadata: {
+                      ...(doneEvent.usage
+                        ? { tokenUsage: doneEvent.usage }
+                        : {}),
+                      ...(doneEvent.confidence != null
+                        ? { confidence: doneEvent.confidence }
+                        : {}),
+                      ...(doneEvent.groundedSourceCount
+                        ? { groundedSourceCount: doneEvent.groundedSourceCount }
+                        : {}),
+                      ...(doneEvent.sources?.length
+                        ? { sources: doneEvent.sources }
+                        : {}),
+                    },
                     createdAt: new Date().toISOString(),
                   };
 

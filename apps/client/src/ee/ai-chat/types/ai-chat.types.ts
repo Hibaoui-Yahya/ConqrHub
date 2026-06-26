@@ -24,12 +24,27 @@ export type AiChatMessage = {
   createdAt: string;
 };
 
+export type AiChatSource = {
+  label: string;
+  title: string | null;
+  sourceId: string;
+  kind: string;
+  score: number;
+};
+
 export type AiChatStreamEvent =
   | { type: 'chat_created'; chatId: string }
   | { type: 'content'; text: string }
   | { type: 'tool_call'; id: string; name: string; args: Record<string, unknown> }
   | { type: 'tool_result'; id: string; result: unknown }
-  | { type: 'done'; messageId: string; usage?: Record<string, number> }
+  | {
+      type: 'done';
+      messageId: string;
+      usage?: Record<string, number>;
+      confidence?: number | null;
+      groundedSourceCount?: number;
+      sources?: AiChatSource[];
+    }
   | { type: 'error'; message: string; code?: string; retryable?: boolean };
 
 export type PageMention = {

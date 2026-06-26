@@ -382,6 +382,33 @@ describe('AiChatStreamService.send()', () => {
       });
     });
 
+    it('emits grounded sources and confidence on the done event', async () => {
+      const ragResult = {
+        isEmpty: false,
+        chunks: [
+          { sourceId: 'src-1', score: 0.9, label: 'P1', kind: 'page', title: 'Auth guide', excerpt: '...' },
+          { sourceId: 'src-2', score: 0.6, label: 'P2', kind: 'page', title: 'Login flow', excerpt: '...' },
+        ],
+      };
+      const ai = makeAiProvider([
+        { type: 'tool-call', toolCallId: 'tc-1', toolName: 'rag_retrieve', input: { question: 'auth' } },
+        { type: 'tool-result', toolCallId: 'tc-1', toolName: 'rag_retrieve', output: ragResult },
+        { type: 'text-delta', id: 't1', text: 'Answer [P1].' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 12 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.confidence).toBeGreaterThan(0);
+      expect(done.groundedSourceCount).toBe(2);
+      expect(done.sources).toHaveLength(2);
+      expect(done.sources[0]).toMatchObject({ sourceId: 'src-1', label: 'P1', title: 'Auth guide' });
+      expect(done.sources[0].score).toBeGreaterThan(done.sources[1].score);
+    });
+
     it('populates groundedSourceCount and confidence when rag_retrieve returns results', async () => {
       const ragResult = {
         isEmpty: false,

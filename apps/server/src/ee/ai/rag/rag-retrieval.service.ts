@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiProviderService } from '../providers/ai-provider.service';
+import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import {
   EmbeddingRepository,
   SimilarityResult,
@@ -30,6 +31,7 @@ export class RagRetrievalService {
   constructor(
     private readonly aiProvider: AiProviderService,
     private readonly repo: EmbeddingRepository,
+    private readonly env: EnvironmentService,
   ) {}
 
   async retrieve(opts: {
@@ -60,7 +62,13 @@ export class RagRetrievalService {
       topK,
     });
 
-    return this.assembleContext(raw);
+    // Relevance floor: drop weak matches so the model is grounded only on
+    // chunks that actually resemble the question. Disabled when min score is 0.
+    const minScore = this.env.getAiRagMinScore();
+    const filtered =
+      minScore > 0 ? raw.filter((r) => r.score >= minScore) : raw;
+
+    return this.assembleContext(filtered);
   }
 
   assembleContext(raw: SimilarityResult[]): RetrievedContext {
