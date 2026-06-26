@@ -341,11 +341,40 @@
 
 .sourceItem {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
   font-size: var(--mantine-font-size-xs);
   color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   min-width: 0;
+}
+
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sourceMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  padding-left: 19px;
+  font-size: 11px;
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
+}
+
+.sourceMeta > span:not(:last-child)::after {
+  content: "·";
+  margin-left: 6px;
+}
+
+.sourceVerified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: light-dark(var(--mantine-color-teal-7), var(--mantine-color-teal-4));
 }
 
 .sourceIcon {
@@ -360,6 +389,8 @@
 }
 
 .sourceTitle {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -373,6 +404,8 @@
 }
 
 .sourceTitleLink {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

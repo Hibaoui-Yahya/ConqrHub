@@ -145,16 +145,16 @@ function makeSvc(
       .fn()
       .mockResolvedValue({ cannot: jest.fn().mockReturnValue(true) }),
   };
-  // DB stub for source enrichment: selectFrom().innerJoin().select().where().execute()
-  const db = {
-    selectFrom: () => ({
-      innerJoin: () => ({
-        select: () => ({
-          where: () => ({ execute: jest.fn().mockResolvedValue(enrichRows) }),
-        }),
-      }),
-    }),
+  // DB stub for source enrichment. Chainable so any combination of
+  // innerJoin/leftJoin/select/where resolves to the provided rows.
+  const dbChain: any = {
+    innerJoin: () => dbChain,
+    leftJoin: () => dbChain,
+    select: () => dbChain,
+    where: () => dbChain,
+    execute: jest.fn().mockResolvedValue(enrichRows),
   };
+  const db = { selectFrom: () => dbChain };
   return new AiChatStreamService(
     db as any,
     ai as any,
@@ -435,9 +435,14 @@ describe('AiChatStreamService.send()', () => {
         { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 5 } },
       ]);
       const { reply, events } = makeFakeReply();
-      // Enrichment query resolves the page's slug + space slug.
+      // Enrichment query resolves slug, space, author, update + verification.
       const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo(), makeTitleService(), makeRegistry(), [
-        { id: 'page-1', slugId: 'abc123', title: 'Auth guide', spaceSlug: 'eng' },
+        {
+          id: 'page-1', slugId: 'abc123', title: 'Auth guide',
+          spaceSlug: 'eng', spaceName: 'Engineering', authorName: 'Maria Lopez',
+          updatedAt: new Date('2026-05-18T10:00:00Z'),
+          verifiedAt: new Date('2026-05-20T09:00:00Z'), verifierName: 'Sam Chen',
+        },
       ]);
 
       await svc.send(DTO, USER, reply);
@@ -447,7 +452,12 @@ describe('AiChatStreamService.send()', () => {
         sourceId: 'page-1',
         slugId: 'abc123',
         spaceSlug: 'eng',
+        spaceName: 'Engineering',
+        author: 'Maria Lopez',
+        verifiedBy: 'Sam Chen',
       });
+      expect(done.sources[0].updatedAt).toContain('2026-05-18');
+      expect(done.sources[0].verifiedAt).toContain('2026-05-20');
     });
 
     it('populates groundedSourceCount and confidence when rag_retrieve returns results', async () => {
