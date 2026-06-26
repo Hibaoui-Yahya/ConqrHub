@@ -6,6 +6,7 @@ import {
   SpaceCaslAction,
   SpaceCaslSubject,
 } from '../../../../core/casl/interfaces/space-ability.type';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { ChatTool, ChatToolContext } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
 
@@ -29,6 +30,7 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly retrieval: RagRetrievalService,
     private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly spaceMemberRepo: SpaceMemberRepo,
     private readonly registry: ChatToolRegistry,
   ) {}
 
@@ -50,6 +52,13 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
     }>;
     isEmpty: boolean;
   }> {
+    // Permission scoping. When a specific space is requested, verify read
+    // access to it. When none is given, the search must still stay inside the
+    // user's permission boundary — otherwise similarity search would surface
+    // chunk text from every space in the workspace, including ones the user
+    // cannot read. Scope to the user's accessible spaces, the same boundary
+    // SearchService uses for workspace-wide page search.
+    let spaceIds: string[] | undefined;
     if (args.spaceId) {
       let ability;
       try {
@@ -67,6 +76,11 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
           `You do not have access to space ${args.spaceId}`,
         );
       }
+    } else {
+      spaceIds = await this.spaceMemberRepo.getUserSpaceIds(ctx.user.id);
+      if (spaceIds.length === 0) {
+        return { isEmpty: true, chunks: [] };
+      }
     }
 
     try {
@@ -74,6 +88,7 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
         question: args.question,
         workspaceId: ctx.workspaceId,
         spaceId: args.spaceId,
+        spaceIds,
       });
 
       return {

@@ -105,6 +105,11 @@ export class EmbeddingRepository {
           oc
             .columns(['sourceKind', 'sourceId', 'chunkIndex', 'model'])
             .doUpdateSet({
+              // Refresh space_id/workspace_id too: a page can move between
+              // spaces, and the row's tenancy columns must follow it or
+              // permission-scoped retrieval would use a stale space.
+              workspaceId: sql`excluded.workspace_id`,
+              spaceId: sql`excluded.space_id`,
               chunkText: sql`excluded.chunk_text`,
               embedding: sql`excluded.embedding`,
               contentHash: sql`excluded.content_hash`,
@@ -122,6 +127,31 @@ export class EmbeddingRepository {
       .where('sourceId', '=', sourceId)
       .where('model', '=', model)
       .where('chunkIndex', '>=', chunks.length)
+      .execute();
+  }
+
+  /**
+   * Move every embedding row for a source to a new space/workspace without
+   * re-embedding. Used when a page moves spaces: the content (and vectors)
+   * are unchanged, only the tenancy columns and metadata.spaceId need to
+   * follow so permission-scoped retrieval stays correct.
+   */
+  async reassignSource(opts: {
+    sourceKind: AiSourceKind;
+    sourceId: string;
+    workspaceId: string;
+    spaceId: string;
+  }): Promise<void> {
+    await (this.db as any)
+      .updateTable('aiEmbeddings')
+      .set({
+        workspaceId: opts.workspaceId,
+        spaceId: opts.spaceId,
+        metadata: sql`jsonb_set(coalesce(metadata, '{}'::jsonb), '{spaceId}', to_jsonb(${opts.spaceId}::text), true)`,
+        updatedAt: sql`now()`,
+      })
+      .where('sourceKind', '=', opts.sourceKind)
+      .where('sourceId', '=', opts.sourceId)
       .execute();
   }
 
@@ -165,18 +195,34 @@ export class EmbeddingRepository {
   /**
    * Cosine similarity search using pgvector's <=> operator.
    * Returns top-K chunks ordered from most to least relevant (score: 0–1).
+   *
+   * `spaceIds` constrains the search to a set of spaces — pass the caller's
+   * readable spaces to keep retrieval inside the user's permission boundary.
+   * An empty array matches nothing (a user who can read no space gets no
+   * results), which is the safe default rather than a workspace-wide search.
    */
   async similaritySearch(opts: {
     workspaceId: string;
     queryEmbedding: number[];
     spaceId?: string;
+    spaceIds?: string[];
     sourceKind?: AiSourceKind;
     sourceId?: string;
+    model?: string;
     topK?: number;
   }): Promise<SimilarityResult[]> {
-    const { workspaceId, queryEmbedding, spaceId, sourceKind, sourceId } = opts;
+    const { workspaceId, queryEmbedding, spaceId, spaceIds, sourceKind, sourceId, model } =
+      opts;
     const topK = opts.topK ?? 8;
+
+    // An explicit empty allow-list means "no readable spaces" — return early
+    // rather than emit `IN ()`, which different drivers handle inconsistently.
+    if (spaceIds && spaceIds.length === 0) return [];
+
+    // Bind the query vector as a parameter (text -> ::vector cast), matching
+    // the upsert path. Avoids sql.raw string interpolation entirely.
     const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+    const queryVector = sql`${vectorLiteral}::vector`;
 
     const rows: Array<{
       sourceKind: string;
@@ -193,16 +239,15 @@ export class EmbeddingRepository {
         'chunkIndex',
         'chunkText',
         'metadata',
-        sql`1 - (embedding <=> ${sql.raw(`'${vectorLiteral}'`)}::vector)`.as('score'),
+        sql`1 - (embedding <=> ${queryVector})`.as('score'),
       ])
       .where('workspaceId', '=', workspaceId)
       .$if(!!spaceId, (qb: any) => qb.where('spaceId', '=', spaceId))
+      .$if(!!spaceIds, (qb: any) => qb.where('spaceId', 'in', spaceIds))
       .$if(!!sourceKind, (qb: any) => qb.where('sourceKind', '=', sourceKind))
       .$if(!!sourceId, (qb: any) => qb.where('sourceId', '=', sourceId))
-      .orderBy(
-        sql`embedding <=> ${sql.raw(`'${vectorLiteral}'`)}::vector`,
-        'asc',
-      )
+      .$if(!!model, (qb: any) => qb.where('model', '=', model))
+      .orderBy(sql`embedding <=> ${queryVector}`, 'asc')
       .limit(topK)
       .execute();
 

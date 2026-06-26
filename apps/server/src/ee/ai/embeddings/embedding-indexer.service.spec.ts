@@ -68,6 +68,7 @@ function makeRepo(): jest.Mocked<EmbeddingRepository> {
     upsertChunks: jest.fn().mockResolvedValue(undefined),
     deleteBySource: jest.fn().mockResolvedValue(undefined),
     deleteBySourceIds: jest.fn().mockResolvedValue(undefined),
+    reassignSource: jest.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -107,6 +108,54 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       expect(result.status).toBe('ai_unavailable');
       expect(ai.embedMany).not.toHaveBeenCalled();
       expect(repo.upsertChunks).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reassignPageSpace() — space move', () => {
+    it('reassigns tenancy to the page current space without re-embedding', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      const page: PageRow = {
+        id: PAGE_ID, title: 'T', textContent: 'body',
+        spaceId: 'new-space', deletedAt: null,
+      };
+      const svc = makeSvc(page, ai, undefined, repo);
+
+      await svc.reassignPageSpace(PAGE_ID, WS);
+
+      expect(repo.reassignSource).toHaveBeenCalledWith({
+        sourceKind: 'page',
+        sourceId: PAGE_ID,
+        workspaceId: WS,
+        spaceId: 'new-space',
+      });
+      // No re-embedding on a pure move.
+      expect(ai.embedMany).not.toHaveBeenCalled();
+      expect(repo.upsertChunks).not.toHaveBeenCalled();
+    });
+
+    it('deletes embeddings instead of reassigning when the page is gone', async () => {
+      const repo = makeRepo();
+      const svc = makeSvc(undefined, undefined, undefined, repo);
+
+      await svc.reassignPageSpace(PAGE_ID, WS);
+
+      expect(repo.deleteBySource).toHaveBeenCalledWith('page', PAGE_ID);
+      expect(repo.reassignSource).not.toHaveBeenCalled();
+    });
+
+    it('deletes embeddings when the page is soft-deleted', async () => {
+      const repo = makeRepo();
+      const page: PageRow = {
+        id: PAGE_ID, title: 'T', textContent: 'body',
+        spaceId: 'new-space', deletedAt: new Date(),
+      };
+      const svc = makeSvc(page, undefined, undefined, repo);
+
+      await svc.reassignPageSpace(PAGE_ID, WS);
+
+      expect(repo.deleteBySource).toHaveBeenCalledWith('page', PAGE_ID);
+      expect(repo.reassignSource).not.toHaveBeenCalled();
     });
   });
 

@@ -72,9 +72,14 @@ export class AiEmbeddingQueueProcessor
       }
 
       case QueueJob.PAGE_MOVED_TO_SPACE: {
-        // Space-id on the embedding row is now stale; re-index to refresh it.
+        // The page's content is unchanged but its space changed, so the
+        // embedding rows' space_id is stale. Reassign the tenancy columns
+        // directly (no re-embedding) so permission-scoped retrieval is
+        // correct for the new space.
         const { pageIds, workspaceId } = job.data as PageJobPayload;
-        await this.indexPages(pageIds, workspaceId);
+        for (const pageId of pageIds ?? []) {
+          await this.indexer.reassignPageSpace(pageId, workspaceId);
+        }
         break;
       }
 

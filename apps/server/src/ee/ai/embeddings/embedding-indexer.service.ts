@@ -122,6 +122,36 @@ export class EmbeddingIndexerService {
     return { pageId, status: 'indexed', chunksIndexed: chunks.length };
   }
 
+  /**
+   * Refresh the space/workspace of a page's existing embeddings after it
+   * moves spaces. Content is unchanged, so this avoids re-embedding and just
+   * updates the tenancy columns from the page's current row. If the page is
+   * gone or soft-deleted, its embeddings are removed instead.
+   */
+  async reassignPageSpace(
+    pageId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    const page = await (this.db as any)
+      .selectFrom('pages')
+      .select(['spaceId', 'deletedAt'])
+      .where('id', '=', pageId)
+      .where('workspaceId', '=', workspaceId)
+      .executeTakeFirst();
+
+    if (!page || page.deletedAt) {
+      await this.repo.deleteBySource('page', pageId);
+      return;
+    }
+
+    await this.repo.reassignSource({
+      sourceKind: 'page',
+      sourceId: pageId,
+      workspaceId,
+      spaceId: page.spaceId,
+    });
+  }
+
   async deletePageEmbeddings(pageId: string): Promise<void> {
     await this.repo.deleteBySource('page', pageId);
   }
