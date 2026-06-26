@@ -1,6 +1,12 @@
 .message {
   /* Generous spacing so consecutive turns read as distinct blocks. */
   margin-bottom: var(--mantine-spacing-xl);
+  /* Center each turn to a readable column while the scroll container spans
+     full width (so its scrollbar stays at the far right, not mid-page). */
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .message:last-child {
