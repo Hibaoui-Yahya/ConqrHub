@@ -373,4 +373,16 @@ export class EnvironmentService {
     const parsed = parseInt(raw, 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 200;
   }
+
+  /**
+   * Minimum cosine similarity (0–1) a retrieved chunk must clear to be used as
+   * RAG context. Drops weak matches so the model isn't grounded on irrelevant
+   * content. Default 0.2; set AI_RAG_MIN_SCORE=0 to disable filtering.
+   */
+  getAiRagMinScore(): number {
+    const raw = this.configService.get<string>('AI_RAG_MIN_SCORE', '0.2');
+    const parsed = parseFloat(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0.2;
+    return Math.min(parsed, 1);
+  }
 }

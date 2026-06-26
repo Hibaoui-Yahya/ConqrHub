@@ -11,8 +11,13 @@ import {
 } from "@tabler/icons-react";
 import { markdownToHtml } from "@docmost/editor-ext";
 import { CopyButton } from "@/components/common/copy-button";
-import type { AiChatMessage, AiChatToolCall } from "../types/ai-chat.types";
+import type {
+  AiChatMessage,
+  AiChatSource,
+  AiChatToolCall,
+} from "../types/ai-chat.types";
 import ChatToolGroup from "./chat-tool-group";
+import ChatSources from "./chat-sources";
 import classes from "../styles/chat-message.module.css";
 import CopyTextButton from "@/components/common/copy.tsx";
 
@@ -129,6 +134,15 @@ export default function ChatMessage({
           </>
         )}
       </div>
+      {!isStreaming && (
+        <ChatSources
+          sources={message.metadata?.sources as AiChatSource[] | undefined}
+          confidence={message.metadata?.confidence as number | null | undefined}
+          groundedSourceCount={
+            message.metadata?.groundedSourceCount as number | undefined
+          }
+        />
+      )}
       {!isStreaming && message.content && (
         <div className={classes.messageActions}>
           <CopyTextButton text={message?.content} />
