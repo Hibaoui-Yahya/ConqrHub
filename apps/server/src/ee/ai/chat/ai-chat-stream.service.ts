@@ -111,6 +111,11 @@ export interface ChatSource {
   // in-app path (avoids the model inventing an absolute/wrong-domain URL).
   slugId?: string;
   spaceSlug?: string;
+  spaceName?: string;
+  author?: string;
+  updatedAt?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
 }
 
 /**
@@ -206,18 +211,34 @@ export class AiChatStreamService {
       id: string;
       slugId: string | null;
       title: string | null;
+      updatedAt: Date | string | null;
       spaceSlug: string | null;
+      spaceName: string | null;
+      authorName: string | null;
+      verifiedAt: Date | string | null;
+      verifierName: string | null;
     }> = await (this.db as any)
       .selectFrom('pages')
       .innerJoin('spaces', 'spaces.id', 'pages.spaceId')
+      .leftJoin('users as author', 'author.id', 'pages.creatorId')
+      .leftJoin('pageVerifications as pv', 'pv.pageId', 'pages.id')
+      .leftJoin('users as verifier', 'verifier.id', 'pv.verifiedById')
       .select([
         'pages.id as id',
         'pages.slugId as slugId',
         'pages.title as title',
+        'pages.updatedAt as updatedAt',
         'spaces.slug as spaceSlug',
+        'spaces.name as spaceName',
+        'author.name as authorName',
+        'pv.verifiedAt as verifiedAt',
+        'verifier.name as verifierName',
       ])
       .where('pages.id', 'in', pageIds)
       .execute();
+
+    const toIso = (v: Date | string | null): string | undefined =>
+      v ? new Date(v).toISOString() : undefined;
 
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const s of sources) {
@@ -225,6 +246,11 @@ export class AiChatStreamService {
       if (!r) continue;
       s.slugId = r.slugId ?? undefined;
       s.spaceSlug = r.spaceSlug ?? undefined;
+      s.spaceName = r.spaceName ?? undefined;
+      s.author = r.authorName ?? undefined;
+      s.updatedAt = toIso(r.updatedAt);
+      s.verifiedBy = r.verifierName ?? undefined;
+      s.verifiedAt = toIso(r.verifiedAt);
       if (!s.title) s.title = r.title ?? null;
     }
   }

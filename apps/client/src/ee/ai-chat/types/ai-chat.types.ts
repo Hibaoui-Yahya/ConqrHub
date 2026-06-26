@@ -32,6 +32,11 @@ export type AiChatSource = {
   score: number;
   slugId?: string;
   spaceSlug?: string;
+  spaceName?: string;
+  author?: string;
+  updatedAt?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
 };
 
 export type AiChatStreamEvent =
