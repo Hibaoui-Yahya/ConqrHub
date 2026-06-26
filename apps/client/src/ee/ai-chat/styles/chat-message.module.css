@@ -1,5 +1,10 @@
 .message {
-  margin-bottom: var(--mantine-spacing-lg);
+  /* Generous spacing so consecutive turns read as distinct blocks. */
+  margin-bottom: var(--mantine-spacing-xl);
+}
+
+.message:last-child {
+  margin-bottom: 0;
 }
 
 .userMessage {
@@ -106,6 +111,8 @@
   padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
   border-radius: var(--mantine-radius-md);
   overflow-x: auto;
+  /* Keep wide code from stretching the message and forcing a page scrollbar. */
+  max-width: 100%;
   font-size: var(--mantine-font-size-sm);
   margin: 0.75em 0;
 }

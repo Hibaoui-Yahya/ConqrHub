@@ -27,7 +27,18 @@
 .messageList {
   flex: 1;
   overflow-y: auto;
+  /* Never expose a horizontal scrollbar from wide content (e.g. code blocks);
+     such content scrolls within its own container instead. */
+  overflow-x: hidden;
   padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+  /* Anchor the conversation to the bottom (just above the composer) so a
+     short chat doesn't leave a large empty gap; long chats still scroll. */
+  display: flex;
+  flex-direction: column;
+}
+
+.messageList > :first-child {
+  margin-top: auto;
 }
 
 .messageErrorFallback {
