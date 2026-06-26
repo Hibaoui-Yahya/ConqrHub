@@ -33,6 +33,7 @@ function makeIndexer(): jest.Mocked<EmbeddingIndexerService> {
     indexPage: jest.fn().mockResolvedValue({ pageId: 'p1', status: 'indexed', chunksIndexed: 3 }),
     deletePageEmbeddings: jest.fn().mockResolvedValue(undefined),
     deletePageEmbeddingsBatch: jest.fn().mockResolvedValue(undefined),
+    reassignPageSpace: jest.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -79,7 +80,6 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
     [QueueJob.PAGE_RESTORED],
     [QueueJob.GENERATE_PAGE_EMBEDDINGS],
     [QueueJob.PAGE_UPDATED],
-    [QueueJob.PAGE_MOVED_TO_SPACE],
   ])('%s → calls indexPage for each pageId', (jobName) => {
     it(`${jobName} indexes both pages in order`, async () => {
       const indexer = makeIndexer();
@@ -102,6 +102,27 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
       expect(indexer.deletePageEmbeddingsBatch).not.toHaveBeenCalled();
       expect(repo.deleteByWorkspace).not.toHaveBeenCalled();
       expect(repo.deleteBySpace).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Space move ────────────────────────────────────────────────────────────
+
+  describe('PAGE_MOVED_TO_SPACE', () => {
+    it('reassigns each page space without re-embedding', async () => {
+      const indexer = makeIndexer();
+      const proc = makeProcessor({ indexer });
+
+      await proc.process(
+        makeJob(QueueJob.PAGE_MOVED_TO_SPACE, {
+          pageIds: ['p1', 'p2'],
+          workspaceId: 'ws',
+        }),
+      );
+
+      expect(indexer.reassignPageSpace).toHaveBeenCalledTimes(2);
+      expect(indexer.reassignPageSpace).toHaveBeenNthCalledWith(1, 'p1', 'ws');
+      expect(indexer.reassignPageSpace).toHaveBeenNthCalledWith(2, 'p2', 'ws');
+      expect(indexer.indexPage).not.toHaveBeenCalled();
     });
   });
 

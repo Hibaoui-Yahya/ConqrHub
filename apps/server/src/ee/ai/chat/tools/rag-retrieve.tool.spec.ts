@@ -54,13 +54,21 @@ function makeRegistry(): jest.Mocked<Pick<ChatToolRegistry, 'register'>> {
   return { register: jest.fn() } as any;
 }
 
+function makeSpaceMemberRepo(
+  spaceIds: string[] = ['sp-1', 'sp-2'],
+): { getUserSpaceIds: jest.Mock } {
+  return { getUserSpaceIds: jest.fn().mockResolvedValue(spaceIds) };
+}
+
 function makeTool(
   canRead: boolean,
   ctx: RetrievedContext = makeContext(),
+  spaceMemberRepo = makeSpaceMemberRepo(),
 ): RagRetrieveTool {
   const tool = new RagRetrieveTool(
     makeRetrieval(ctx) as any,
     makeSpaceAbility(canRead) as any,
+    spaceMemberRepo as any,
     makeRegistry() as any,
   );
   return tool;
@@ -85,6 +93,7 @@ describe('RagRetrieveTool', () => {
       const tool = new RagRetrieveTool(
         retrieval as any,
         makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
         makeRegistry() as any,
       );
 
@@ -98,6 +107,7 @@ describe('RagRetrieveTool', () => {
       const tool = new RagRetrieveTool(
         retrieval as any,
         makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
         makeRegistry() as any,
       );
 
@@ -113,20 +123,43 @@ describe('RagRetrieveTool', () => {
     });
   });
 
-  describe('no spaceId — no CASL check', () => {
-    it('skips the CASL check and calls retrieve when no spaceId is provided', async () => {
+  describe('no spaceId — scoped to accessible spaces (cross-space leak guard)', () => {
+    it('scopes retrieval to the user accessible spaceIds when no spaceId is given', async () => {
       const retrieval = makeRetrieval();
       const spaceAbility = makeSpaceAbility(false);
+      const memberRepo = makeSpaceMemberRepo(['sp-1', 'sp-2']);
       const tool = new RagRetrieveTool(
         retrieval as any,
         spaceAbility as any,
+        memberRepo as any,
         makeRegistry() as any,
       );
 
       await tool.execute({ question: 'Q?' }, CTX);
 
+      // No single-space CASL check, but the search is constrained to the
+      // user's readable spaces rather than the whole workspace.
       expect(spaceAbility.createForUser).not.toHaveBeenCalled();
-      expect(retrieval.retrieve).toHaveBeenCalledTimes(1);
+      expect(memberRepo.getUserSpaceIds).toHaveBeenCalledWith('user-1');
+      expect(retrieval.retrieve).toHaveBeenCalledWith(
+        expect.objectContaining({ spaceIds: ['sp-1', 'sp-2'], spaceId: undefined }),
+      );
+    });
+
+    it('returns empty without retrieving when the user can read no spaces', async () => {
+      const retrieval = makeRetrieval();
+      const memberRepo = makeSpaceMemberRepo([]);
+      const tool = new RagRetrieveTool(
+        retrieval as any,
+        makeSpaceAbility(false) as any,
+        memberRepo as any,
+        makeRegistry() as any,
+      );
+
+      const result = await tool.execute({ question: 'Q?' }, CTX);
+
+      expect(result).toEqual({ isEmpty: true, chunks: [] });
+      expect(retrieval.retrieve).not.toHaveBeenCalled();
     });
   });
 
@@ -180,6 +213,7 @@ describe('RagRetrieveTool', () => {
       const tool = new RagRetrieveTool(
         makeRetrieval() as any,
         makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
         registry as any,
       );
 

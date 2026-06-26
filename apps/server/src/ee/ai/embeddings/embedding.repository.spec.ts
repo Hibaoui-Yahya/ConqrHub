@@ -225,4 +225,26 @@ describe('EmbeddingRepository', () => {
       expect(inserts[0].metadata).toBeNull();
     });
   });
+
+  describe('similaritySearch()', () => {
+    it('returns [] without querying when spaceIds is an empty allow-list', async () => {
+      // An empty allow-list means the caller can read no spaces. The search
+      // must NOT fall through to a workspace-wide query (cross-space leak),
+      // so it short-circuits before touching the DB.
+      const db: any = {
+        selectFrom: () => {
+          throw new Error('DB must not be queried for an empty allow-list');
+        },
+      };
+      const repo = new EmbeddingRepository(db);
+
+      const result = await repo.similaritySearch({
+        workspaceId: 'ws',
+        queryEmbedding: [0.1, 0.2, 0.3],
+        spaceIds: [],
+      });
+
+      expect(result).toEqual([]);
+    });
+  });
 });

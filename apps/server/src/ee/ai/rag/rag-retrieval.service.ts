@@ -36,17 +36,25 @@ export class RagRetrievalService {
     question: string;
     workspaceId: string;
     spaceId?: string;
+    spaceIds?: string[];
     pageId?: string;
     topK?: number;
   }): Promise<RetrievedContext> {
-    const { question, workspaceId, spaceId, pageId } = opts;
+    const { question, workspaceId, spaceId, spaceIds, pageId } = opts;
     const topK = opts.topK ?? DEFAULT_TOP_K;
+
+    // A caller passing an empty allow-list can read no spaces — skip the
+    // embedding call entirely and return empty context.
+    if (spaceIds && spaceIds.length === 0) {
+      return { chunks: [], contextText: '', isEmpty: true };
+    }
 
     const queryEmbedding = await this.aiProvider.embed(question);
 
     const raw = await this.repo.similaritySearch({
       workspaceId,
       spaceId,
+      spaceIds,
       queryEmbedding,
       sourceId: pageId,
       topK,
