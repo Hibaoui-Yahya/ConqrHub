@@ -30,6 +30,8 @@ export type AiChatSource = {
   sourceId: string;
   kind: string;
   score: number;
+  slugId?: string;
+  spaceSlug?: string;
 };
 
 export type AiChatStreamEvent =

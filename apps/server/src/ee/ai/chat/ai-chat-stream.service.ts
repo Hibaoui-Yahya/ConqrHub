@@ -4,6 +4,8 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { InjectKysely } from 'nestjs-kysely';
+import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { ModelMessage, stepCountIs } from 'ai';
 import { FastifyReply } from 'fastify';
 import { User } from '@docmost/db/types/entity.types';
@@ -105,6 +107,10 @@ export interface ChatSource {
   sourceId: string;
   kind: string;
   score: number;
+  // Populated for page sources so the client can deep-link with a relative
+  // in-app path (avoids the model inventing an absolute/wrong-domain URL).
+  slugId?: string;
+  spaceSlug?: string;
 }
 
 /**
@@ -175,6 +181,7 @@ export class AiChatStreamService {
   private readonly logger = new Logger(AiChatStreamService.name);
 
   constructor(
+    @InjectKysely() private readonly db: KyselyDB,
     private readonly aiProvider: AiProviderService,
     private readonly chatRepo: AiChatRepo,
     private readonly messageRepo: AiChatMessageRepo,
@@ -183,6 +190,44 @@ export class AiChatStreamService {
     private readonly pageService: PageService,
     private readonly spaceAbility: SpaceAbilityFactory,
   ) {}
+
+  /**
+   * Enriches page sources with slugId + space slug so the client can build a
+   * relative in-app link (/s/<space>/p/<slug>). Without this the model would
+   * have to invent an absolute URL and tends to guess the wrong domain.
+   */
+  private async enrichSources(sources: ChatSource[]): Promise<void> {
+    const pageIds = sources
+      .filter((s) => s.kind === 'page')
+      .map((s) => s.sourceId);
+    if (pageIds.length === 0) return;
+
+    const rows: Array<{
+      id: string;
+      slugId: string | null;
+      title: string | null;
+      spaceSlug: string | null;
+    }> = await (this.db as any)
+      .selectFrom('pages')
+      .innerJoin('spaces', 'spaces.id', 'pages.spaceId')
+      .select([
+        'pages.id as id',
+        'pages.slugId as slugId',
+        'pages.title as title',
+        'spaces.slug as spaceSlug',
+      ])
+      .where('pages.id', 'in', pageIds)
+      .execute();
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const s of sources) {
+      const r = byId.get(s.sourceId);
+      if (!r) continue;
+      s.slugId = r.slugId ?? undefined;
+      s.spaceSlug = r.spaceSlug ?? undefined;
+      if (!s.title) s.title = r.title ?? null;
+    }
+  }
 
   private async resolveReferencedPages(
     user: User,
@@ -476,6 +521,7 @@ export class AiChatStreamService {
     // Compute confidence signals + the grounded sources behind the answer.
     const { groundedSourceCount, confidence } = computeConfidence(toolCalls);
     const sources = buildSources(toolCalls);
+    await this.enrichSources(sources);
 
     // Persist the assistant message. Sources/confidence go into metadata so a
     // re-opened chat shows the same grounding the live stream did.

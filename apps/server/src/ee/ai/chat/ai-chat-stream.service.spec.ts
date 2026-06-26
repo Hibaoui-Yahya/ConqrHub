@@ -137,6 +137,7 @@ function makeSvc(
   msgRepo: jest.Mocked<AiChatMessageRepo>,
   titleService = makeTitleService(),
   registry = makeRegistry(),
+  enrichRows: any[] = [],
 ): AiChatStreamService {
   const pageService = { findById: jest.fn().mockResolvedValue(undefined) };
   const spaceAbility = {
@@ -144,7 +145,18 @@ function makeSvc(
       .fn()
       .mockResolvedValue({ cannot: jest.fn().mockReturnValue(true) }),
   };
+  // DB stub for source enrichment: selectFrom().innerJoin().select().where().execute()
+  const db = {
+    selectFrom: () => ({
+      innerJoin: () => ({
+        select: () => ({
+          where: () => ({ execute: jest.fn().mockResolvedValue(enrichRows) }),
+        }),
+      }),
+    }),
+  };
   return new AiChatStreamService(
+    db as any,
     ai as any,
     chatRepo,
     msgRepo,
@@ -407,6 +419,35 @@ describe('AiChatStreamService.send()', () => {
       expect(done.sources).toHaveLength(2);
       expect(done.sources[0]).toMatchObject({ sourceId: 'src-1', label: 'P1', title: 'Auth guide' });
       expect(done.sources[0].score).toBeGreaterThan(done.sources[1].score);
+    });
+
+    it('enriches page sources with slugId + spaceSlug for in-app deep links', async () => {
+      const ragResult = {
+        isEmpty: false,
+        chunks: [
+          { sourceId: 'page-1', score: 0.9, label: 'P1', kind: 'page', title: 'Auth guide', excerpt: '...' },
+        ],
+      };
+      const ai = makeAiProvider([
+        { type: 'tool-call', toolCallId: 'tc-1', toolName: 'rag_retrieve', input: { question: 'auth' } },
+        { type: 'tool-result', toolCallId: 'tc-1', toolName: 'rag_retrieve', output: ragResult },
+        { type: 'text-delta', id: 't1', text: 'See [P1].' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 5 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      // Enrichment query resolves the page's slug + space slug.
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo(), makeTitleService(), makeRegistry(), [
+        { id: 'page-1', slugId: 'abc123', title: 'Auth guide', spaceSlug: 'eng' },
+      ]);
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.sources[0]).toMatchObject({
+        sourceId: 'page-1',
+        slugId: 'abc123',
+        spaceSlug: 'eng',
+      });
     });
 
     it('populates groundedSourceCount and confidence when rag_retrieve returns results', async () => {

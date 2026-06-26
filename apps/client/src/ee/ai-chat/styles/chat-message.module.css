@@ -358,3 +358,15 @@
   font-variant-numeric: tabular-nums;
   color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
 }
+
+.sourceTitleLink {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-4));
+  text-decoration: none;
+}
+
+.sourceTitleLink:hover {
+  text-decoration: underline;
+}
