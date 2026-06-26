@@ -11,11 +11,13 @@ import { EmbeddingsAdminController } from './embeddings-admin.controller';
 import { EmbeddingReindexScheduler } from './embedding-reindex.scheduler';
 import WorkspaceAbilityFactory from '../../../core/casl/abilities/workspace-ability.factory';
 import { AiProviderModule } from '../providers/ai-provider.module';
+import { PageVerificationModule } from '../../page-verification/page-verification.module';
 
 @Module({
   imports: [
     EnvironmentModule,
     AiProviderModule,
+    PageVerificationModule,
     BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
   ],
   controllers: [EmbeddingsAdminController],
