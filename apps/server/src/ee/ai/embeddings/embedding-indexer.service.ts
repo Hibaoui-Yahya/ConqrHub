@@ -8,8 +8,29 @@ import { EmbeddingRepository } from './embedding.repository';
 
 export interface IndexPageResult {
   pageId: string;
-  status: 'indexed' | 'skipped' | 'deleted' | 'no_content' | 'ai_unavailable';
+  status:
+    | 'indexed'
+    | 'skipped'
+    | 'deleted'
+    | 'no_content'
+    | 'ai_unavailable'
+    | 'not_verified';
   chunksIndexed?: number;
+}
+
+/**
+ * A page's content is eligible for the knowledge base only while it carries a
+ * currently-valid verification. `verified` and `expiring` (verified but within
+ * the expiry warning window) both count as valid; everything else — draft,
+ * in_approval, approved, expired, obsolete, or no verification row at all —
+ * does not. A past `expiresAt` also disqualifies regardless of stored status.
+ */
+function isEffectivelyVerified(
+  v: { status: string | null; expiresAt: Date | null } | undefined,
+): boolean {
+  if (!v || (v.status !== 'verified' && v.status !== 'expiring')) return false;
+  if (v.expiresAt && new Date(v.expiresAt).getTime() <= Date.now()) return false;
+  return true;
 }
 
 @Injectable()
@@ -47,6 +68,21 @@ export class EmbeddingIndexerService {
     if (page.deletedAt) {
       await this.repo.deleteBySource('page', pageId);
       return { pageId, status: 'deleted' };
+    }
+
+    // Verification gate: only currently-verified content belongs in the
+    // knowledge base. If the page is not verified (never verified, still in
+    // draft/approval, expired, obsolete, or invalidated by a recent edit),
+    // drop any existing embeddings so RAG never retrieves unverified content.
+    const verification = await (this.db as any)
+      .selectFrom('pageVerifications')
+      .select(['status', 'expiresAt'])
+      .where('pageId', '=', pageId)
+      .executeTakeFirst();
+
+    if (!isEffectivelyVerified(verification)) {
+      await this.repo.deleteBySource('page', pageId);
+      return { pageId, status: 'not_verified' };
     }
 
     if (!page.textContent?.trim()) {

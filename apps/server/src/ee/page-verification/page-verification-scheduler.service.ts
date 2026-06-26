@@ -14,6 +14,7 @@ export class PageVerificationSchedulerService {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
+    @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
   ) {}
 
   async reconcile(): Promise<void> {
@@ -47,6 +48,20 @@ export class PageVerificationSchedulerService {
         await this.notificationQueue.add(QueueJob.PAGE_VERIFICATION_EXPIRED, {
           verificationId: v.id,
         });
+
+        // Expired content is no longer verified — drop it from the knowledge
+        // base. The indexer removes embeddings for a now-unverified page.
+        try {
+          await this.aiQueue.add(QueueJob.GENERATE_PAGE_EMBEDDINGS, {
+            pageIds: [v.pageId],
+            workspaceId: v.workspaceId,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to enqueue RAG sync for expired page ${v.pageId}`,
+            err,
+          );
+        }
         expiredCount++;
       } else if (expiresMs <= windowEnd.getTime()) {
         await this.db

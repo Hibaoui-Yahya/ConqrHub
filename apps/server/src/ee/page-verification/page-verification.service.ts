@@ -50,8 +50,44 @@ export class PageVerificationService {
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly workspaceAbility: WorkspaceAbilityFactory,
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
+    @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
+
+  /**
+   * Re-syncs a page's RAG embeddings to its current verification state. The
+   * indexer is self-correcting: it indexes a verified page and removes
+   * embeddings for an unverified one, so a single re-index job covers both
+   * "just verified -> add to RAG" and "no longer verified -> drop from RAG".
+   */
+  private async enqueueRagSync(pageId: string, workspaceId: string) {
+    try {
+      await this.aiQueue.add(QueueJob.GENERATE_PAGE_EMBEDDINGS, {
+        pageIds: [pageId],
+        workspaceId,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to enqueue RAG sync for page ${pageId}`, err);
+    }
+  }
+
+  /**
+   * Called when a page's content changes. Any currently-valid verification is
+   * reset to draft so the page must be re-verified before its (now changed)
+   * content can re-enter the knowledge base. Returns the pageIds that were
+   * actually invalidated.
+   */
+  async invalidateOnContentChange(pageIds: string[]): Promise<string[]> {
+    if (pageIds.length === 0) return [];
+    const affected = await this.db
+      .updateTable('pageVerifications')
+      .set({ status: 'draft', updatedAt: new Date() })
+      .where('pageId', 'in', pageIds)
+      .where('status', 'in', ['verified', 'expiring', 'approved'])
+      .returning('pageId')
+      .execute();
+    return affected.map((r) => r.pageId);
+  }
 
   async getVerificationInfo(dto: VerificationInfoDto, user: User) {
     const page = await this.db.selectFrom('pages').select(['id', 'spaceId'])
@@ -155,6 +191,9 @@ export class PageVerificationService {
     await this.db.deleteFrom('pageVerifiers').where('pageVerificationId', '=', verification.id).execute();
     await this.db.deleteFrom('pageVerifications').where('id', '=', verification.id).execute();
 
+    // No verification -> not eligible for RAG; re-sync removes any embeddings.
+    await this.enqueueRagSync(verification.pageId, verification.workspaceId);
+
     await this.auditService.logWithContext({
       event: AuditEvent.PAGE_VERIFICATION_REMOVED, resourceType: AuditResource.PAGE,
       resourceId: pageId, spaceId: verification.spaceId,
@@ -196,6 +235,12 @@ export class PageVerificationService {
         pageId: verification.pageId, spaceId: verification.spaceId, workspaceId: verification.workspaceId,
         actorId: user.id, verifierIds: otherIds,
       });
+    }
+
+    // A page only enters RAG once it reaches final 'verified' status (not the
+    // intermediate qms 'approved' step).
+    if (newStatus === 'verified') {
+      await this.enqueueRagSync(verification.pageId, verification.workspaceId);
     }
 
     await this.auditService.logWithContext({
@@ -264,6 +309,9 @@ export class PageVerificationService {
     await this.assertCanManage(verification.spaceId, user, workspace);
     await this.db.updateTable('pageVerifications').set({ status: 'obsolete', updatedAt: new Date() })
       .where('id', '=', verification.id).execute();
+
+    // Obsolete content must leave the knowledge base.
+    await this.enqueueRagSync(verification.pageId, verification.workspaceId);
 
     await this.auditService.logWithContext({
       event: AuditEvent.PAGE_MARKED_OBSOLETE, resourceType: AuditResource.PAGE,

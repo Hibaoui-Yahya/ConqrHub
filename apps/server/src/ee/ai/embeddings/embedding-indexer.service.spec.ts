@@ -16,17 +16,29 @@ type PageRow = {
   deletedAt: Date | null;
 };
 
-function makeDbWithPage(page: PageRow | undefined) {
+type VerificationRow = { status: string | null; expiresAt: Date | null };
+
+// Table-aware mock: `pages` resolves to the page row, `pageVerifications` to
+// the verification row. Chain methods return self so any number of
+// .select()/.where() calls work before .executeTakeFirst().
+function makeDbWithPage(
+  page: PageRow | undefined,
+  verification: VerificationRow | null | undefined = { status: 'verified', expiresAt: null },
+) {
+  const rowFor: Record<string, any> = {
+    pages: page,
+    pageVerifications: verification,
+  };
+  const chain = (row: any): any => {
+    const c: any = {
+      select: () => c,
+      where: () => c,
+      executeTakeFirst: jest.fn().mockResolvedValue(row),
+    };
+    return c;
+  };
   return {
-    selectFrom: () => ({
-      select: () => ({
-        where: () => ({
-          where: () => ({
-            executeTakeFirst: jest.fn().mockResolvedValue(page),
-          }),
-        }),
-      }),
-    }),
+    selectFrom: (table: string) => chain(rowFor[table]),
   } as any;
 }
 
@@ -78,9 +90,10 @@ function makeSvc(
   env?: ReturnType<typeof makeEnv>,
   repo?: jest.Mocked<EmbeddingRepository>,
   chunking?: ChunkingService,
+  verification: VerificationRow | null | undefined = { status: 'verified', expiresAt: null },
 ) {
   return new EmbeddingIndexerService(
-    makeDbWithPage(page),
+    makeDbWithPage(page, verification),
     (aiProvider ?? makeAiProvider()) as any,
     (env ?? makeEnv()) as any,
     chunking ?? new ChunkingService(),
@@ -108,6 +121,73 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       expect(result.status).toBe('ai_unavailable');
       expect(ai.embedMany).not.toHaveBeenCalled();
       expect(repo.upsertChunks).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verification gate — only verified content enters RAG', () => {
+    const PAGE: PageRow = {
+      id: PAGE_ID, title: 'T', textContent: 'real content',
+      spaceId: SPACE_ID, deletedAt: null,
+    };
+
+    it('skips indexing and removes embeddings when the page has no verification', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      // null => no verification row exists for the page.
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, null);
+
+      const result = await svc.indexPage(PAGE_ID, WS);
+
+      expect(result.status).toBe('not_verified');
+      expect(repo.deleteBySource).toHaveBeenCalledWith('page', PAGE_ID);
+      expect(ai.embedMany).not.toHaveBeenCalled();
+      expect(repo.upsertChunks).not.toHaveBeenCalled();
+    });
+
+    it('skips indexing when verification is still in draft', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'draft', expiresAt: null });
+
+      const result = await svc.indexPage(PAGE_ID, WS);
+
+      expect(result.status).toBe('not_verified');
+      expect(repo.deleteBySource).toHaveBeenCalledWith('page', PAGE_ID);
+    });
+
+    it('skips indexing when a verified verification has expired', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      const past = new Date(Date.now() - 60_000);
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'verified', expiresAt: past });
+
+      const result = await svc.indexPage(PAGE_ID, WS);
+
+      expect(result.status).toBe('not_verified');
+      expect(ai.embedMany).not.toHaveBeenCalled();
+    });
+
+    it('indexes when the page is verified', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'verified', expiresAt: null });
+
+      const result = await svc.indexPage(PAGE_ID, WS);
+
+      expect(result.status).toBe('indexed');
+      expect(repo.upsertChunks).toHaveBeenCalled();
+    });
+
+    it('indexes when verified but only within the expiring window (not yet expired)', async () => {
+      const ai = makeAiProvider();
+      const repo = makeRepo();
+      const future = new Date(Date.now() + 60_000);
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'expiring', expiresAt: future });
+
+      const result = await svc.indexPage(PAGE_ID, WS);
+
+      expect(result.status).toBe('indexed');
+      expect(repo.upsertChunks).toHaveBeenCalled();
     });
   });
 

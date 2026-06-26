@@ -51,12 +51,17 @@ function makeInsightIndexer(): jest.Mocked<InsightIndexerService> {
   } as any;
 }
 
+function makeVerification(): { invalidateOnContentChange: jest.Mock } {
+  return { invalidateOnContentChange: jest.fn().mockResolvedValue([]) };
+}
+
 function makeProcessor(
   overrides: {
     pages?: { id: string }[];
     indexer?: jest.Mocked<EmbeddingIndexerService>;
     insightIndexer?: jest.Mocked<InsightIndexerService>;
     repo?: jest.Mocked<EmbeddingRepository>;
+    verification?: { invalidateOnContentChange: jest.Mock };
   } = {},
 ) {
   return new AiEmbeddingQueueProcessor(
@@ -64,6 +69,7 @@ function makeProcessor(
     overrides.indexer ?? makeIndexer(),
     overrides.insightIndexer ?? makeInsightIndexer(),
     overrides.repo ?? makeRepo(),
+    (overrides.verification ?? makeVerification()) as any,
   );
 }
 
@@ -102,6 +108,28 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
       expect(indexer.deletePageEmbeddingsBatch).not.toHaveBeenCalled();
       expect(repo.deleteByWorkspace).not.toHaveBeenCalled();
       expect(repo.deleteBySpace).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Content change invalidates verification ───────────────────────────────
+
+  describe('PAGE_CONTENT_UPDATED → verification invalidation', () => {
+    it('invalidates verification before re-indexing the changed pages', async () => {
+      const indexer = makeIndexer();
+      const verification = makeVerification();
+      const proc = makeProcessor({ indexer, verification });
+
+      await proc.process(
+        makeJob(QueueJob.PAGE_CONTENT_UPDATED, {
+          pageIds: ['p1', 'p2'],
+          workspaceId: 'ws',
+        }),
+      );
+
+      expect(verification.invalidateOnContentChange).toHaveBeenCalledWith(['p1', 'p2']);
+      // Still re-indexes (indexPage is self-correcting: it removes embeddings
+      // for the now-unverified pages).
+      expect(indexer.indexPage).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -5,6 +5,7 @@ import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { EmbeddingIndexerService } from './embedding-indexer.service';
 import { InsightIndexerService } from './insight-indexer.service';
 import { EmbeddingRepository } from './embedding.repository';
+import { PageVerificationService } from '../../page-verification/page-verification.service';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 
@@ -39,14 +40,25 @@ export class AiEmbeddingQueueProcessor
     private readonly indexer: EmbeddingIndexerService,
     private readonly insightIndexer: InsightIndexerService,
     private readonly repo: EmbeddingRepository,
+    private readonly verification: PageVerificationService,
   ) {
     super();
   }
 
   async process(job: Job): Promise<void> {
     switch (job.name) {
+      case QueueJob.PAGE_CONTENT_UPDATED: {
+        // Content changed: invalidate any existing verification first, so a
+        // previously-verified page must be re-verified before its new content
+        // can re-enter the knowledge base. The subsequent index pass then sees
+        // the page as unverified and removes its embeddings.
+        const { pageIds, workspaceId } = job.data as PageJobPayload;
+        await this.verification.invalidateOnContentChange(pageIds ?? []);
+        await this.indexPages(pageIds, workspaceId);
+        break;
+      }
+
       case QueueJob.PAGE_CREATED:
-      case QueueJob.PAGE_CONTENT_UPDATED:
       case QueueJob.PAGE_RESTORED:
       case QueueJob.GENERATE_PAGE_EMBEDDINGS: {
         const { pageIds, workspaceId } = job.data as PageJobPayload;
