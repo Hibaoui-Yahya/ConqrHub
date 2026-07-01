@@ -37,7 +37,21 @@ async function bootstrap() {
   app.useLogger(app.get(PinoLogger));
 
   app.setGlobalPrefix('api', {
-    exclude: ['robots.txt', 'share/:shareId/p/:pageSlug', 'mcp'],
+    exclude: [
+      'robots.txt',
+      'share/:shareId/p/:pageSlug',
+      'mcp',
+      // MCP OAuth: discovery + endpoints must be served at the bare origin.
+      '.well-known/oauth-authorization-server',
+      '.well-known/oauth-protected-resource',
+      '.well-known/oauth-protected-resource/mcp',
+      '.well-known/openid-configuration',
+      'oauth/register',
+      'oauth/authorize',
+      'oauth/authorize/consent',
+      'oauth/token',
+      'oauth/revoke',
+    ],
   });
 
   const reflector = app.get(Reflector);
@@ -49,6 +63,24 @@ async function bootstrap() {
   await app.register(fastifyIp);
   await app.register(fastifyMultipart);
   await app.register(fastifyCookie);
+
+  // OAuth token + consent endpoints receive application/x-www-form-urlencoded
+  // bodies (RFC 6749 §4.1.3). Fastify has no urlencoded parser by default;
+  // register one that yields a plain object so @Body() works.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string' },
+      (_req: any, body: string, done: (err: Error | null, body?: any) => void) => {
+        try {
+          done(null, Object.fromEntries(new URLSearchParams(body)));
+        } catch (err) {
+          done(err as Error);
+        }
+      },
+    );
 
   app
     .getHttpAdapter()

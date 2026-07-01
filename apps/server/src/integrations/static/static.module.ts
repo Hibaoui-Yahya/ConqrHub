@@ -76,7 +76,9 @@ export class StaticModule implements OnModuleInit {
           url.startsWith('/api') ||
           url.startsWith('/mcp') ||
           url.startsWith('/collab') ||
-          url.startsWith('/socket.io')
+          url.startsWith('/socket.io') ||
+          url.startsWith('/oauth') ||
+          url.startsWith('/.well-known')
         ) {
           return res.callNotFound();
         }

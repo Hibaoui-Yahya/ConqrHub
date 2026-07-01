@@ -23,7 +23,7 @@ import {
   acceptInvitation,
   createWorkspace,
 } from "@/features/workspace/services/workspace-service.ts";
-import APP_ROUTE, { getPostLoginRedirect } from "@/lib/app-route.ts";
+import APP_ROUTE, { redirectAfterLogin } from "@/lib/app-route.ts";
 import { RESET } from "jotai/utils";
 import { useTranslation } from "react-i18next";
 import { isCloud } from "@/lib/config.ts";
@@ -48,7 +48,7 @@ export default function useAuth() {
       } else if (response?.requiresMfaSetup) {
         navigate(APP_ROUTE.AUTH.MFA_SETUP_REQUIRED + window.location.search);
       } else {
-        navigate(getPostLoginRedirect());
+        redirectAfterLogin(navigate);
       }
     } catch (err) {
       setIsLoading(false);

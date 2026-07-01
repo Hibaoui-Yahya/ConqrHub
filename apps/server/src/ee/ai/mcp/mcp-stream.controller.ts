@@ -7,15 +7,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { McpService } from './mcp.service';
 import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
 import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
+import { McpAuthGuard } from './oauth/mcp-auth.guard';
 
-@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+@UseGuards(McpAuthGuard, WorkspaceAiToggleGuard)
 @RequireAiFeature('mcp')
 @Controller('mcp/stream')
 export class McpStreamController {

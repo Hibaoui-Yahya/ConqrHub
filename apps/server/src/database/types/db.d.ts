@@ -84,6 +84,7 @@ export interface AiEmbeddings {
 }
 
 export interface ApiKeys {
+  clientId: string | null;
   createdAt: Generated<Timestamp>;
   creatorId: string;
   deletedAt: Timestamp | null;
@@ -91,6 +92,7 @@ export interface ApiKeys {
   id: Generated<string>;
   lastUsedAt: Timestamp | null;
   name: string | null;
+  type: Generated<string>;
   updatedAt: Generated<Timestamp>;
   workspaceId: string;
 }
@@ -661,6 +663,33 @@ export interface Workspaces {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface McpOauthClients {
+  id: Generated<string>;
+  clientId: string;
+  clientName: string | null;
+  redirectUris: Generated<Json>;
+  grantTypes: Generated<Json>;
+  responseTypes: Generated<Json>;
+  tokenEndpointAuthMethod: Generated<string>;
+  scope: string | null;
+  workspaceId: string | null;
+  createdAt: Generated<Timestamp>;
+}
+
+export interface McpOauthRefreshTokens {
+  id: Generated<string>;
+  tokenHash: string;
+  clientId: string;
+  apiKeyId: string;
+  userId: string;
+  workspaceId: string;
+  scope: string | null;
+  resource: string | null;
+  expiresAt: Timestamp;
+  rotatedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+}
+
 export interface Meetings {
   id: Generated<string>;
   workspaceId: string;
@@ -709,6 +738,8 @@ export interface DB {
   fileTasks: FileTasks;
   groups: Groups;
   groupUsers: GroupUsers;
+  mcpOauthClients: McpOauthClients;
+  mcpOauthRefreshTokens: McpOauthRefreshTokens;
   meetings: Meetings;
   meetingSegments: MeetingSegments;
   notifications: Notifications;

@@ -46,6 +46,13 @@ export type JwtApiKeyPayload = {
   workspaceId: string;
   apiKeyId: string;
   type: 'api_key';
+  /**
+   * OAuth-issued MCP access tokens carry an audience (the canonical MCP
+   * resource URL) and the granted scope. Manual API keys omit both. The MCP
+   * auth guard enforces `aud` when present (confused-deputy defense).
+   */
+  aud?: string;
+  scope?: string;
 };
 
 export type JwtPdfRenderPayload = {

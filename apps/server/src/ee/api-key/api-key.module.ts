@@ -9,6 +9,6 @@ import { CaslModule } from '../../core/casl/casl.module';
   imports: [TokenModule, CaslModule],
   controllers: [ApiKeyController],
   providers: [ApiKeyService, ApiKeyRepo],
-  exports: [ApiKeyService],
+  exports: [ApiKeyService, ApiKeyRepo],
 })
 export class ApiKeyModule {}

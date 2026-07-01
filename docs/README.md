@@ -6,6 +6,12 @@ This documentation set is split by **audience and depth**. Find your starting po
 
 ---
 
+## The single document that defines everything
+
+If you only read one file, read this. The complete platform definition — vision, every module, the full stack, architecture, AI subsystem, security, deployment, roadmap, and the long-horizon "knowledge OS" future — lives in [`conqra-hub-platform.md`](./conqra-hub-platform.md).
+
+---
+
 ## I want to…
 
 ### …understand the product

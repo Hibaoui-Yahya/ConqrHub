@@ -34,6 +34,8 @@ import {
   Templates,
   Meetings,
   MeetingSegments,
+  McpOauthClients,
+  McpOauthRefreshTokens,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -160,6 +162,16 @@ export type UpdatableUserMFA = Updateable<Omit<_UserMFA, 'id'>>;
 export type ApiKey = Selectable<ApiKeys>;
 export type InsertableApiKey = Insertable<ApiKeys>;
 export type UpdatableApiKey = Updateable<Omit<ApiKeys, 'id'>>;
+
+// MCP OAuth
+export type McpOauthClient = Selectable<McpOauthClients>;
+export type InsertableMcpOauthClient = Insertable<McpOauthClients>;
+export type UpdatableMcpOauthClient = Updateable<Omit<McpOauthClients, 'id'>>;
+export type McpOauthRefreshToken = Selectable<McpOauthRefreshTokens>;
+export type InsertableMcpOauthRefreshToken = Insertable<McpOauthRefreshTokens>;
+export type UpdatableMcpOauthRefreshToken = Updateable<
+  Omit<McpOauthRefreshTokens, 'id'>
+>;
 
 // Page Embedding
 export type PageEmbedding = Selectable<PageEmbeddings>;
