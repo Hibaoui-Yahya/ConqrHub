@@ -140,28 +140,67 @@ async function bootstrap() {
     );
   }
   const subdomainHost = process.env.SUBDOMAIN_HOST;
-  app.enableCors({
-    credentials: true,
-    origin: (origin, cb) => {
-      // Same-origin (Postman, curl, server-to-server) requests come with
-      // no Origin header — allow those.
-      if (!origin) return cb(null, true);
-      // Fail-open: no parseable APP_URL → accept any origin.
-      if (!allowedOrigin) return cb(null, true);
-      if (origin === allowedOrigin) return cb(null, true);
-      if (subdomainHost) {
-        try {
-          const host = new URL(origin).host;
-          if (host === subdomainHost || host.endsWith('.' + subdomainHost)) {
-            return cb(null, true);
-          }
-        } catch {
-          /* fall through */
+
+  // Strict, credentialed CORS for the app API: only the configured origin (and
+  // its subdomains) may read cookie-authenticated responses. `cb(null, false)`
+  // (not `cb(Error)`) on a disallowed origin: we omit the ACAO header so the
+  // browser blocks the cross-origin read, WITHOUT 500-ing the request. CSRF on
+  // state-changing calls is separately covered by the SameSite=Lax auth cookie.
+  const strictOrigin = (origin: string, cb: (e: Error | null, ok: boolean) => void) => {
+    // Same-origin (Postman, curl, server-to-server) requests have no Origin.
+    if (!origin) return cb(null, true);
+    // Fail-open: no parseable APP_URL → accept any origin.
+    if (!allowedOrigin) return cb(null, true);
+    if (origin === allowedOrigin) return cb(null, true);
+    if (subdomainHost) {
+      try {
+        const host = new URL(origin).host;
+        if (host === subdomainHost || host.endsWith('.' + subdomainHost)) {
+          return cb(null, true);
         }
+      } catch {
+        /* fall through */
       }
-      return cb(new Error('Origin not allowed by CORS'), false);
-    },
-  });
+    }
+    return cb(null, false);
+  };
+
+  // The OAuth 2.1 discovery/register/token/authorize endpoints and the MCP
+  // resource are PUBLIC, cross-origin-by-design resources fetched by
+  // third-party clients (ChatGPT/Claude connectors) from their own origin — or
+  // from a `null`-origin embedded webview. They use Bearer tokens / top-level
+  // navigations, not the session cookie, so the strict credentialed policy must
+  // NOT apply: it would 500 every one of their requests. These routes set their
+  // own `Access-Control-Allow-Origin: *` (or handle preflight explicitly), so
+  // here we simply disable the global CORS layer for them (`origin: false` adds
+  // no headers and never rejects). Everything else keeps the strict policy.
+  const isPublicCrossOriginPath = (rawUrl: string): boolean => {
+    const path = (rawUrl || '').split('?')[0];
+    return (
+      path.startsWith('/oauth') ||
+      path.startsWith('/.well-known') ||
+      path === '/mcp' ||
+      path.startsWith('/mcp/')
+    );
+  };
+
+  // @fastify/cors accepts a callback delegator `(req, cb)` for per-request
+  // options (verified in its source); NestJS's enableCors type only models the
+  // static options object, so cast.
+  const corsDelegator = (
+    req: any,
+    cb: (err: Error | null, opts: any) => void,
+  ) => {
+    if (isPublicCrossOriginPath(req?.url ?? '')) {
+      cb(null, { origin: false });
+      return;
+    }
+    cb(null, { origin: strictOrigin, credentials: true });
+  };
+  // Pass as `{ delegator }` (not a bare function): avvio would otherwise treat
+  // a bare function as an options-factory `(instance) => opts` and crash at
+  // boot. `delegator` is @fastify/cors's documented per-request hook property.
+  app.enableCors({ delegator: corsDelegator } as any);
   app.useGlobalInterceptors(new TransformHttpResponseInterceptor(reflector));
   app.enableShutdownHooks();
 

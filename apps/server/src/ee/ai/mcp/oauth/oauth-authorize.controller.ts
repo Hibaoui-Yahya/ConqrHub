@@ -131,11 +131,15 @@ export class OauthAuthorizeController {
       defaultHttps: this.environmentService.isHttps(),
     });
 
-    // Defense-in-depth against cross-site consent submission (authToken is
-    // SameSite=Lax, so a cross-site POST is already unauthenticated; this
-    // rejects a same-cookie forced-Origin submission too).
+    // Defense-in-depth against cross-site consent submission. The real
+    // protection is the SameSite=Lax authToken cookie (a cross-site POST is
+    // unauthenticated → resolveSession returns null → 401 below). We therefore
+    // only reject a *genuine* differing browser origin, and explicitly allow a
+    // missing or opaque ("null") Origin — embedded webviews (e.g. the ChatGPT
+    // desktop connector) submit the consent form with `Origin: null`, and
+    // rejecting those broke the connect flow.
     const origin = req.headers.origin;
-    if (origin && origin !== urls.origin) {
+    if (origin && origin !== 'null' && origin !== urls.origin) {
       return this.errorPage(res, 403, 'Invalid request origin.');
     }
 
