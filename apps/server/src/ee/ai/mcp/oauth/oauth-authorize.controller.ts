@@ -17,7 +17,6 @@ import {
   isMcpEnabledForWorkspace,
   resolveRequestWorkspace,
 } from './oauth-request.util';
-import { SUPPORTED_SCOPES } from './oauth.constants';
 
 interface ResolvedSession {
   userId: string;
@@ -233,17 +232,12 @@ export class OauthAuthorizeController {
         description: 'resource does not match this MCP server',
       };
     }
-    if (p.scope) {
-      const unknown = p.scope
-        .split(/\s+/)
-        .filter((s) => s && !SUPPORTED_SCOPES.includes(s));
-      if (unknown.length > 0) {
-        return {
-          error: 'invalid_scope',
-          description: `unsupported scope: ${unknown.join(' ')}`,
-        };
-      }
-    }
+    // Scope is intentionally NOT rejected here. Clients (e.g. Claude, ChatGPT)
+    // may request scopes beyond what we advertise; per OAuth 2.0 §3.3 the AS may
+    // narrow the granted scope rather than fail. resolveScope() clamps the
+    // request down to our supported set (always granting `mcp`), and the granted
+    // scope is echoed back in the token response. Hard-rejecting unknown scopes
+    // with invalid_scope broke the connector handshake ("Authorization failed").
     return null;
   }
 
