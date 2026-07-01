@@ -8,11 +8,13 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipTransform } from '../../../../common/decorators/skip-transform.decorator';
+import { EnvironmentService } from '../../../../integrations/environment/environment.service';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { McpOauthService } from './mcp-oauth.service';
 import { OAuthError } from './oauth.errors';
 import {
-  getRequestWorkspace,
-  isMcpEnabledForRequest,
+  isMcpEnabledForWorkspace,
+  resolveRequestWorkspace,
 } from './oauth-request.util';
 
 /**
@@ -20,7 +22,11 @@ import {
  */
 @Controller('oauth/register')
 export class OauthRegisterController {
-  constructor(private readonly service: McpOauthService) {}
+  constructor(
+    private readonly service: McpOauthService,
+    private readonly workspaceRepo: WorkspaceRepo,
+    private readonly environmentService: EnvironmentService,
+  ) {}
 
   @SkipTransform()
   @Options()
@@ -40,7 +46,12 @@ export class OauthRegisterController {
     @Res() res: FastifyReply,
     @Body() body: Record<string, unknown>,
   ) {
-    if (!isMcpEnabledForRequest(req)) {
+    const workspace = await resolveRequestWorkspace(
+      req,
+      this.workspaceRepo,
+      this.environmentService,
+    );
+    if (!isMcpEnabledForWorkspace(workspace)) {
       return this.error(
         res,
         new OAuthError('invalid_request', 'MCP is not enabled', 404),
@@ -48,7 +59,6 @@ export class OauthRegisterController {
     }
 
     try {
-      const workspace = getRequestWorkspace(req);
       const response = await this.service.registerClient(
         body ?? {},
         workspace?.id ?? null,

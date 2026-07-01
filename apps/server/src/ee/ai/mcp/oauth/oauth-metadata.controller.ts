@@ -2,9 +2,13 @@ import { Controller, Get, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipTransform } from '../../../../common/decorators/skip-transform.decorator';
 import { EnvironmentService } from '../../../../integrations/environment/environment.service';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { McpOauthService } from './mcp-oauth.service';
 import { resolveOAuthUrls } from './oauth-url.util';
-import { isMcpEnabledForRequest } from './oauth-request.util';
+import {
+  isMcpEnabledForWorkspace,
+  resolveRequestWorkspace,
+} from './oauth-request.util';
 
 /**
  * OAuth discovery documents (RFC 9728 protected-resource metadata + RFC 8414
@@ -17,51 +21,69 @@ export class OauthMetadataController {
   constructor(
     private readonly service: McpOauthService,
     private readonly environmentService: EnvironmentService,
+    private readonly workspaceRepo: WorkspaceRepo,
   ) {}
 
   @SkipTransform()
   @Get('.well-known/oauth-protected-resource')
-  protectedResourceRoot(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-    this.sendPrm(req, res);
+  async protectedResourceRoot(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    await this.sendPrm(req, res);
   }
 
   @SkipTransform()
   @Get('.well-known/oauth-protected-resource/mcp')
-  protectedResourceMcp(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-    this.sendPrm(req, res);
+  async protectedResourceMcp(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    await this.sendPrm(req, res);
   }
 
   @SkipTransform()
   @Get('.well-known/oauth-authorization-server')
-  authorizationServer(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-    this.sendAsMetadata(req, res);
+  async authorizationServer(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    await this.sendAsMetadata(req, res);
   }
 
   // Defensive alias — some clients probe OIDC discovery.
   @SkipTransform()
   @Get('.well-known/openid-configuration')
-  openidConfiguration(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-    this.sendAsMetadata(req, res);
+  async openidConfiguration(
+    @Req() req: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    await this.sendAsMetadata(req, res);
   }
 
-  private sendPrm(req: FastifyRequest, res: FastifyReply) {
-    if (!this.enabled(req)) return this.notFound(res);
+  private async sendPrm(req: FastifyRequest, res: FastifyReply) {
+    if (!(await this.enabled(req))) return this.notFound(res);
     const urls = resolveOAuthUrls(req.raw, {
       defaultHttps: this.environmentService.isHttps(),
     });
     this.json(res, this.service.buildProtectedResourceMetadata(urls));
   }
 
-  private sendAsMetadata(req: FastifyRequest, res: FastifyReply) {
-    if (!this.enabled(req)) return this.notFound(res);
+  private async sendAsMetadata(req: FastifyRequest, res: FastifyReply) {
+    if (!(await this.enabled(req))) return this.notFound(res);
     const urls = resolveOAuthUrls(req.raw, {
       defaultHttps: this.environmentService.isHttps(),
     });
     this.json(res, this.service.buildAuthorizationServerMetadata(urls));
   }
 
-  private enabled(req: FastifyRequest): boolean {
-    return isMcpEnabledForRequest(req);
+  private async enabled(req: FastifyRequest): Promise<boolean> {
+    const workspace = await resolveRequestWorkspace(
+      req,
+      this.workspaceRepo,
+      this.environmentService,
+    );
+    return isMcpEnabledForWorkspace(workspace);
   }
 
   private json(res: FastifyReply, body: unknown) {

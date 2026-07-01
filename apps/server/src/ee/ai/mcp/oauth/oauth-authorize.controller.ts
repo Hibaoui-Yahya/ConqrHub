@@ -5,13 +5,18 @@ import { EnvironmentService } from '../../../../integrations/environment/environ
 import { TokenService } from '../../../../core/auth/services/token.service';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { Workspace } from '@docmost/db/types/entity.types';
 import { JwtType } from '../../../../core/auth/dto/jwt-payload';
 import { isUserDisabled } from '../../../../common/helpers';
 import { McpOauthService } from './mcp-oauth.service';
 import { renderConsentPage } from './consent-page';
 import { isSupportedChallengeMethod } from './pkce.util';
 import { redirectUriMatches, resolveOAuthUrls } from './oauth-url.util';
-import { getRequestWorkspace, isMcpEnabledForRequest } from './oauth-request.util';
+import {
+  isMcpEnabledForWorkspace,
+  resolveRequestWorkspace,
+} from './oauth-request.util';
 import { SUPPORTED_SCOPES } from './oauth.constants';
 
 interface ResolvedSession {
@@ -28,6 +33,7 @@ export class OauthAuthorizeController {
     private readonly tokenService: TokenService,
     private readonly userRepo: UserRepo,
     private readonly userSessionRepo: UserSessionRepo,
+    private readonly workspaceRepo: WorkspaceRepo,
     private readonly environmentService: EnvironmentService,
   ) {}
 
@@ -40,7 +46,12 @@ export class OauthAuthorizeController {
     @Res() res: FastifyReply,
     @Query() query: Record<string, string>,
   ) {
-    if (!isMcpEnabledForRequest(req)) {
+    const workspace = await resolveRequestWorkspace(
+      req,
+      this.workspaceRepo,
+      this.environmentService,
+    );
+    if (!isMcpEnabledForWorkspace(workspace)) {
       return this.errorPage(res, 404, 'MCP is not enabled for this workspace.');
     }
 
@@ -76,7 +87,7 @@ export class OauthAuthorizeController {
     }
 
     // 3. Session — bounce to login if absent.
-    const session = await this.resolveSession(req);
+    const session = await this.resolveSession(req, workspace);
     if (!session) {
       const loginUrl = `${urls.origin}/login?redirect=${encodeURIComponent(req.url)}`;
       return this.redirect(res, loginUrl);
@@ -128,11 +139,16 @@ export class OauthAuthorizeController {
       return this.errorPage(res, 403, 'Invalid request origin.');
     }
 
-    if (!isMcpEnabledForRequest(req)) {
+    const workspace = await resolveRequestWorkspace(
+      req,
+      this.workspaceRepo,
+      this.environmentService,
+    );
+    if (!isMcpEnabledForWorkspace(workspace)) {
       return this.errorPage(res, 404, 'MCP is not enabled for this workspace.');
     }
 
-    const session = await this.resolveSession(req);
+    const session = await this.resolveSession(req, workspace);
     if (!session) {
       return this.errorPage(res, 401, 'Your session has expired. Please retry.');
     }
@@ -229,6 +245,7 @@ export class OauthAuthorizeController {
 
   private async resolveSession(
     req: FastifyRequest,
+    workspace: Workspace | undefined,
   ): Promise<ResolvedSession | null> {
     const token = (req as any).cookies?.authToken;
     if (!token) return null;
@@ -240,7 +257,6 @@ export class OauthAuthorizeController {
       return null;
     }
 
-    const workspace = getRequestWorkspace(req);
     if (!workspace || payload.workspaceId !== workspace.id) return null;
 
     const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
