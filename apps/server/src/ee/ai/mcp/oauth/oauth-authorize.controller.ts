@@ -130,18 +130,13 @@ export class OauthAuthorizeController {
       defaultHttps: this.environmentService.isHttps(),
     });
 
-    // Defense-in-depth against cross-site consent submission. The real
-    // protection is the SameSite=Lax authToken cookie (a cross-site POST is
-    // unauthenticated → resolveSession returns null → 401 below). We therefore
-    // only reject a *genuine* differing browser origin, and explicitly allow a
-    // missing or opaque ("null") Origin — embedded webviews (e.g. the ChatGPT
-    // desktop connector) submit the consent form with `Origin: null`, and
-    // rejecting those broke the connect flow.
-    const origin = req.headers.origin;
-    if (origin && origin !== 'null' && origin !== urls.origin) {
-      return this.errorPage(res, 403, 'Invalid request origin.');
-    }
-
+    // NB: we deliberately do NOT gate on the Origin header. CSRF is already
+    // covered by the SameSite=Lax authToken cookie — a genuinely cross-site
+    // POST won't carry it, so resolveSession() below returns null → 401. MCP
+    // connectors (ChatGPT desktop, Claude) submit the consent form from their
+    // own embedded webview, sending `Origin: https://chatgpt.com`, `null`, etc.;
+    // rejecting those origins 403'd the approval and broke the connect flow
+    // ("consent appeared, then stuck").
     const workspace = await resolveRequestWorkspace(
       req,
       this.workspaceRepo,
