@@ -64,23 +64,12 @@ async function bootstrap() {
   await app.register(fastifyMultipart);
   await app.register(fastifyCookie);
 
-  // OAuth token + consent endpoints receive application/x-www-form-urlencoded
-  // bodies (RFC 6749 §4.1.3). Fastify has no urlencoded parser by default;
-  // register one that yields a plain object so @Body() works.
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .addContentTypeParser(
-      'application/x-www-form-urlencoded',
-      { parseAs: 'string' },
-      (_req: any, body: string, done: (err: Error | null, body?: any) => void) => {
-        try {
-          done(null, Object.fromEntries(new URLSearchParams(body)));
-        } catch (err) {
-          done(err as Error);
-        }
-      },
-    );
+  // NOTE: the OAuth token/consent/register endpoints receive
+  // `application/x-www-form-urlencoded` bodies (RFC 6749 §4.1.3). We do NOT
+  // register a parser for it here — @nestjs/platform-fastify already registers
+  // `@fastify/formbody`, which parses that content type into a plain object for
+  // `@Body()`. Adding our own throws FST_ERR_CTP_ALREADY_PRESENT and crashes
+  // bootstrap.
 
   app
     .getHttpAdapter()
