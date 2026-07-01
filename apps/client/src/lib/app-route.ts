@@ -47,4 +47,18 @@ export function getPostLoginRedirect(): string {
   return APP_ROUTE.HOME;
 }
 
+/**
+ * Navigate to the post-login destination. Backend-served routes (e.g. the MCP
+ * OAuth `/oauth/authorize` consent flow) are not React Router routes, so they
+ * need a full page load rather than a client-side navigation.
+ */
+export function redirectAfterLogin(navigate: (to: string) => void): void {
+  const target = getPostLoginRedirect();
+  if (target.startsWith("/oauth/")) {
+    window.location.assign(target);
+  } else {
+    navigate(target);
+  }
+}
+
 export default APP_ROUTE;

@@ -117,6 +117,39 @@ export class TokenService {
     return this.jwtService.sign(payload, expiresIn ? { expiresIn } : {});
   }
 
+  /**
+   * Mint a short-lived OAuth access token for an MCP connector. It is an
+   * API_KEY-type JWT (so the existing JwtStrategy validates it against the
+   * api_keys grant row unchanged) but additionally carries `aud` (the canonical
+   * MCP resource URL) and the granted `scope`. The MCP auth guard enforces the
+   * audience.
+   */
+  async generateMcpAccessToken(opts: {
+    apiKeyId: string;
+    user: User;
+    workspaceId: string;
+    audience: string;
+    scope: string;
+    expiresInSeconds: number;
+  }): Promise<string> {
+    const { apiKeyId, user, workspaceId, audience, scope, expiresInSeconds } =
+      opts;
+    if (isUserDisabled(user)) {
+      throw new ForbiddenException();
+    }
+
+    const payload: JwtApiKeyPayload = {
+      sub: user.id,
+      apiKeyId,
+      workspaceId,
+      type: JwtType.API_KEY,
+      aud: audience,
+      scope,
+    };
+
+    return this.jwtService.sign(payload, { expiresIn: expiresInSeconds });
+  }
+
   async generatePdfRenderToken(
     pageId: string,
     workspaceId: string,
