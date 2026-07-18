@@ -140,6 +140,13 @@ async function bootstrap() {
     );
   }
   const subdomainHost = process.env.SUBDOMAIN_HOST;
+  // Conqr suite (blueprint §5.2A): sibling product origins (e.g. the Plane web
+  // app) may call the credentialed /integrations API. Exact-match allowlist,
+  // comma-separated; never a wildcard.
+  const extraOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   // Strict, credentialed CORS for the app API: only the configured origin (and
   // its subdomains) may read cookie-authenticated responses. `cb(null, false)`
@@ -152,6 +159,7 @@ async function bootstrap() {
     // Fail-open: no parseable APP_URL → accept any origin.
     if (!allowedOrigin) return cb(null, true);
     if (origin === allowedOrigin) return cb(null, true);
+    if (extraOrigins.includes(origin)) return cb(null, true);
     if (subdomainHost) {
       try {
         const host = new URL(origin).host;
