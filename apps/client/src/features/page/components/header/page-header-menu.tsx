@@ -128,6 +128,17 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
         </ActionIcon>
       </Tooltip>
 
+      <Tooltip label={t("Related work & knowledge")} openDelay={250} withArrow>
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          onClick={() => toggleAside("links")}
+          aria-label={t("Related work & knowledge")}
+        >
+          <IconLink size={20} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
+
       <PageActionMenu readOnly={readOnly} />
     </>
   );

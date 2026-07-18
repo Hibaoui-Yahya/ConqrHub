@@ -19,6 +19,7 @@ import {
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { NotificationList } from "./notification-list";
+import { SuiteNotificationList } from "@/features/integration/components/suite-notification-list";
 import {
   NotificationFilter,
   NotificationTab,
@@ -32,7 +33,8 @@ import classes from "../notification.module.css";
 export function NotificationPopover() {
   const { t } = useTranslation();
   const [opened, setOpened] = useState(false);
-  const [tab, setTab] = useState<NotificationTab>("direct");
+  // "suite" = deduped cross-product feed (blueprint §5.3C)
+  const [tab, setTab] = useState<NotificationTab | "suite">("direct");
   const [filter, setFilter] = useState<NotificationFilter>("all");
 
   const { data: unreadData } = useUnreadCountQuery();
@@ -133,13 +135,14 @@ export function NotificationPopover() {
 
         <Tabs
           value={tab}
-          onChange={(value) => setTab(value as NotificationTab)}
+          onChange={(value) => setTab(value as NotificationTab | "suite")}
           variant="default"
           color="dark"
         >
           <Tabs.List px="md">
             <Tabs.Tab value="direct">{t("Direct")}</Tabs.Tab>
             <Tabs.Tab value="updates">{t("Updates")}</Tabs.Tab>
+            <Tabs.Tab value="suite">{t("Suite")}</Tabs.Tab>
           </Tabs.List>
         </Tabs>
 
@@ -150,11 +153,15 @@ export function NotificationPopover() {
           scrollbarSize={6}
           style={{ overscrollBehavior: "contain" }}
         >
-          <NotificationList
-            tab={tab}
-            filter={filter}
-            onNavigate={() => setOpened(false)}
-          />
+          {tab === "suite" ? (
+            <SuiteNotificationList onNavigate={() => setOpened(false)} />
+          ) : (
+            <NotificationList
+              tab={tab}
+              filter={filter}
+              onNavigate={() => setOpened(false)}
+            />
+          )}
         </ScrollArea.Autosize>
       </Popover.Dropdown>
     </Popover>

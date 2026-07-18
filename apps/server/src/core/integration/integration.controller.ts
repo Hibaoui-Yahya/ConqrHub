@@ -384,6 +384,21 @@ export class IntegrationController {
     });
   }
 
+  /** Recent deduped cross-product notifications — the bell's Suite feed (§5.3C). */
+  @HttpCode(HttpStatus.OK)
+  @Post('notifications/recent')
+  async notificationsRecent(
+    @Body('limit') limit: number | undefined,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return {
+      items: await this.notificationDedup.recentForWorkspace(
+        workspace.id,
+        typeof limit === 'number' && limit > 0 ? Math.min(limit, 50) : 20,
+      ),
+    };
+  }
+
   /** Deduplicated notifications for a cross-product action chain (§5.3C). */
   @HttpCode(HttpStatus.OK)
   @Post('notifications/for-correlation')

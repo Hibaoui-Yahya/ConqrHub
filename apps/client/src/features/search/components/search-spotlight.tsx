@@ -1,11 +1,26 @@
 import { Spotlight } from "@mantine/spotlight";
-import { IconSearch, IconSparkles } from "@tabler/icons-react";
-import { Group, Button } from "@mantine/core";
+import {
+  IconSearch,
+  IconSparkles,
+  IconClipboardList,
+  IconExternalLink,
+  IconSettings,
+} from "@tabler/icons-react";
+import { Group, Button, Badge, Text } from "@mantine/core";
 import React, { useState, useMemo, useEffect } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 import { searchSpotlightStore } from "../constants.ts";
+import { federatedSearch } from "@/features/integration/services/integration-service";
+
+// Plane web app origin for palette actions (same resolution as the app switcher).
+const PLANE_URL =
+  process.env.PLANE_APP_URL ||
+  (import.meta as any)?.env?.VITE_PLANE_URL ||
+  "http://localhost";
 import { SearchSpotlightFilters } from "./search-spotlight-filters.tsx";
 import { useUnifiedSearch } from "../hooks/use-unified-search.ts";
 import { useAiSearch } from "../../../ee/ai/hooks/use-ai-search.ts";
@@ -50,6 +65,21 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
   const { data: searchResults, isLoading } = useUnifiedSearch(
     searchParams,
     !isAiMode // Disable regular search when in AI mode
+  );
+
+  // Cross-product results (blueprint §5.3A): Plane work items from the
+  // federated search, shown as their own group with a source badge. A failing
+  // integration never degrades native search — errors render nothing.
+  const navigate = useNavigate();
+  const { data: federatedItems } = useQuery({
+    queryKey: ["palette-federated-search", debouncedSearchQuery],
+    queryFn: () => federatedSearch(debouncedSearchQuery),
+    enabled: !isAiMode && debouncedSearchQuery.trim().length >= 2,
+    retry: false,
+    staleTime: 15_000,
+  });
+  const planeItems = (federatedItems ?? []).filter(
+    (item) => item.source === "plane" && !!item.deepLink,
   );
   const {
     //@ts-ignore
@@ -188,14 +218,60 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
           ) : (
             <>
               {query.length === 0 && resultItems.length === 0 && (
-                <Spotlight.Empty>{t("Start typing to search...")}</Spotlight.Empty>
+                <>
+                  <Spotlight.Empty>{t("Start typing to search...")}</Spotlight.Empty>
+                  <Spotlight.ActionsGroup label={t("Actions")}>
+                    <Spotlight.Action
+                      leftSection={<IconExternalLink size={18} stroke={1.5} />}
+                      label={t("Open Plane")}
+                      description={t("Projects & work management")}
+                      onClick={() => window.open(PLANE_URL, "_blank", "noreferrer")}
+                    />
+                    <Spotlight.Action
+                      leftSection={<IconSettings size={18} stroke={1.5} />}
+                      label={t("Integration settings")}
+                      description={t("Project ↔ space mappings")}
+                      onClick={() => navigate("/settings/integrations")}
+                    />
+                  </Spotlight.ActionsGroup>
+                </>
               )}
 
-              {query.length > 0 && !isLoading && resultItems.length === 0 && (
-                <Spotlight.Empty>{t("No results found...")}</Spotlight.Empty>
-              )}
+              {query.length > 0 &&
+                !isLoading &&
+                resultItems.length === 0 &&
+                planeItems.length === 0 && (
+                  <Spotlight.Empty>{t("No results found...")}</Spotlight.Empty>
+                )}
 
               {resultItems.length > 0 && <>{resultItems}</>}
+
+              {planeItems.length > 0 && (
+                <Spotlight.ActionsGroup label="Plane">
+                  {planeItems.map((item) => (
+                    <Spotlight.Action
+                      key={item.urn}
+                      leftSection={<IconClipboardList size={18} stroke={1.5} />}
+                      onClick={() => window.open(item.deepLink, "_blank", "noreferrer")}
+                    >
+                      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                        <Text size="sm" truncate style={{ flex: 1 }}>
+                          {item.key ? `#${item.key} ` : ""}
+                          {item.title}
+                        </Text>
+                        {item.state && (
+                          <Badge size="xs" variant="light">
+                            {item.state}
+                          </Badge>
+                        )}
+                        <Badge size="xs" variant="outline" color="gray">
+                          Plane
+                        </Badge>
+                      </Group>
+                    </Spotlight.Action>
+                  ))}
+                </Spotlight.ActionsGroup>
+              )}
             </>
           )}
         </Spotlight.ActionsList>

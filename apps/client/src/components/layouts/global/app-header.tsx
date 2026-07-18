@@ -21,6 +21,7 @@ import {
 } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
+import AppSwitcher from "@/components/layouts/global/app-switcher.tsx";
 import { useTranslation } from "react-i18next";
 import useTrial from "@/ee/hooks/use-trial.tsx";
 import { isCloud } from "@/lib/config.ts";
@@ -71,6 +72,8 @@ export function AppHeader() {
             />
           </Tooltip>
 
+          <AppSwitcher />
+
           <Link to="/home" className={classes.brand} aria-label="ConqrHub">
             <Box hiddenFrom="sm" className={classes.brandIcon}>
               <img
@@ -82,11 +85,11 @@ export function AppHeader() {
             </Box>
             <Text
               size="lg"
-              fw={500}
-              style={{ userSelect: "none", fontFamily: "'Playfair Display', 'Newsreader', serif" }}
+              fw={700}
+              style={{ userSelect: "none", letterSpacing: "-0.02em" }}
               visibleFrom="sm"
             >
-              Conqr<span style={{ color: "#3FC1F2", fontStyle: "italic" }}>Hub</span>
+              Conqr<span style={{ color: "var(--brand-default)" }}>Hub</span>
             </Text>
           </Link>
         </Group>

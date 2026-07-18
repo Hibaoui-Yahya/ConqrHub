@@ -74,6 +74,19 @@ export class NotificationDedupService {
     return out.sort((a, b) => (a.at < b.at ? 1 : -1));
   }
 
+  /**
+   * Recent deduped notifications for a workspace, newest first (the bell's
+   * cross-product "Suite" feed, §5.3C). Cap applies AFTER dedup so the user
+   * sees `limit` outcomes, not `limit` raw events.
+   */
+  async recentForWorkspace(
+    workspaceId: string,
+    limit = 20,
+  ): Promise<DedupedNotification[]> {
+    const events = await this.events.findRecentByWorkspace(workspaceId, 200);
+    return this.dedupe(events).slice(0, Math.max(1, limit));
+  }
+
   /** Deduped notifications for a single correlation chain (from the outbox). */
   async forCorrelation(
     workspaceId: string,

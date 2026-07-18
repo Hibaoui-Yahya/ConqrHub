@@ -19,11 +19,16 @@ function make(opts: {
     listWorkItems:
       opts.listWorkItems ?? jest.fn().mockResolvedValue({ results: [] }),
   };
+  const environment = {
+    getPlaneAppUrl: () => 'https://plane.example.com',
+    getPlaneWorkspaceSlug: () => 'acme',
+  };
   return {
     service: new FederatedSearchService(
       hubSearch as any,
       mappings as any,
       plane as any,
+      environment as any,
     ),
     hubSearch,
     plane,

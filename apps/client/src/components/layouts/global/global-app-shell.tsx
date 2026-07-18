@@ -80,7 +80,7 @@ export default function GlobalAppShell({
 
   return (
     <AppShell
-      header={{ height: 45 }}
+      header={{ height: 48 }}
       navbar={{
         width: isSpaceRoute ? sidebarWidth : 300,
         breakpoint: "sm",

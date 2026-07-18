@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@casl/react": "^5.0.1",
+    "@conqr/tokens": "workspace:*",
+    "@conqr/integration-ui": "workspace:*",
+    "@conqr/icons": "workspace:*",
+    "@conqr/ui": "workspace:*",
+    "@conqr/shell": "workspace:*",
     "@docmost/editor-ext": "workspace:*",
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",

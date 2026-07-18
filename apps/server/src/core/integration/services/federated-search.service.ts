@@ -3,6 +3,7 @@ import { SearchService } from '../../search/search.service';
 import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
 import { PlaneClientService } from './plane-client.service';
 import { buildUrn } from '../domain/urn.util';
+import { EnvironmentService } from '../../../integrations/environment/environment.service';
 
 export interface FederatedResult {
   source: 'hub' | 'plane';
@@ -13,6 +14,8 @@ export interface FederatedResult {
   key?: number | null;
   state?: string | null;
   deepLinkId?: string;
+  /** Absolute link into the owning product (present when resolvable). */
+  deepLink?: string;
 }
 
 // Bound the Plane fan-out so a federated query never blows the API rate limit.
@@ -37,6 +40,7 @@ export class FederatedSearchService {
     private readonly hubSearch: SearchService,
     private readonly mappings: ProjectSpaceMappingRepo,
     private readonly plane: PlaneClientService,
+    private readonly environment: EnvironmentService,
   ) {}
 
   async search(
@@ -107,6 +111,8 @@ export class FederatedSearchService {
             search: query,
             perPage: PLANE_PER_PROJECT,
           });
+          const appUrl = this.environment.getPlaneAppUrl();
+          const slug = this.environment.getPlaneWorkspaceSlug();
           return results.map((wi) => ({
             source: 'plane' as const,
             type: 'work-item',
@@ -114,6 +120,10 @@ export class FederatedSearchService {
             title: wi.name,
             key: wi.sequence_id ?? null,
             state: wi.state_detail?.name ?? wi.state ?? null,
+            deepLink:
+              appUrl && slug
+                ? `${appUrl}/${slug}/projects/${pid}/issues/${wi.id}`
+                : undefined,
           }));
         } catch (err) {
           this.logger.warn(

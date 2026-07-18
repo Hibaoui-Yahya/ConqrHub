@@ -12,14 +12,16 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <Group justify="center" gap={8} className={classes.logo}>
         <Text
           size="32px"
-          fw={500}
+          fw={700}
           style={{
             userSelect: "none",
-            fontFamily: "'Playfair Display', 'Newsreader', serif",
+            letterSpacing: "-0.02em",
           }}
         >
           Conqr
-          <span style={{ color: "#3FC1F2", fontStyle: "italic" }}>Hub</span>
+          <span style={{ color: "var(--brand-default)" }}>
+            Hub
+          </span>
         </Text>
       </Group>
       {children}

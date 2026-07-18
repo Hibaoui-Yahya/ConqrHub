@@ -46,3 +46,27 @@ describe('NotificationDedupService.dedupe', () => {
     expect(service.dedupe([])).toEqual([]);
   });
 });
+
+describe('NotificationDedupService.recentForWorkspace (§5.3C Suite feed)', () => {
+  it('fetches recent workspace events, dedupes, and caps AFTER dedup', async () => {
+    const events = [
+      ev({ correlationId: 'c1', createdAt: '2026-07-18T12:00:00Z' }),
+      ev({ correlationId: 'c1', type: 'plane.work-item.updated', createdAt: '2026-07-18T12:00:01Z' }),
+      ev({ correlationId: 'c2', createdAt: '2026-07-18T11:00:00Z' }),
+      ev({ correlationId: 'c3', createdAt: '2026-07-18T10:00:00Z' }),
+    ];
+    const repo = { findRecentByWorkspace: jest.fn().mockResolvedValue(events) };
+    const service = new NotificationDedupService(repo as any);
+    const out = await service.recentForWorkspace('ws1', 2);
+    expect(repo.findRecentByWorkspace).toHaveBeenCalledWith('ws1', 200);
+    expect(out).toHaveLength(2); // capped after dedup (3 chains -> 2)
+    expect(out[0].correlationId).toBe('c1'); // newest first
+    expect(out[0].collapsedEventCount).toBe(2);
+  });
+
+  it('returns empty for a quiet workspace', async () => {
+    const repo = { findRecentByWorkspace: jest.fn().mockResolvedValue([]) };
+    const service = new NotificationDedupService(repo as any);
+    expect(await service.recentForWorkspace('ws1')).toEqual([]);
+  });
+});

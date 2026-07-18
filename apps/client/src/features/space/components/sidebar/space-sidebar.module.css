@@ -15,7 +15,7 @@
     margin-bottom: var(--mantine-spacing-md);
 
     &:not(:last-of-type) {
-        border-bottom: rem(1px) solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+        border-bottom: rem(1px) solid var(--border-subtle);
     }
 }
 
@@ -43,11 +43,11 @@
     padding: rem(4px) var(--mantine-spacing-xs);
     border-radius: var(--mantine-radius-sm);
     font-weight: 500;
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+    color: var(--txt-secondary);
 
     &:hover {
-        background-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-6));
-        color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+        background-color: var(--bg-layer-1);
+        color: var(--txt-primary);
     }
 }
 
@@ -59,7 +59,7 @@
 
 .menuItemIcon {
     margin-right: var(--mantine-spacing-sm);
-    color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+    color: var(--txt-tertiary);
 }
 
 .pages {
@@ -80,17 +80,17 @@
     text-decoration: none;
     border-radius: var(--mantine-radius-sm);
     font-size: var(--mantine-font-size-xs);
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+    color: var(--txt-secondary);
     line-height: 1;
     font-weight: 500;
 
     &:hover {
-        background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
-        color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+        background-color: var(--bg-layer-1);
+        color: var(--txt-primary);
     }
 }
 
 .activeButton {
-    background-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-6));
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+    background-color: var(--bg-accent-subtle);
+    color: var(--txt-accent-primary);
 }

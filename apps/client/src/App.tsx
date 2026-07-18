@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import SetupWorkspace from "@/pages/auth/setup-workspace.tsx";
 import LoginPage from "@/pages/auth/login";
+import PlaneDocsRedirect from "@/pages/integration/plane-docs-redirect";
+import IntegrationsSettings from "@/pages/settings/integrations/integrations-settings";
 import Home from "@/pages/dashboard/home";
 import Page from "@/pages/page/page";
 import AccountSettings from "@/pages/settings/account/account-settings";
@@ -91,6 +93,10 @@ export default function App() {
 
         <Route element={<Layout />}>
           <Route path={"/home"} element={<Home />} />
+          <Route
+            path={"/plane-docs/:projectId"}
+            element={<PlaneDocsRedirect />}
+          />
           <Route path={"/ai"} element={<AiChat />} />
           <Route path={"/ai/chat/:chatId"} element={<AiChat />} />
           <Route path={"/spaces"} element={<SpacesPage />} />
@@ -130,6 +136,7 @@ export default function App() {
             <Route path={"audit"} element={<AuditLogs />} />
             <Route path={"verifications"} element={<VerifiedPages />} />
             <Route path={"health"} element={<DocHealthPage />} />
+            <Route path={"integrations"} element={<IntegrationsSettings />} />
             {!isCloud() && <Route path={"license"} element={<License />} />}
             {isCloud() && <Route path={"billing"} element={<Billing />} />}
           </Route>

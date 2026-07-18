@@ -1,6 +1,9 @@
-# Local dev overrides for `docker compose up -d db redis`.
-# Exposes db + redis to the host and matches the password in .env so the
-# NestJS server (running on the host via `pnpm run dev`) can connect.
+# Local dev / self-host overrides.
+# - db + redis exposed to the host (kept for host-side tooling / migrations).
+# - docmost: run OUR built ConqrHub image (Plane-aligned UI + app switcher +
+#   shared theme) as a persistent container with restart: unless-stopped, so the
+#   backend no longer gets reaped. Served on host :5173 (unchanged URL), talking
+#   to db/redis over the compose network.
 services:
   db:
     environment:
@@ -11,3 +14,36 @@ services:
   redis:
     ports:
       - "6380:6379"
+
+  docmost:
+    image: conqrhub/app:local
+    restart: unless-stopped
+    ports:
+      - "5173:3000"
+    environment:
+      APP_URL: "http://localhost:5173"
+      APP_SECRET: "7f748fee1832faa75a05e57d2ba683f754c12806c75030543e8a0550d6b6ce0b"
+      DATABASE_URL: "postgresql://docmost:docmostdev@db:5432/docmost"
+      REDIS_URL: "redis://redis:6379"
+      STORAGE_DRIVER: "local"
+      # Conqr suite single sign-on (Keycloak). The container reaches Keycloak on
+      # the host via host.docker.internal; the browser uses localhost:8080 — set
+      # Keycloak KC_HOSTNAME so both resolve to the SAME issuer, and register the
+      # redirect below on Keycloak's `conqrhub` client. Put the real secret in
+      # the shell/.env as OIDC_CLIENT_SECRET.
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER_URL: "http://host.docker.internal:8080/realms/conqr"
+      OIDC_CLIENT_ID: "conqrhub"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-changeme}"
+      OIDC_REDIRECT_URI: "http://localhost:5173/api/auth/oidc/callback"
+      # Cross-product API access (blueprint §5.2A): Plane's origin may call the
+      # credentialed /integrations API from the browser.
+      CORS_ALLOWED_ORIGINS: "http://localhost"
+      # Plane deep links (app switcher, palette, resolver)
+      PLANE_APP_URL: "http://localhost"
+      # Plane REST adapter (integration layer) — Plane's proxy on the host
+      PLANE_API_URL: "http://host.docker.internal/api"
+      PLANE_API_KEY: "${PLANE_API_KEY:-}"
+      PLANE_WORKSPACE_SLUG: "${PLANE_WORKSPACE_SLUG:-conqrai}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

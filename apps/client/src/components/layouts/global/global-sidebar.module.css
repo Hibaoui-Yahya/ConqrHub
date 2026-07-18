@@ -16,32 +16,33 @@
     align-items: center;
     text-decoration: none;
     font-size: var(--mantine-font-size-sm);
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+    color: var(--txt-secondary);
     padding-left: var(--mantine-spacing-xs);
-    min-height: 30px;
+    min-height: 32px;
     border-radius: var(--mantine-radius-sm);
     font-weight: 500;
     user-select: none;
 
     @mixin hover {
-        background-color: light-dark(
-                var(--mantine-color-gray-1),
-                var(--mantine-color-dark-6)
-        );
-        color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
+        background-color: var(--bg-layer-1);
+        color: var(--txt-primary);
     }
 
     &[data-active] {
         &,
-        & :hover {
-            background-color: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-6));
-            color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
+        &:hover {
+            background-color: var(--bg-accent-subtle);
+            color: var(--txt-accent-primary);
+        }
+
+        .linkIcon {
+            color: var(--txt-accent-primary);
         }
     }
 }
 
 .linkIcon {
-    color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+    color: var(--txt-tertiary);
     margin-right: var(--mantine-spacing-sm);
     width: rem(16px);
     height: rem(16px);
@@ -50,7 +51,7 @@
 .sectionHeader {
     padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
     font-size: var(--mantine-font-size-xs);
-    color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-3));
+    color: var(--txt-tertiary);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -62,7 +63,7 @@
 
 .bottomSection {
     padding-top: var(--mantine-spacing-xs);
-    border-top: rem(1px) solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+    border-top: rem(1px) solid var(--border-subtle);
 }
 
 .spaceItem {
@@ -72,18 +73,15 @@
     gap: var(--mantine-spacing-sm);
     text-decoration: none;
     font-size: var(--mantine-font-size-sm);
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+    color: var(--txt-secondary);
     padding-left: var(--mantine-spacing-xs);
-    min-height: 30px;
+    min-height: 32px;
     border-radius: var(--mantine-radius-sm);
     font-weight: 500;
     user-select: none;
 
     @mixin hover {
-        background-color: light-dark(
-                var(--mantine-color-gray-1),
-                var(--mantine-color-dark-6)
-        );
-        color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
+        background-color: var(--bg-layer-1);
+        color: var(--txt-primary);
     }
 }

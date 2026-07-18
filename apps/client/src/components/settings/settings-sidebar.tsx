@@ -16,6 +16,7 @@ import {
   IconHistory,
   IconShieldCheck,
   IconActivityHeartbeat,
+  IconPlug,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import classes from "./settings.module.css";
@@ -106,6 +107,12 @@ const groupedData: DataGroup[] = [
         label: "Documentation health",
         icon: IconActivityHeartbeat,
         path: "/settings/health",
+        role: "admin",
+      },
+      {
+        label: "Integrations",
+        icon: IconPlug,
+        path: "/settings/integrations",
         role: "admin",
       },
       {

@@ -10,6 +10,7 @@ import {
   IconUnderline,
   IconMessage,
   IconSparkles,
+  IconSquarePlus,
 } from "@tabler/icons-react";
 import clsx from "clsx";
 import classes from "./bubble-menu.module.css";
@@ -28,6 +29,7 @@ import { LinkSelector } from "@/features/editor/components/bubble-menu/link-sele
 import { useTranslation } from "react-i18next";
 import { showAiMenuAtom, showLinkMenuAtom } from "@/features/editor/atoms/editor-atoms";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom";
+import { createWorkItemDraftAtom } from "@/features/integration/atoms/create-work-item-atom";
 
 export interface BubbleMenuItem {
   name: string;
@@ -47,6 +49,7 @@ export const EditorBubbleMenu: FC<EditorBubbleMenuProps> = (props) => {
   const workspace = useAtomValue(workspaceAtom);
   const isGenerativeAiEnabled = workspace?.settings?.ai?.generative !== false;
   const [, setDraftCommentId] = useAtom(draftCommentIdAtom);
+  const [, setCreateWorkItemDraft] = useAtom(createWorkItemDraftAtom);
   const showCommentPopupRef = useRef(showCommentPopup);
   const showAiMenuRef = useRef(showAiMenu);
   const [showLinkMenu] = useAtom(showLinkMenuAtom);
@@ -126,6 +129,16 @@ export const EditorBubbleMenu: FC<EditorBubbleMenuProps> = (props) => {
       setShowCommentPopup(true);
     },
     icon: IconMessage,
+  };
+
+  // Create a Plane work item from the current selection (blueprint §5.1A).
+  const createWorkItem = () => {
+    const { from, to } = props.editor.state.selection;
+    const text = props.editor.state.doc
+      .textBetween(from, to, " ")
+      .trim()
+      .slice(0, 200);
+    setCreateWorkItemDraft({ open: true, title: text });
   };
 
   const bubbleMenuProps: EditorBubbleMenuProps = {
@@ -249,6 +262,19 @@ export const EditorBubbleMenu: FC<EditorBubbleMenuProps> = (props) => {
             onClick={commentItem.command}
           >
             <IconMessage size={16} stroke={2} />
+          </ActionIcon>
+        </Tooltip>
+
+        <Tooltip label={t("Create work item")} withArrow withinPortal={false}>
+          <ActionIcon
+            variant="default"
+            size="lg"
+            radius="6px"
+            aria-label={t("Create work item")}
+            style={{ border: "none" }}
+            onClick={createWorkItem}
+          >
+            <IconSquarePlus size={16} stroke={2} />
           </ActionIcon>
         </Tooltip>
       </div>
