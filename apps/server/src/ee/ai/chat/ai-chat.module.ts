@@ -8,6 +8,7 @@ import { SpaceModule } from '../../../core/space/space.module';
 import { CommentModule } from '../../../core/comment/comment.module';
 import { WorkspaceModule } from '../../../core/workspace/workspace.module';
 import { UserModule } from '../../../core/user/user.module';
+import { IntegrationModule } from '../../../core/integration/integration.module';
 import { AiChatController } from './ai-chat.controller';
 import { AiChatStreamController } from './ai-chat-stream.controller';
 import { AiChatService } from './ai-chat.service';
@@ -53,6 +54,8 @@ import { UpdateCommentTool } from './tools/update-comment.tool';
 import { DeletePageTool } from './tools/delete-page.tool';
 import { DeleteCommentTool } from './tools/delete-comment.tool';
 import { AddDiagramTool } from './tools/add-diagram.tool';
+// Cross-product ConqrPlane tools
+import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
 
 // AiChatRepo and AiChatMessageRepo are registered in the @Global() DatabaseModule
 // and are therefore available here without a local re-registration.
@@ -67,6 +70,7 @@ import { AddDiagramTool } from './tools/add-diagram.tool';
     CommentModule,
     WorkspaceModule,
     UserModule,
+    IntegrationModule,
   ],
   controllers: [AiChatController, AiChatStreamController],
   providers: [
@@ -111,6 +115,8 @@ import { AddDiagramTool } from './tools/add-diagram.tool';
     DeletePageTool,
     DeleteCommentTool,
     AddDiagramTool,
+    // Cross-product ConqrPlane tools
+    ...PLANE_WORK_ITEM_TOOLS,
   ],
   exports: [ChatToolRegistry],
 })
