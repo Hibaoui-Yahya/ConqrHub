@@ -50,6 +50,8 @@ type DataItem = {
   feature?: string;
   role?: "admin" | "owner";
   env?: "cloud" | "selfhosted";
+  /** Opens in a new tab (cross-product settings, §7.4). */
+  external?: boolean;
 };
 
 type DataGroup = {
@@ -138,6 +140,17 @@ const groupedData: DataGroup[] = [
       },
     ],
   },
+  {
+    heading: "Conqr suite",
+    items: [
+      {
+        label: "Plane settings",
+        icon: IconPlug,
+        path: `${process.env.PLANE_APP_URL || "http://localhost"}/${process.env.PLANE_WORKSPACE_SLUG || ""}/settings/`,
+        external: true,
+      },
+    ],
+  },
 ];
 
 export default function SettingsSidebar() {
@@ -219,6 +232,23 @@ export default function SettingsSidebar() {
           }
 
           const isDisabled = isItemDisabled(item);
+
+          // Cross-product settings open the sibling app in a new tab (§7.4).
+          if (item.external) {
+            return (
+              <a
+                key={item.label}
+                className={classes.link}
+                href={item.path}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <item.icon className={classes.linkIcon} stroke={2} />
+                <span>{t(item.label)}</span>
+              </a>
+            );
+          }
+
           const linkElement = (
             <Link
               onMouseEnter={!isDisabled ? prefetchHandler : undefined}

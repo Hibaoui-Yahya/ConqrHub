@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     POSTHOG_KEY,
     OIDC_ENABLED,
     PLANE_APP_URL,
+    PLANE_WORKSPACE_SLUG,
   } = loadEnv(mode, envPath, "");
 
   return {
@@ -35,6 +36,7 @@ export default defineConfig(({ mode }) => {
         POSTHOG_KEY,
         OIDC_ENABLED,
         PLANE_APP_URL,
+        PLANE_WORKSPACE_SLUG,
       },
       APP_VERSION: JSON.stringify(process.env.npm_package_version),
     },

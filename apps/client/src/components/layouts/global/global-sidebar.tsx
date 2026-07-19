@@ -60,8 +60,6 @@ export default function GlobalSidebar() {
 
   return (
     <div className={classes.navbar}>
-      {/* Workspace menu — same element as Plane's sidebar header (§7.4) */}
-      <WorkspaceMenu />
       <ScrollArea w="100%" style={{ flex: 1 }}>
         <div className={classes.section}>
           {mainNavItems.map((item) => (
@@ -129,26 +127,10 @@ export default function GlobalSidebar() {
       </ScrollArea>
 
       <div className={classes.bottomSection}>
-        <a
-          className={classes.link}
-          onClick={(e) => {
-            e.preventDefault();
-            openInvite();
-          }}
-          href="#"
-        >
-          <IconUserPlus className={classes.linkIcon} stroke={2} />
-          <span>{t("Invite People")}</span>
-        </a>
-        <Link
-          className={classes.link}
-          data-active={active.startsWith("/settings") || undefined}
-          to="/settings/account/profile"
-          onClick={handleNavClick}
-        >
-          <IconSettings className={classes.linkIcon} stroke={2} />
-          <span>{t("Settings")}</span>
-        </Link>
+        {/* Workspace menu — same element as Plane's, anchored at the sidebar
+            bottom; its dropdown covers Settings, Invite members and Sign out
+            so the old duplicate links are gone (§7.4). */}
+        <WorkspaceMenu onInvite={openInvite} />
       </div>
 
       <Modal

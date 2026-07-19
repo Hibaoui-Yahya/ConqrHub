@@ -13,8 +13,10 @@ COPY . .
 # the Plane deep-link base for the app switcher / palette.
 ARG OIDC_ENABLED=""
 ARG PLANE_APP_URL=""
+ARG PLANE_WORKSPACE_SLUG=""
 ENV OIDC_ENABLED=$OIDC_ENABLED
 ENV PLANE_APP_URL=$PLANE_APP_URL
+ENV PLANE_WORKSPACE_SLUG=$PLANE_WORKSPACE_SLUG
 
 # --no-frozen-lockfile: the checked-out pnpm-lock.yaml is out of date vs
 # packages/icons/package.json; allow pnpm to reconcile during the local build.

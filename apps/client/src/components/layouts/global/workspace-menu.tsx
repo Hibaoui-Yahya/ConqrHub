@@ -16,12 +16,18 @@ import APP_ROUTE from "@/lib/app-route.ts";
 import { isCloud } from "@/lib/config.ts";
 import classes from "./workspace-menu.module.css";
 
+type WorkspaceMenuProps = {
+  /** Opens the invite modal in place (falls back to the members page). */
+  onInvite?: () => void;
+};
+
 /**
- * Workspace menu at the top of the sidebar — the same element Plane shows
- * (workspace avatar + name, then: email, workspace row with role/member
- * count, Settings / Invite members, Create workspace (cloud), Sign out).
+ * Workspace menu anchored at the sidebar bottom — the same element Plane
+ * shows (workspace avatar + name, then: email, workspace row with
+ * role/member count, Settings / Invite members, Create workspace (cloud),
+ * Sign out). Opens upward from the bottom of the sidebar.
  */
-export default function WorkspaceMenu() {
+export default function WorkspaceMenu({ onInvite }: WorkspaceMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -35,7 +41,7 @@ export default function WorkspaceMenu() {
   const memberCount = workspace.memberCount;
 
   return (
-    <Menu position="bottom-start" width={280} shadow="lg" withinPortal>
+    <Menu position="top-start" width={280} shadow="lg" withinPortal>
       <Menu.Target>
         <UnstyledButton className={classes.trigger} aria-label={t("Workspace menu")}>
           <Avatar color="brand" variant="filled" radius="sm" size={22}>
@@ -82,7 +88,9 @@ export default function WorkspaceMenu() {
           </UnstyledButton>
           <UnstyledButton
             className={classes.pillButton}
-            onClick={() => navigate(APP_ROUTE.SETTINGS.WORKSPACE.MEMBERS)}
+            onClick={() =>
+              onInvite ? onInvite() : navigate(APP_ROUTE.SETTINGS.WORKSPACE.MEMBERS)
+            }
           >
             <IconUserPlus size={14} />
             {t("Invite members")}
