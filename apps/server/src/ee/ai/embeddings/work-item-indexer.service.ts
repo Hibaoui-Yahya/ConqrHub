@@ -25,9 +25,12 @@ const LABEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Indexes ConqrPlane work items into the suite semantic store (gap-analysis
- * A1). A work item is scoped to the Hub space its Plane project is mapped to,
- * so pgvector retrieval inherits the caller's space permissions; projects
- * without a mapping are deliberately never indexed.
+ * A1). A work item is scoped to the Hub space its Plane project is mapped to;
+ * projects without a mapping are deliberately never indexed. Indexing alone
+ * does not gate visibility — read-side enforcement lives in
+ * `WorkIntelService`, which restricts `similaritySearch` to the caller's
+ * readable space ids (via `SpaceMemberRepo.getUserSpaceIds`) before returning
+ * any chunk.
  */
 @Injectable()
 export class WorkItemIndexerService {

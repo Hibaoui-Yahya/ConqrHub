@@ -34,8 +34,16 @@ function makeSvc(results: any[], overrides: Partial<Record<string, any>> = {}) {
     similaritySearch: jest.fn().mockResolvedValue(results),
     ...overrides.repo,
   };
-  const svc = new WorkIntelService(aiProvider as any, repo as any);
-  return { svc, aiProvider, repo };
+  const spaceMemberRepo = {
+    getUserSpaceIds: jest.fn().mockResolvedValue(['space-1']),
+    ...overrides.spaceMemberRepo,
+  };
+  const svc = new WorkIntelService(
+    aiProvider as any,
+    repo as any,
+    spaceMemberRepo as any,
+  );
+  return { svc, aiProvider, repo, spaceMemberRepo };
 }
 
 describe('WorkIntelService', () => {
@@ -48,6 +56,7 @@ describe('WorkIntelService', () => {
     ]);
     const items = await svc.findSimilar({
       workspaceId: 'ws-1',
+      userId: 'user-1',
       title: 'Login broken',
       limit: 2,
     });
@@ -60,21 +69,47 @@ describe('WorkIntelService', () => {
     const { svc, repo } = makeSvc([], {
       aiProvider: { isAvailable: jest.fn().mockReturnValue(false) },
     });
-    const items = await svc.findSimilar({ workspaceId: 'ws-1', title: 'x' });
+    const items = await svc.findSimilar({
+      workspaceId: 'ws-1',
+      userId: 'user-1',
+      title: 'x',
+    });
     expect(items).toEqual([]);
     expect(repo.similaritySearch).not.toHaveBeenCalled();
   });
 
-  it('searches only plane_work_item chunks in the caller workspace', async () => {
-    const { svc, repo } = makeSvc([]);
-    await svc.findSimilar({ workspaceId: 'ws-1', title: 'x', limit: 5 });
+  it('searches only plane_work_item chunks in the caller workspace, scoped to the caller readable spaces', async () => {
+    const { svc, repo, spaceMemberRepo } = makeSvc([]);
+    await svc.findSimilar({
+      workspaceId: 'ws-1',
+      userId: 'user-1',
+      title: 'x',
+      limit: 5,
+    });
+    expect(spaceMemberRepo.getUserSpaceIds).toHaveBeenCalledWith('user-1');
     expect(repo.similaritySearch).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'ws-1',
         sourceKind: 'plane_work_item',
+        spaceIds: ['space-1'],
         topK: 20, // limit * OVERSAMPLE(4)
       }),
     );
+  });
+
+  it('returns an empty result with no repo call when the caller has no readable spaces', async () => {
+    const { svc, repo, aiProvider, spaceMemberRepo } = makeSvc([], {
+      spaceMemberRepo: { getUserSpaceIds: jest.fn().mockResolvedValue([]) },
+    });
+    const items = await svc.findSimilar({
+      workspaceId: 'ws-1',
+      userId: 'user-1',
+      title: 'x',
+    });
+    expect(items).toEqual([]);
+    expect(spaceMemberRepo.getUserSpaceIds).toHaveBeenCalledWith('user-1');
+    expect(aiProvider.embedMany).not.toHaveBeenCalled();
+    expect(repo.similaritySearch).not.toHaveBeenCalled();
   });
 
   it('predicts labels weighted by similarity, normalized to confidences', async () => {
@@ -85,6 +120,7 @@ describe('WorkIntelService', () => {
     ]);
     const { labels } = await svc.predictLabels({
       workspaceId: 'ws-1',
+      userId: 'user-1',
       title: 'Login broken',
     });
     expect(labels[0].label).toBe('bug'); // 0.9 + 0.6 dominates
@@ -101,6 +137,7 @@ describe('WorkIntelService', () => {
     ]);
     const { labels } = await svc.predictLabels({
       workspaceId: 'ws-1',
+      userId: 'user-1',
       title: 'Login broken',
     });
     expect(labels.map((l) => l.label)).not.toContain('junk');
@@ -116,6 +153,7 @@ describe('WorkIntelService', () => {
     const { svc, aiProvider } = makeSvc([]);
     await svc.findSimilar({
       workspaceId: 'ws-1',
+      userId: 'user-1',
       title: 'Title',
       description: 'Desc',
     });

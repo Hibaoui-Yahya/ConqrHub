@@ -10,14 +10,18 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
+import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
+import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
-import { Workspace } from '@docmost/db/types/entity.types';
+import { User, Workspace } from '@docmost/db/types/entity.types';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
 import { WorkIntelService, SimilarWorkItem } from './work-intel.service';
 import { WorkIntelBackfillDto, WorkIntelQueryDto } from './dto/work-intel.dto';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+@RequireAiFeature('retrieval')
 @Controller('ai/work-items')
 export class WorkIntelController {
   constructor(
@@ -30,10 +34,12 @@ export class WorkIntelController {
   @Post('similar')
   async similar(
     @Body() dto: WorkIntelQueryDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ): Promise<{ items: SimilarWorkItem[] }> {
     const items = await this.workIntel.findSimilar({
       workspaceId: workspace.id,
+      userId: user.id,
       title: dto.title,
       description: dto.description,
       limit: dto.limit,
@@ -45,10 +51,12 @@ export class WorkIntelController {
   @Post('predict-labels')
   async predictLabels(
     @Body() dto: WorkIntelQueryDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ): Promise<{ labels: { label: string; confidence: number }[] }> {
     return this.workIntel.predictLabels({
       workspaceId: workspace.id,
+      userId: user.id,
       title: dto.title,
       description: dto.description,
       limit: dto.limit,

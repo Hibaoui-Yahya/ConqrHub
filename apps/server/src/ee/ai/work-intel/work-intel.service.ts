@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { EmbeddingRepository } from '../embeddings/embedding.repository';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 
 export interface SimilarWorkItem {
   workItemId: string;
@@ -26,10 +27,12 @@ export class WorkIntelService {
   constructor(
     private readonly aiProvider: AiProviderService,
     private readonly repo: EmbeddingRepository,
+    private readonly spaceMemberRepo: SpaceMemberRepo,
   ) {}
 
   async findSimilar(opts: {
     workspaceId: string;
+    userId: string;
     title: string;
     description?: string;
     limit?: number;
@@ -61,6 +64,7 @@ export class WorkIntelService {
 
   async predictLabels(opts: {
     workspaceId: string;
+    userId: string;
     title: string;
     description?: string;
     limit?: number;
@@ -98,10 +102,25 @@ export class WorkIntelService {
   }
 
   private async retrieve(
-    opts: { workspaceId: string; title: string; description?: string },
+    opts: {
+      workspaceId: string;
+      userId: string;
+      title: string;
+      description?: string;
+    },
     limit: number,
   ) {
     if (!this.aiProvider.isAvailable()) return [];
+
+    // Space-permission scoping: plane_work_item chunks are indexed into the
+    // Hub space their project is mapped to (see WorkItemIndexerService), but
+    // that alone does not gate visibility. Restrict the search to spaces the
+    // caller can actually read, the same boundary RagRetrieveTool uses for
+    // unscoped RAG search. An empty allow-list means the caller can read no
+    // spaces — skip the embedding call entirely and return no results.
+    const spaceIds = await this.spaceMemberRepo.getUserSpaceIds(opts.userId);
+    if (spaceIds.length === 0) return [];
+
     const query = [opts.title, opts.description].filter(Boolean).join('\n\n');
     if (!query.trim()) return [];
     const [embedding] = await this.aiProvider.embedMany([query]);
@@ -109,6 +128,7 @@ export class WorkIntelService {
       workspaceId: opts.workspaceId,
       queryEmbedding: embedding,
       sourceKind: 'plane_work_item',
+      spaceIds,
       topK: limit * OVERSAMPLE,
     });
   }

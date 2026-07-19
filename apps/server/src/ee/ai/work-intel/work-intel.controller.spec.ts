@@ -25,6 +25,44 @@ function makeController(overrides: Partial<Record<string, any>> = {}) {
 }
 
 describe('WorkIntelController', () => {
+  describe('similar', () => {
+    it('passes the authenticated user id through to the service for space scoping', async () => {
+      const { controller, workIntel } = makeController({
+        workIntel: { findSimilar: jest.fn().mockResolvedValue([]) },
+      });
+
+      await controller.similar(
+        { title: 'Login broken' } as any,
+        { id: 'user-1' } as any,
+        { id: 'ws-1' } as any,
+      );
+
+      expect(workIntel.findSimilar).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: 'ws-1', userId: 'user-1' }),
+      );
+    });
+  });
+
+  describe('predictLabels', () => {
+    it('passes the authenticated user id through to the service for space scoping', async () => {
+      const { controller, workIntel } = makeController({
+        workIntel: {
+          predictLabels: jest.fn().mockResolvedValue({ labels: [] }),
+        },
+      });
+
+      await controller.predictLabels(
+        { title: 'Login broken' } as any,
+        { id: 'user-1' } as any,
+        { id: 'ws-1' } as any,
+      );
+
+      expect(workIntel.predictLabels).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: 'ws-1', userId: 'user-1' }),
+      );
+    });
+  });
+
   describe('backfill', () => {
     it('rejects a projectId that does not belong to the caller workspace', async () => {
       const { controller, mappings, aiQueue } = makeController({
