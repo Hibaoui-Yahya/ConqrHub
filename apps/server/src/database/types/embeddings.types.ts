@@ -19,7 +19,11 @@ export interface PageEmbeddings {
   deletedAt: Timestamp | null;
 }
 
-export type AiSourceKind = 'page' | 'expert_insight' | 'external_document';
+export type AiSourceKind =
+  | 'page'
+  | 'expert_insight'
+  | 'external_document'
+  | 'plane_work_item';
 
 export interface AiEmbeddings {
   id: Generated<string>;

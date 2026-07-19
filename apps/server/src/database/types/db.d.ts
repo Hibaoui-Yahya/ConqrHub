@@ -5,7 +5,7 @@
 
 import type { ColumnType } from "kysely";
 
-export type AiSourceKind = "expert_insight" | "external_document" | "page";
+export type AiSourceKind = "expert_insight" | "external_document" | "page" | "plane_work_item";
 
 export type ExpertInsightConfidence = "high" | "low" | "medium";
 
