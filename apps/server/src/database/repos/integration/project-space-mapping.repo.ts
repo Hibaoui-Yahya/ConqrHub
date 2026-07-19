@@ -6,6 +6,7 @@ import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { dbOrTx } from '@docmost/db/utils';
 import { Injectable } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
+import { sql } from 'kysely';
 
 @Injectable()
 export class ProjectSpaceMappingRepo {
@@ -68,6 +69,29 @@ export class ProjectSpaceMappingRepo {
       .where('deletedAt', 'is', null)
       .limit(limit)
       .execute();
+  }
+
+  /**
+   * The single mapping a work item's embeddings are scoped to: the earliest
+   * primary mapping for the project across all Hub workspaces (secondary
+   * mappings are used only when no primary exists).
+   */
+  async findPrimaryForProjectAnyWorkspace(
+    planeProjectId: string,
+    trx?: KyselyTransaction,
+  ): Promise<IntegrationProjectSpaceMapping | undefined> {
+    const db = dbOrTx(this.db, trx);
+    return db
+      .selectFrom('integrationProjectSpaceMappings')
+      .select(this.cols())
+      .where('planeProjectId', '=', planeProjectId)
+      .where('deletedAt', 'is', null)
+      .orderBy(
+        sql`case when mapping_kind = 'primary' then 0 else 1 end`,
+        'asc',
+      )
+      .orderBy('createdAt', 'asc')
+      .executeTakeFirst();
   }
 
   /** Primary mappings for a project across ALL workspaces (webhook has no tenant). */

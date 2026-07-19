@@ -54,6 +54,7 @@ import { PagePromotionService } from './services/page-promotion.service';
     RelationshipService,
     ProjectSpaceMappingService,
     SmartObjectResolverService,
+    PlaneClientService,
     WorkItemCreationService,
     TraceabilityService,
     NotificationDedupService,
