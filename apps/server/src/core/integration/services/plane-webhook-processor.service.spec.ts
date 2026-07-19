@@ -11,15 +11,18 @@ function make(findResult: any[] = []) {
       .fn()
       .mockResolvedValue({ suggestionsEmitted: 1 }),
   };
+  const aiQueue = { add: jest.fn().mockResolvedValue({}) };
   return {
     service: new PlaneWebhookProcessorService(
       relationships as any,
       events as any,
       lifecycle as any,
+      aiQueue as any,
     ),
     events,
     relationships,
     lifecycle,
+    aiQueue,
   };
 }
 
@@ -92,5 +95,39 @@ describe('PlaneWebhookProcessorService', () => {
     expect(events.record.mock.calls[0][0].type).toBe(
       EventType.PlaneWorkItemDeleted,
     );
+  });
+
+  it('enqueues semantic indexing for issue create/update events', async () => {
+    const { service, aiQueue } = make();
+    await service.process(
+      { event: 'issue', action: 'updated', data: { id: 'wi-1', project: 'proj-1' } },
+      'delivery-1',
+    );
+    expect(aiQueue.add).toHaveBeenCalledWith('index-plane-work-item', {
+      workItemId: 'wi-1',
+      projectId: 'proj-1',
+    });
+  });
+
+  it('enqueues embedding deletion for issue deleted events', async () => {
+    const { service, aiQueue } = make();
+    await service.process(
+      { event: 'issue', action: 'deleted', data: { id: 'wi-1', project: 'proj-1' } },
+      'delivery-2',
+    );
+    expect(aiQueue.add).toHaveBeenCalledWith(
+      'delete-plane-work-item-embeddings',
+      { workItemId: 'wi-1' },
+    );
+  });
+
+  it('still succeeds when the AI queue is unavailable', async () => {
+    const { service, aiQueue } = make();
+    aiQueue.add.mockRejectedValueOnce(new Error('redis down'));
+    const res = await service.process(
+      { event: 'issue', action: 'updated', data: { id: 'wi-1', project: 'proj-1' } },
+      'delivery-3',
+    );
+    expect(res).toBeDefined(); // refresh fan-out must not fail because indexing didn't enqueue
   });
 });

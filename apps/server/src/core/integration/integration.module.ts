@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { CaslModule } from '../casl/casl.module';
 import { SearchModule } from '../search/search.module';
 import { PageModule } from '../page/page.module';
+import { QueueName } from '../../integrations/queue/constants';
 import { IntegrationController } from './integration.controller';
 import { PlaneWebhookController } from './plane-webhook.controller';
 import { RelationshipService } from './services/relationship.service';
@@ -29,7 +31,12 @@ import { PagePromotionService } from './services/page-promotion.service';
  * DatabaseModule; CaslModule supplies the workspace ability factory.
  */
 @Module({
-  imports: [CaslModule, SearchModule, PageModule],
+  imports: [
+    CaslModule,
+    SearchModule,
+    PageModule,
+    BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
+  ],
   controllers: [IntegrationController, PlaneWebhookController],
   providers: [
     RelationshipService,

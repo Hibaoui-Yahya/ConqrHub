@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { RelationshipRepo } from '@docmost/db/repos/integration/relationship.repo';
 import { IntegrationEventService } from './integration-event.service';
 import { LifecycleAutomationService } from './lifecycle-automation.service';
 import { buildUrn } from '../domain/urn.util';
 import { EventType } from '../domain/event-envelope';
+import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 
 export interface ParsedPlaneEvent {
   event?: string; // "issue", "cycle", ...
@@ -30,6 +33,7 @@ export class PlaneWebhookProcessorService {
     private readonly relationships: RelationshipRepo,
     private readonly events: IntegrationEventService,
     private readonly lifecycle: LifecycleAutomationService,
+    @InjectQueue(QueueName.AI_QUEUE) private readonly aiQueue: Queue,
   ) {}
 
   parse(rawBody: Buffer | string | undefined): ParsedPlaneEvent | null {
@@ -70,12 +74,33 @@ export class PlaneWebhookProcessorService {
     }
 
     const subject = buildUrn('plane', 'work-item', payload.data.id);
+    const isDelete = payload.action === 'deleted';
+
+    // Keep the suite semantic index fresh (gap-analysis A1). Enqueue-only:
+    // the EE worker decides whether AI is available / the project is mapped.
+    // Failure to enqueue must never break refresh fan-out.
+    try {
+      if (isDelete) {
+        await this.aiQueue.add(QueueJob.DELETE_PLANE_WORK_ITEM_EMBEDDINGS, {
+          workItemId: String(payload.data.id),
+        });
+      } else {
+        await this.aiQueue.add(QueueJob.INDEX_PLANE_WORK_ITEM, {
+          workItemId: String(payload.data.id),
+          projectId: String(payload.data.project ?? ''),
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to enqueue semantic indexing for ${subject}: ${(err as Error).message}`,
+      );
+    }
+
     const affected = await this.relationships.findByUrnAnyWorkspace(subject);
     const workspaces = Array.from(
       new Set(affected.map((r) => r.workspaceId)),
     );
 
-    const isDelete = payload.action === 'deleted';
     for (const workspaceId of workspaces) {
       await this.events.record({
         workspaceId,
