@@ -12,6 +12,9 @@
   align-items: center;
   justify-content: space-between;
   padding-bottom: var(--mantine-spacing-xs);
+  /* Right clearance for the sidebar collapse toggle (sits in the sidebar's
+     top row, Plane-style). */
+  padding-right: rem(28px);
 }
 
 .title {

@@ -1,0 +1,46 @@
+/* Plane breadcrumb spec: 13px, tertiary text for ancestors, primary for the
+   current crumb, "/" separators, small leading icon per crumb. */
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: rem(6px);
+  min-width: 0;
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: rem(6px);
+  min-width: 0;
+  padding: rem(2px) rem(4px);
+  border-radius: rem(4px);
+  text-decoration: none;
+  color: var(--txt-tertiary);
+
+  &[data-current] {
+    color: var(--txt-primary);
+  }
+}
+
+a.crumb:hover {
+  background-color: var(--bg-layer-transparent-hover);
+  color: var(--txt-secondary);
+}
+
+.crumbIcon {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.crumbLabel {
+  font-size: rem(13px);
+  font-weight: 500;
+  color: inherit;
+}
+
+.separator {
+  color: var(--txt-tertiary);
+  font-size: rem(13px);
+  user-select: none;
+}

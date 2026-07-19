@@ -17,6 +17,10 @@ import classes from "./app-shell.module.css";
 import { useTrialEndAction } from "@/ee/hooks/use-trial-end-action.tsx";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import GlobalSidebar from "@/components/layouts/global/global-sidebar.tsx";
+import ContentHeader from "@/components/layouts/global/content-header.tsx";
+import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
+import { Tooltip } from "@mantine/core";
+import { useTranslation } from "react-i18next";
 
 export default function GlobalAppShell({
   children,
@@ -24,9 +28,11 @@ export default function GlobalAppShell({
   children: React.ReactNode;
 }) {
   useTrialEndAction();
+  const { t } = useTranslation();
   const [mobileOpened] = useAtom(mobileSidebarAtom);
   const toggleMobile = useToggleSidebar(mobileSidebarAtom);
   const [desktopOpened] = useAtom(desktopSidebarAtom);
+  const toggleDesktop = useToggleSidebar(desktopSidebarAtom);
   const [{ isAsideOpen }] = useAtom(asideStateAtom);
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
@@ -108,6 +114,18 @@ export default function GlobalAppShell({
       >
         {/* Plane-style workspace card: the sidebar is the card's left half. */}
         <div className={classes.navbarCard}>
+          {/* Plane keeps the collapse toggle in the sidebar's top row,
+              right-aligned — not in the app header. */}
+          <Tooltip label={t("Sidebar toggle")}>
+            <SidebarToggle
+              aria-label={t("Sidebar toggle")}
+              opened={desktopOpened}
+              onClick={toggleDesktop}
+              visibleFrom="sm"
+              size="sm"
+              className={classes.sidebarCollapse}
+            />
+          </Tooltip>
           {isSpaceRoute && (
             <div className={classes.resizeHandle} onMouseDown={startResizing} />
           )}
@@ -125,11 +143,15 @@ export default function GlobalAppShell({
               : `${classes.mainCard} ${classes.mainCardFull}`
           }
         >
-          {isSettingsRoute ? (
-            <Container size={900}>{children}</Container>
-          ) : (
-            children
-          )}
+          {/* Page routes carry their own breadcrumb header (page-header). */}
+          {!isPageRoute && <ContentHeader />}
+          <div className={classes.mainCardBody}>
+            {isSettingsRoute ? (
+              <Container size={900}>{children}</Container>
+            ) : (
+              children
+            )}
+          </div>
         </div>
       </AppShell.Main>
 

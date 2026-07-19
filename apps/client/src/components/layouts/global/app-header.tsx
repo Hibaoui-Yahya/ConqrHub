@@ -15,10 +15,7 @@ import { IconSparkles } from "@tabler/icons-react";
 import useToggleAside from "@/hooks/use-toggle-aside.tsx";
 import APP_ROUTE from "@/lib/app-route.ts";
 import { useAtom } from "jotai";
-import {
-  desktopSidebarAtom,
-  mobileSidebarAtom,
-} from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
+import { mobileSidebarAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
 import AppSwitcher from "@/components/layouts/global/app-switcher.tsx";
@@ -40,8 +37,6 @@ export function AppHeader() {
   const [mobileOpened] = useAtom(mobileSidebarAtom);
   const toggleMobile = useToggleSidebar(mobileSidebarAtom);
 
-  const [desktopOpened] = useAtom(desktopSidebarAtom);
-  const toggleDesktop = useToggleSidebar(desktopSidebarAtom);
   const { isTrial, trialDaysLeft } = useTrial();
   const location = useLocation();
   const toggleAside = useToggleAside();
@@ -52,22 +47,14 @@ export function AppHeader() {
     <>
       <Group h="100%" px="md" justify="space-between" wrap={"nowrap"}>
         <Group wrap="nowrap">
+          {/* Mobile keeps its hamburger here; the desktop toggle lives in the
+              sidebar's top row (Plane parity). */}
           <Tooltip label={t("Sidebar toggle")}>
             <SidebarToggle
               aria-label={t("Sidebar toggle")}
               opened={mobileOpened}
               onClick={toggleMobile}
               hiddenFrom="sm"
-              size="sm"
-            />
-          </Tooltip>
-
-          <Tooltip label={t("Sidebar toggle")}>
-            <SidebarToggle
-              aria-label={t("Sidebar toggle")}
-              opened={desktopOpened}
-              onClick={toggleDesktop}
-              visibleFrom="sm"
               size="sm"
             />
           </Tooltip>

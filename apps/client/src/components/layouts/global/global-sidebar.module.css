@@ -5,7 +5,9 @@
 .navbar {
     height: 100%;
     width: 100%;
-    padding: rem(8px);
+    /* Top clearance for the sidebar collapse toggle (Plane keeps its toggle
+       in the sidebar's top row, right-aligned). */
+    padding: rem(36px) rem(8px) rem(8px);
     display: flex;
     flex-direction: column;
 }

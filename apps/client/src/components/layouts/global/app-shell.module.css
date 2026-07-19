@@ -36,14 +36,45 @@
 
 /* Right half of the workspace card (page content). */
 .mainCard {
+  display: flex;
+  flex-direction: column;
   height: calc(100dvh - var(--app-shell-header-height, rem(48px)) - rem(8px));
   margin: 0 rem(8px) rem(8px) 0;
-  padding: var(--mantine-spacing-md);
-  overflow-y: auto;
+  padding: 0;
+  overflow: hidden;
   background-color: var(--bg-surface-1);
   border: rem(1px) solid var(--border-subtle);
   border-left: none;
   border-radius: 0 rem(8px) rem(8px) 0;
+}
+
+/* Plane's content header: a fixed 40px breadcrumb row at the top of the
+   card; the expand toggle docks at its left when the sidebar is collapsed. */
+.contentHeader {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: rem(6px);
+  min-height: rem(40px);
+  padding: 0 var(--mantine-spacing-md);
+  border-bottom: rem(1px) solid var(--border-subtle);
+}
+
+/* Scroll container below the content header. */
+.mainCardBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--mantine-spacing-md);
+}
+
+/* Plane keeps the collapse toggle inside the sidebar's top row, right-aligned
+   — not in the app header. */
+.sidebarCollapse {
+  position: absolute;
+  top: rem(7px);
+  right: rem(7px);
+  z-index: 10;
 }
 
 /* Sidebar collapsed → the content is the whole card. */

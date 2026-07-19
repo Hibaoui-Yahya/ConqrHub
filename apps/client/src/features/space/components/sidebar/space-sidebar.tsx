@@ -92,7 +92,9 @@ export function SpaceSidebar() {
             gap={4}
             wrap="nowrap"
             justify="space-between"
-            style={{ width: "100%" }}
+            // Right clearance for the sidebar collapse toggle (Plane keeps it
+            // in the sidebar's top row, right of the switcher).
+            style={{ width: "100%", paddingRight: 28 }}
           >
             <SwitchSpace
               spaceName={space?.name}
