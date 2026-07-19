@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -63,6 +64,13 @@ export class WorkIntelController {
   ): Promise<{ enqueued: number }> {
     let projectIds: string[];
     if (dto.projectId) {
+      const mapped = await this.mappings.listForProject(
+        workspace.id,
+        dto.projectId,
+      );
+      if (mapped.length === 0) {
+        throw new NotFoundException('No mapping for this project in your workspace');
+      }
       projectIds = [dto.projectId];
     } else {
       const mapped = await this.mappings.listForWorkspace(workspace.id);

@@ -81,14 +81,16 @@ export class WorkIntelService {
     const weights = new Map<string, number>();
     let total = 0;
     for (const { score, labels } of bestPerItem.values()) {
+      const s = Math.max(0, score);
       for (const label of labels) {
-        weights.set(label, (weights.get(label) ?? 0) + score);
-        total += score;
+        weights.set(label, (weights.get(label) ?? 0) + s);
+        total += s;
       }
     }
     if (total === 0) return { labels: [] };
 
     const labels = Array.from(weights.entries())
+      .filter(([, w]) => w > 0)
       .map(([label, w]) => ({ label, confidence: w / total }))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 5);

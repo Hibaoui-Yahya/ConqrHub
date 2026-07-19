@@ -93,6 +93,25 @@ describe('WorkIntelService', () => {
     expect(labels.map((l) => l.label)).toContain('story');
   });
 
+  it('clamps negative similarity scores so a label gets zero weight and is excluded', async () => {
+    const { svc } = makeSvc([
+      chunk('a', 0.9, { labels: ['bug'] }),
+      chunk('b', 0.6, { labels: ['bug', 'ui'] }),
+      chunk('c', -0.2, { labels: ['junk'] }),
+    ]);
+    const { labels } = await svc.predictLabels({
+      workspaceId: 'ws-1',
+      title: 'Login broken',
+    });
+    expect(labels.map((l) => l.label)).not.toContain('junk');
+    for (const l of labels) {
+      expect(l.confidence).toBeGreaterThanOrEqual(0);
+      expect(l.confidence).toBeLessThanOrEqual(1);
+    }
+    const total = labels.reduce((s, l) => s + l.confidence, 0);
+    expect(total).toBeLessThanOrEqual(1.0001);
+  });
+
   it('combines title and description into one query embedding', async () => {
     const { svc, aiProvider } = makeSvc([]);
     await svc.findSimilar({
