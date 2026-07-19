@@ -119,7 +119,9 @@ export class FederatedSearchService {
             urn: buildUrn('plane', 'work-item', wi.id),
             title: wi.name,
             key: wi.sequence_id ?? null,
-            state: wi.state_detail?.name ?? wi.state ?? null,
+            // state_detail only — the raw `state` field is an opaque id, worse
+            // than no badge at all.
+            state: wi.state_detail?.name ?? null,
             deepLink:
               appUrl && slug
                 ? `${appUrl}/${slug}/projects/${pid}/issues/${wi.id}`

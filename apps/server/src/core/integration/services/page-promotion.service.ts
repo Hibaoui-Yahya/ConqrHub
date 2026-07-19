@@ -71,11 +71,18 @@ export class PagePromotionService {
       );
     }
 
-    const ability = await this.spaceAbility.createForUser(
-      input.user,
-      docs.primary.spaceId,
-    );
-    if (ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)) {
+    // The ability factory throws for users with no space membership; both
+    // cases mean the same thing here: no create rights in the target space.
+    let ability;
+    try {
+      ability = await this.spaceAbility.createForUser(
+        input.user,
+        docs.primary.spaceId,
+      );
+    } catch {
+      ability = null;
+    }
+    if (!ability || ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)) {
       throw new BadRequestException(
         'You cannot create pages in the mapped documentation space',
       );

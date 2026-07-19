@@ -1,3 +1,9 @@
+// PageService transitively imports ESM-only editor/collab modules that Jest's
+// CJS transform can't parse; the unit under test only needs its shape.
+jest.mock('../../page/services/page.service', () => ({
+  PageService: class PageService {},
+}));
+
 import { ProjectSpaceMappingService } from './project-space-mapping.service';
 
 function make(
@@ -7,6 +13,7 @@ function make(
   opts?: {
     pagesBySpace?: Record<string, any[]>;
     deniedSpaceIds?: string[];
+    throwingSpaceIds?: string[];
   },
 ) {
   const mappingRepo = {
@@ -16,16 +23,22 @@ function make(
   const spaceRepo = {
     findById: jest.fn(async (id: string) => spaces[id] ?? null),
   };
-  const pageRepo = {
-    getRecentPagesInSpace: jest.fn(async (spaceId: string) => ({
-      rows: opts?.pagesBySpace?.[spaceId] ?? [],
+  const pageService = {
+    getRecentSpacePages: jest.fn(async (spaceId: string) => ({
+      items: opts?.pagesBySpace?.[spaceId] ?? [],
     })),
   };
   const spaceAbility = {
-    createForUser: jest.fn(async (_user: any, spaceId: string) => ({
-      cannot: () => (opts?.deniedSpaceIds ?? []).includes(spaceId),
-      can: () => !(opts?.deniedSpaceIds ?? []).includes(spaceId),
-    })),
+    createForUser: jest.fn(async (_user: any, spaceId: string) => {
+      // Mirror the real factory: it THROWS for users without membership.
+      if ((opts?.throwingSpaceIds ?? []).includes(spaceId)) {
+        throw new Error('Space permissions not found');
+      }
+      return {
+        cannot: () => (opts?.deniedSpaceIds ?? []).includes(spaceId),
+        can: () => !(opts?.deniedSpaceIds ?? []).includes(spaceId),
+      };
+    }),
   };
   const environment = {
     getPlaneAppUrl: () => env?.appUrl ?? 'https://plane.example.com',
@@ -36,7 +49,7 @@ function make(
     {} as any,
     mappingRepo as any,
     spaceRepo as any,
-    pageRepo as any,
+    pageService as any,
     spaceAbility as any,
     {} as any,
     environment as any,
@@ -179,5 +192,29 @@ describe('ProjectSpaceMappingService.browseProjectDocs (§5.2A Docs area)', () =
     const service = make([], {});
     const res = await service.browseProjectDocs('ws1', user, 'proj1');
     expect(res).toEqual({ spaces: [], pages: [] });
+  });
+
+  it('treats a throwing ability factory (no membership) as a silent deny', async () => {
+    const service = make(
+      [
+        { spaceId: 's1', mappingKind: 'primary' },
+        { spaceId: 's2', mappingKind: 'secondary' },
+      ],
+      {
+        s1: { slug: 'eng', name: 'Engineering' },
+        s2: { slug: 'ops', name: 'Ops' },
+      },
+      undefined,
+      {
+        throwingSpaceIds: ['s1'],
+        pagesBySpace: {
+          s1: [{ id: 'p1', slugId: 'a', title: 'Hidden', updatedAt: new Date() }],
+          s2: [{ id: 'p2', slugId: 'b', title: 'Visible', updatedAt: new Date() }],
+        },
+      },
+    );
+    const res = await service.browseProjectDocs('ws1', user, 'proj1');
+    expect(res.spaces.map((s) => s.spaceId)).toEqual(['s2']);
+    expect(res.pages.map((p) => p.pageId)).toEqual(['p2']);
   });
 });

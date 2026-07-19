@@ -8,7 +8,7 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { executeTx } from '@docmost/db/utils';
 import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
 import { SpaceRepo } from '@docmost/db/repos/space/space.repo';
-import { PageRepo } from '@docmost/db/repos/page/page.repo';
+import { PageService } from '../../page/services/page.service';
 import {
   IntegrationProjectSpaceMapping,
   User,
@@ -44,7 +44,7 @@ export class ProjectSpaceMappingService {
     @InjectKysely() private readonly db: KyselyDB,
     private readonly mappings: ProjectSpaceMappingRepo,
     private readonly spaceRepo: SpaceRepo,
-    private readonly pageRepo: PageRepo,
+    private readonly pageService: PageService,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly events: IntegrationEventService,
     private readonly environment: EnvironmentService,
@@ -201,7 +201,14 @@ export class ProjectSpaceMappingService {
     for (const m of mappings) {
       const space = await this.spaceRepo.findById(m.spaceId, workspaceId);
       if (!space) continue;
-      const ability = await this.spaceAbility.createForUser(user, m.spaceId);
+      // The ability factory THROWS for users with no space membership; treat
+      // that exactly like a deny — the space is silently omitted (§9.2).
+      let ability;
+      try {
+        ability = await this.spaceAbility.createForUser(user, m.spaceId);
+      } catch {
+        continue;
+      }
       if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) continue;
       spaceSlugById.set(m.spaceId, {
         slug: space.slug,
@@ -227,11 +234,15 @@ export class ProjectSpaceMappingService {
       deepLink: string;
     }[] = [];
     for (const space of spaces) {
-      const recent = await this.pageRepo.getRecentPagesInSpace(space.spaceId, {
-        limit: 10,
-      } as any);
+      // getRecentSpacePages also applies per-page permission filtering, so a
+      // restricted page never leaks into the Plane Docs area (§9.2).
+      const recent = await this.pageService.getRecentSpacePages(
+        space.spaceId,
+        user.id,
+        { limit: 10 } as any,
+      );
       const info = spaceSlugById.get(space.spaceId)!;
-      for (const page of (recent as any).rows ?? []) {
+      for (const page of recent.items ?? []) {
         pages.push({
           pageId: page.id,
           slugId: page.slugId,
