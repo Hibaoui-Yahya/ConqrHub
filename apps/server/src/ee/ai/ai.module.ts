@@ -10,6 +10,7 @@ import { AiChatModule } from './chat/ai-chat.module';
 import { McpModule } from './mcp/mcp.module';
 import { SttModule } from './stt/stt.module';
 import { MeetingModule } from './meeting/meeting.module';
+import { WorkIntelModule } from './work-intel/work-intel.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MeetingModule } from './meeting/meeting.module';
     McpModule,
     SttModule,
     MeetingModule,
+    WorkIntelModule,
   ],
   controllers: [AiGenerateController],
   providers: [AiGenerateService, WorkspaceAiToggleGuard],
