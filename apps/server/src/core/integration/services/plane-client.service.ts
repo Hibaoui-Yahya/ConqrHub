@@ -9,11 +9,18 @@ export interface PlaneWorkItem {
   state_detail?: { name?: string; group?: string };
   priority?: string;
   assignees?: string[];
+  labels?: string[];
   project?: string;
   sequence_id?: number;
   updated_at?: string;
   completed_at?: string | null;
   archived_at?: string | null;
+}
+
+export interface PlaneLabel {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 export class PlaneApiError extends Error {
@@ -163,5 +170,68 @@ export class PlaneClientService {
     // Plane returns either a paginated {results} or a bare array depending on endpoint.
     const results = Array.isArray(res) ? res : (res.results ?? []);
     return { results };
+  }
+
+  /** List a project's labels (id → name) for label prediction metadata. */
+  async listLabels(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<PlaneLabel[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneLabel[] } | PlaneLabel[]>(
+      `/workspaces/${slug}/projects/${projectId}/labels/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
+  }
+
+  /**
+   * Cursor-paginated work-item listing for backfills. Plane's cursor format is
+   * `<page_size>:<page>:<offset>`; `next_page_results=false` marks the end.
+   */
+  async listWorkItemsPage(
+    projectId: string,
+    opts: { cursor?: string; perPage?: number } = {},
+    workspaceSlug?: string,
+  ): Promise<{ results: PlaneWorkItem[]; nextCursor: string | null }> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const params = new URLSearchParams();
+    if (opts.perPage) params.set('per_page', String(opts.perPage));
+    if (opts.cursor) params.set('cursor', opts.cursor);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await this.request<{
+      results?: PlaneWorkItem[];
+      next_cursor?: string;
+      next_page_results?: boolean;
+    }>(`/workspaces/${slug}/projects/${projectId}/issues/${qs}`);
+    return {
+      results: res.results ?? [],
+      nextCursor: res.next_page_results ? (res.next_cursor ?? null) : null,
+    };
+  }
+
+  /** List projects in the configured workspace (suite AI/MCP tools). */
+  async listProjects(workspaceSlug?: string): Promise<{ id: string; name: string; identifier?: string }[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: any[] } | any[]>(`/workspaces/${slug}/projects/`);
+    const results = Array.isArray(res) ? res : (res.results ?? []);
+    return results.map((p: any) => ({ id: p.id, name: p.name, identifier: p.identifier }));
+  }
+
+  /** List cycles for a project (suite AI/MCP tools). */
+  async listCycles(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<{ id: string; name: string; start_date?: string | null; end_date?: string | null }[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: any[] } | any[]>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/`,
+    );
+    const results = Array.isArray(res) ? res : (res.results ?? []);
+    return results.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      start_date: c.start_date ?? null,
+      end_date: c.end_date ?? null,
+    }));
   }
 }
