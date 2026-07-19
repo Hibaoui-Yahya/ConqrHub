@@ -42,7 +42,11 @@ type SuiteApp = {
   color: string;
 };
 
-function useSuiteApps(): SuiteApp[] {
+interface UseSuiteAppsProps {
+  t: (key: string) => string;
+}
+
+function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   const location = useLocation();
   // Detect the current Hub space from the route (/s/:spaceSlug/...).
   const spaceSlug = location.pathname.match(/\/s\/([^/]+)/)?.[1];
@@ -62,7 +66,7 @@ function useSuiteApps(): SuiteApp[] {
     {
       key: "hub",
       name: "ConqrHub",
-      desc: "Knowledge & documentation",
+      desc: t("Knowledge & documentation"),
       href: "/home",
       external: false,
       current: true,
@@ -71,10 +75,10 @@ function useSuiteApps(): SuiteApp[] {
     },
     {
       key: "plane",
-      name: "Plane",
+      name: t("ConqrPlane"),
       desc: planeContextual
-        ? "Open this space's project"
-        : "Projects & work management",
+        ? t("Open this space's project")
+        : t("Projects & work management"),
       href: planeHref,
       external: true,
       icon: IconLayoutKanban,
@@ -130,7 +134,7 @@ function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void })
 
 export default function AppSwitcher() {
   const { t } = useTranslation();
-  const suiteApps = useSuiteApps();
+  const suiteApps = useSuiteApps({ t });
   return (
     <Menu
       position="bottom-start"
