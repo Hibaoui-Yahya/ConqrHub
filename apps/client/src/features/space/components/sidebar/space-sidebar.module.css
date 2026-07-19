@@ -46,7 +46,7 @@
     color: var(--txt-secondary);
 
     &:hover {
-        background-color: var(--bg-layer-1);
+        background-color: var(--bg-layer-transparent-hover);
         color: var(--txt-primary);
     }
 }
@@ -85,12 +85,12 @@
     font-weight: 500;
 
     &:hover {
-        background-color: var(--bg-layer-1);
+        background-color: var(--bg-layer-transparent-hover);
         color: var(--txt-primary);
     }
 }
 
 .activeButton {
-    background-color: var(--bg-accent-subtle);
-    color: var(--txt-accent-primary);
+    background-color: var(--bg-layer-transparent-active);
+    color: var(--txt-primary);
 }

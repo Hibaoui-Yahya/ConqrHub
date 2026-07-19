@@ -1,7 +1,11 @@
+/* Sidebar aligned to Plane's SidebarNavItem spec:
+   rounded-md px-2 py-1, 13px/500, text-secondary; hover =
+   --bg-layer-transparent-hover; ACTIVE = --bg-layer-transparent-active +
+   --txt-primary (Plane uses a neutral translucent highlight, not accent). */
 .navbar {
     height: 100%;
     width: 100%;
-    padding: var(--mantine-spacing-md);
+    padding: rem(8px);
     display: flex;
     flex-direction: column;
 }
@@ -15,42 +19,42 @@
     display: flex;
     align-items: center;
     text-decoration: none;
-    font-size: var(--mantine-font-size-sm);
+    font-size: rem(13px);
     color: var(--txt-secondary);
-    padding-left: var(--mantine-spacing-xs);
-    min-height: 32px;
-    border-radius: var(--mantine-radius-md); /* 6px — matches Plane sidebar rounded-md */
+    padding: rem(4px) rem(8px);
+    min-height: 30px;
+    border-radius: var(--mantine-radius-md); /* 6px — Plane rounded-md */
     font-weight: 500;
     user-select: none;
 
     @mixin hover {
-        background-color: var(--bg-layer-1);
+        background-color: var(--bg-layer-transparent-hover);
         color: var(--txt-primary);
     }
 
     &[data-active] {
         &,
         &:hover {
-            background-color: var(--bg-accent-subtle);
-            color: var(--txt-accent-primary);
+            background-color: var(--bg-layer-transparent-active);
+            color: var(--txt-primary);
         }
 
         .linkIcon {
-            color: var(--txt-accent-primary);
+            color: var(--txt-icon-primary, var(--txt-primary));
         }
     }
 }
 
 .linkIcon {
     color: var(--txt-tertiary);
-    margin-right: var(--mantine-spacing-sm);
+    margin-right: rem(6px); /* Plane gap-1.5 */
     width: rem(16px);
     height: rem(16px);
 }
 
 .sectionHeader {
-    padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
-    font-size: var(--mantine-font-size-xs);
+    padding: var(--mantine-spacing-xs) rem(8px);
+    font-size: rem(11px);
     color: var(--txt-tertiary);
     font-weight: 600;
     text-transform: uppercase;
@@ -70,18 +74,18 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: var(--mantine-spacing-sm);
+    gap: rem(6px);
     text-decoration: none;
-    font-size: var(--mantine-font-size-sm);
+    font-size: rem(13px);
     color: var(--txt-secondary);
-    padding-left: var(--mantine-spacing-xs);
-    min-height: 32px;
-    border-radius: var(--mantine-radius-md); /* 6px — matches Plane sidebar rounded-md */
+    padding: rem(4px) rem(8px);
+    min-height: 30px;
+    border-radius: var(--mantine-radius-md); /* 6px — Plane rounded-md */
     font-weight: 500;
     user-select: none;
 
     @mixin hover {
-        background-color: var(--bg-layer-1);
+        background-color: var(--bg-layer-transparent-hover);
         color: var(--txt-primary);
     }
 }

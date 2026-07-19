@@ -25,19 +25,19 @@
     user-select: none;
 
     @mixin hover {
-        background-color: var(--bg-layer-1);
+        background-color: var(--bg-layer-transparent-hover);
         color: var(--txt-primary);
     }
 
     &[data-active] {
         &,
         &:hover {
-            background-color: var(--bg-accent-subtle);
-            color: var(--txt-accent-primary);
+            background-color: var(--bg-layer-transparent-active);
+            color: var(--txt-primary);
         }
 
         .linkIcon {
-            color: var(--txt-accent-primary);
+            color: var(--txt-primary);
         }
     }
 }
