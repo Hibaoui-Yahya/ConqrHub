@@ -19,7 +19,7 @@
     color: var(--txt-secondary);
     padding-left: var(--mantine-spacing-xs);
     min-height: 32px;
-    border-radius: var(--mantine-radius-sm);
+    border-radius: var(--mantine-radius-md); /* 6px — matches Plane sidebar rounded-md */
     font-weight: 500;
     user-select: none;
 
@@ -76,7 +76,7 @@
     color: var(--txt-secondary);
     padding-left: var(--mantine-spacing-xs);
     min-height: 32px;
-    border-radius: var(--mantine-radius-sm);
+    border-radius: var(--mantine-radius-md); /* 6px — matches Plane sidebar rounded-md */
     font-weight: 500;
     user-select: none;
 

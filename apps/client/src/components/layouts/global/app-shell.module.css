@@ -1,19 +1,75 @@
-/* Shell chrome aligned to Plane's design tokens (see styles/conqr-tokens.css).
-   Header is the primary surface; navbar/aside are the secondary surface, each
-   separated by a hairline --border-subtle — Plane's app-frame look. */
+/* Shell chrome aligned to Plane's ACTUAL app composition (v1.3):
+   - everything sits on a flat --bg-canvas,
+   - the header floats on the canvas with no border,
+   - sidebar + content form ONE rounded card (8px inset, 8px radius,
+     --border-subtle) with the sidebar as the card's left half, separated
+     from the content by a subtle divider — Plane's
+     `rounded-lg border border-subtle` workspace panel. */
+
 .header {
-  background-color: var(--bg-surface-1);
-  border-bottom: rem(1px) solid var(--border-subtle);
+  background-color: var(--bg-canvas);
+  border-bottom: none;
 }
 
 .navbar {
-  background-color: var(--bg-surface-2);
-  border-right: rem(1px) solid var(--border-subtle);
+  background-color: var(--bg-canvas);
+  border-right: none;
+  padding: 0 0 rem(8px) rem(8px);
+}
+
+/* Left half of the workspace card (hosts the active sidebar). */
+.navbarCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--bg-surface-1);
+  border: rem(1px) solid var(--border-subtle);
+  border-radius: rem(8px) 0 0 rem(8px);
+}
+
+.main {
+  background-color: var(--bg-canvas);
+}
+
+/* Right half of the workspace card (page content). */
+.mainCard {
+  height: calc(100dvh - var(--app-shell-header-height, rem(48px)) - rem(8px));
+  margin: 0 rem(8px) rem(8px) 0;
+  padding: var(--mantine-spacing-md);
+  overflow-y: auto;
+  background-color: var(--bg-surface-1);
+  border: rem(1px) solid var(--border-subtle);
+  border-left: none;
+  border-radius: 0 rem(8px) rem(8px) 0;
+}
+
+/* Sidebar collapsed → the content is the whole card. */
+.mainCardFull {
+  margin-left: rem(8px);
+  border-left: rem(1px) solid var(--border-subtle);
+  border-radius: rem(8px);
 }
 
 .aside {
-  background-color: var(--bg-surface-2);
-  border-left: rem(1px) solid var(--border-subtle);
+  background-color: var(--bg-canvas);
+  border-left: none;
+  padding: 0 rem(8px) rem(8px) 0;
+}
+
+/* The aside is its own floating card, 8px away from the workspace card. */
+.asideCard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--bg-surface-1);
+  border: rem(1px) solid var(--border-subtle);
+  border-radius: rem(8px);
+  padding: var(--mantine-spacing-md);
 }
 
 .navbar, .aside {
@@ -34,7 +90,7 @@
   position: absolute;
   right: 0;
   top: 0;
-  bottom: 0;
+  bottom: rem(8px);
 
   &:hover, &:active {
     width: 5px;

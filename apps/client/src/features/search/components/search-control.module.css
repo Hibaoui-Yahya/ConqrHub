@@ -2,7 +2,8 @@
     height: 34px;
     padding-left: var(--mantine-spacing-sm);
     padding-right: 4px;
-    border-radius: var(--mantine-radius-md);
+    /* rounded-lg (8px) to match Plane's Power-K search box. */
+    border-radius: var(--mantine-radius-lg);
     color: var(--mantine-color-placeholder);
     border: 1px solid;
 

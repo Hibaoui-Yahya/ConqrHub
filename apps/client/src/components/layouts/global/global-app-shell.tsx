@@ -96,9 +96,9 @@ export default function GlobalAppShell({
           collapsed: { mobile: !isAsideOpen, desktop: !isAsideOpen },
         }
       }
-      padding="md"
+      padding={0}
     >
-      <AppShell.Header px="md" className={classes.header}>
+      <AppShell.Header px="md" className={classes.header} withBorder={false}>
         <AppHeader />
       </AppShell.Header>
       <AppShell.Navbar
@@ -106,25 +106,38 @@ export default function GlobalAppShell({
         withBorder={false}
         ref={sidebarRef}
       >
-        {isSpaceRoute && (
-          <div className={classes.resizeHandle} onMouseDown={startResizing} />
-        )}
-        {isSpaceRoute && <SpaceSidebar />}
-        {isSettingsRoute && <SettingsSidebar />}
-        {isAiRoute && <AiChatSidebar />}
-        {showGlobalSidebar && <GlobalSidebar />}
+        {/* Plane-style workspace card: the sidebar is the card's left half. */}
+        <div className={classes.navbarCard}>
+          {isSpaceRoute && (
+            <div className={classes.resizeHandle} onMouseDown={startResizing} />
+          )}
+          {isSpaceRoute && <SpaceSidebar />}
+          {isSettingsRoute && <SettingsSidebar />}
+          {isAiRoute && <AiChatSidebar />}
+          {showGlobalSidebar && <GlobalSidebar />}
+        </div>
       </AppShell.Navbar>
-      <AppShell.Main>
-        {isSettingsRoute ? (
-          <Container size={900}>{children}</Container>
-        ) : (
-          children
-        )}
+      <AppShell.Main className={classes.main}>
+        <div
+          className={
+            desktopOpened
+              ? classes.mainCard
+              : `${classes.mainCard} ${classes.mainCardFull}`
+          }
+        >
+          {isSettingsRoute ? (
+            <Container size={900}>{children}</Container>
+          ) : (
+            children
+          )}
+        </div>
       </AppShell.Main>
 
       {isPageRoute && (
-        <AppShell.Aside className={classes.aside} p="md" withBorder={false}>
-          <Aside />
+        <AppShell.Aside className={classes.aside} withBorder={false}>
+          <div className={classes.asideCard}>
+            <Aside />
+          </div>
         </AppShell.Aside>
       )}
     </AppShell>

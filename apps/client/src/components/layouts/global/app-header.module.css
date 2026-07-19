@@ -1,8 +1,9 @@
 .header {
     height: 100%;
     margin-bottom: rem(120px);
-    background-color: var(--bg-surface-1);
-    border-bottom: rem(1px) solid var(--border-subtle);
+    /* Plane's top nav floats on the flat canvas — no surface, no border. */
+    background-color: var(--bg-canvas);
+    border-bottom: none;
     padding-left: var(--mantine-spacing-md);
     padding-right: var(--mantine-spacing-md);
 }

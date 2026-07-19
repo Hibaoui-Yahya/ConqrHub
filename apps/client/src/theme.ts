@@ -106,14 +106,19 @@ export const theme = createTheme({
     fontFamily:
       'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
+  // 4px default = Plane's dominant `rounded-sm` (Tailwind v4). Keeps buttons,
+  // inputs, list items, badges at the same tightness as Plane's chrome.
   defaultRadius: "sm",
-  // Radius scale aligned to Plane (tighter corners, esp. at the large end).
+  // Radius scale mapped 1:1 onto Plane's Tailwind v4 scale (its `variables.css`
+  // only overrides `--radius-4xl`, so the v4 defaults apply): xs=2 sm=4 md=6
+  // lg=8 xl=12. Previously shifted +2px at the low end, which made ConqrHub's
+  // corners visibly rounder than Plane — now they match exactly.
   radius: {
-    xs: "4px",
-    sm: "6px",
-    md: "8px",
-    lg: "10px",
-    xl: "12px",
+    xs: "2px", // rounded-xs
+    sm: "4px", // rounded-sm — dominant control radius
+    md: "6px", // rounded-md
+    lg: "8px", // rounded-lg — cards, search, panels
+    xl: "12px", // rounded-xl — modals
   },
   colors: {
     brand,
@@ -134,10 +139,12 @@ export const theme = createTheme({
         },
       }),
     }),
-    // Shape defaults nudged toward Plane's moderately-rounded surfaces.
-    Modal: Modal.extend({ defaultProps: { radius: "md" } }),
-    Card: Card.extend({ defaultProps: { radius: "md" } }),
-    Paper: Paper.extend({ defaultProps: { radius: "md" } }),
+    // Surface radii matched to Plane: cards/panels = rounded-lg (8px), modals =
+    // rounded-xl (12px), dropdown menus/popovers = rounded-md (6px), tooltips =
+    // rounded-sm (4px).
+    Modal: Modal.extend({ defaultProps: { radius: "xl" } }),
+    Card: Card.extend({ defaultProps: { radius: "lg" } }),
+    Paper: Paper.extend({ defaultProps: { radius: "lg" } }),
     Menu: Menu.extend({ defaultProps: { radius: "md", shadow: "md" } }),
     Popover: Popover.extend({ defaultProps: { radius: "md", shadow: "md" } }),
     Tooltip: Tooltip.extend({ defaultProps: { radius: "sm" } }),
