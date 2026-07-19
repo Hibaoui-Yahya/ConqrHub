@@ -157,9 +157,19 @@ export const mantineCssResolver: CSSVariablesResolver = (theme) => ({
   light: {
     "--mantine-color-dark-light-color": "#4e5359",
     "--mantine-color-dark-light-hover": "var(--mantine-color-gray-light-hover)",
+    // Text colour for `subtle`/`light` brand variants (e.g. the "View all spaces"
+    // button). On white, the default brand shade reads fine.
+    "--mantine-color-brand-light-color": "var(--brand-default)",
+    "--mantine-color-blue-light-color": "var(--brand-default)",
   },
   dark: {
     "--mantine-color-dark-light-color": "var(--mantine-color-gray-4)",
     "--mantine-color-dark-light-hover": "var(--mantine-color-default-hover)",
+    // Mantine's auto-derived brand `light-color` is a dark shade in dark mode, so
+    // `subtle`/`light` brand text (links, the "View all spaces" button, tab
+    // accents…) rendered near-invisible on the dark surface. Pin it to the bright
+    // brand shade used by link-hover so the whole class of accent text is legible.
+    "--mantine-color-brand-light-color": "var(--brand-700)",
+    "--mantine-color-blue-light-color": "var(--brand-700)",
   },
 });

@@ -45,5 +45,8 @@ services:
       PLANE_API_URL: "http://host.docker.internal/api/v1"
       PLANE_API_KEY: "${PLANE_API_KEY:-}"
       PLANE_WORKSPACE_SLUG: "${PLANE_WORKSPACE_SLUG:-conqrai}"
+      # ConqrHub as the suite IdP (§9.1): Plane trusts the Hub session — being
+      # signed into the Hub signs Plane in with the same identity, silently.
+      SUITE_IDP_CLIENTS: "${SUITE_IDP_CLIENTS:-plane|plane-suite-secret|http://localhost/auth/oidc/callback/}"
     extra_hosts:
       - "host.docker.internal:host-gateway"

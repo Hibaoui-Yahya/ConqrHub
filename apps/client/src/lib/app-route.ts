@@ -54,7 +54,10 @@ export function getPostLoginRedirect(): string {
  */
 export function redirectAfterLogin(navigate: (to: string) => void): void {
   const target = getPostLoginRedirect();
-  if (target.startsWith("/oauth/")) {
+  // Backend-served routes need a full page load: the MCP OAuth consent flow
+  // (/oauth/*) and the suite IdP authorize endpoint (/api/idp/*) that signs
+  // Plane in with the Hub identity.
+  if (target.startsWith("/oauth/") || target.startsWith("/api/idp/")) {
     window.location.assign(target);
   } else {
     navigate(target);
