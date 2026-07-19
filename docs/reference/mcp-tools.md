@@ -1,6 +1,6 @@
 # MCP Reference
 
-> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 34 tools that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
+> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 39 tools (34 without the ConqrPlane integration configured) that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
 
 ConqrHub's MCP (Model Context Protocol) endpoint lets external agents read, search, and modify the workspace with the same permissions as the user behind the API key. The agent integration is gated by the workspace `mcp` AI feature toggle (default: off — admins enable it from **Settings → AI → MCP**).
 
@@ -171,7 +171,7 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 
 ## Tools
 
-34 tools across 9 categories. Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
+39 tools across 9 categories (the 5 ConqrPlane work-item tools appear only when the Plane integration is configured). Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
 
 ### Search & RAG (2)
 
@@ -273,7 +273,7 @@ Cross-product tools that let the suite assistant (chat + MCP) read and create wo
 | `list_conqrplane_projects` | — | — | List projects in the configured ConqrPlane workspace. Returns `{ id, name, identifier }[]`. Use to find a project ID before searching or creating work items. |
 | `search_work_items` | `projectId` | `query`, `limit` (1–50, default 20) | Search work items in a project by name. Returns `{ id, name, sequenceId, state, priority, updatedAt }[]`. |
 | `get_work_item` | `projectId`, `workItemId` | — | Fetch one work item, including its description. Returns the same summary shape plus `description`. |
-| `create_work_item` | `projectId`, `name` | `description`, `priority` (`urgent` \| `high` \| `medium` \| `low` \| `none`) | Create a work item. Plain-text `description` is wrapped in `<p>` automatically; a value already starting with `<` is passed through as-is. Writes are attributed to the calling user via an on-behalf-of header — use only after explicit user confirmation. |
+| `create_work_item` | `projectId`, `name` | `description`, `priority` (`urgent` \| `high` \| `medium` \| `low` \| `none`) | Create a work item. Plain-text `description` is wrapped in `<p>` automatically; a value already starting with `<` is passed through as-is. An `X-Conqr-On-Behalf-Of` header is sent for future attribution, but ConqrPlane does not yet consume it — writes currently appear as the integration API-key user. Use only after explicit user confirmation. |
 | `get_project_cycles` | `projectId` | — | List a project's cycles (iterations) with `{ id, name, start_date, end_date }`. Use for status questions like "what is in the current cycle". |
 
 Errors from the Plane API (timeouts, 4xx/5xx, or an unconfigured integration) are never thrown through to the transport — each tool catches `PlaneApiError` (and any other failure) and resolves to a structured `{ error: "ConqrPlane request failed (...): ..." }` object instead, so the model can read the message and recover rather than seeing a raw exception.
@@ -293,7 +293,7 @@ Every tool re-checks the API key user's permissions on the resource being touche
 | `create_comment`, `update_comment` | Comment permission on the page |
 | `delete_comment` | Comment creator, or space admin |
 | `list_workspace_members` | Returns only members the requester can see (visibility rules) |
-| `list_conqrplane_projects`, `search_work_items`, `get_work_item`, `create_work_item`, `get_project_cycles` | Not CASL-gated — visible only when the Plane integration is configured. `create_work_item` writes with the calling user's identity via on-behalf-of delegation. |
+| `list_conqrplane_projects`, `search_work_items`, `get_work_item`, `create_work_item`, `get_project_cycles` | Not CASL-gated — visible only when the Plane integration is configured. `create_work_item` sends an on-behalf-of header for future attribution; until ConqrPlane consumes it, writes appear as the integration API-key user. |
 
 A failure surfaces as a tool result with `isError: true` and a human-readable message — never a silent partial success.
 
