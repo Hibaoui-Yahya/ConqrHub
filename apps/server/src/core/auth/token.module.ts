@@ -20,6 +20,8 @@ import { TokenService } from './services/token.service';
     }),
   ],
   providers: [TokenService],
-  exports: [TokenService],
+  // JwtModule is re-exported so AuthModule providers (e.g. the suite IdP) can
+  // inject JwtService directly for custom-audience tokens.
+  exports: [TokenService, JwtModule],
 })
 export class TokenModule {}
