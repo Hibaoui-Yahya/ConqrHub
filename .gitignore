@@ -49,3 +49,4 @@ apps/client/vite.config.d.ts
 
 # Claude Code local config
 .claude/
+.gstack/

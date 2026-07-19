@@ -1,0 +1,16 @@
+{
+  "name": "@conqr/ui",
+  "version": "0.1.0",
+  "description": "Conqr shared UI primitives styled with @conqr/tokens — one interaction model across ConqrHub and the Plane fork.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "module": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": { ".": "./src/index.tsx" },
+  "peerDependencies": {
+    "@mantine/core": "*",
+    "react": "*"
+  },
+  "dependencies": { "@conqr/tokens": "workspace:*" }
+}

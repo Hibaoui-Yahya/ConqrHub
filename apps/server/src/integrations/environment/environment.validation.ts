@@ -174,6 +174,57 @@ export class EnvironmentVariables {
     },
   )
   CLICKHOUSE_URL: string;
+
+  // --- Conqr ↔ Plane integration ---
+  @IsOptional()
+  @IsString()
+  PLANE_API_URL: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_API_KEY: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_WORKSPACE_SLUG: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_APP_URL: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_WEBHOOK_SECRET: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_API_RATE_LIMIT_PER_MINUTE: string;
+
+  @IsOptional()
+  @IsString()
+  PLANE_API_TIMEOUT_MS: string;
+
+  // --- Conqr suite single sign-on (OIDC) ---
+  @IsOptional()
+  @IsString()
+  OIDC_ENABLED: string;
+
+  @IsOptional()
+  @ValidateIf((obj) => obj.OIDC_ISSUER_URL != '' && obj.OIDC_ISSUER_URL != null)
+  @IsUrl({ protocols: ['http', 'https'], require_tld: false })
+  OIDC_ISSUER_URL: string;
+
+  @IsOptional()
+  @IsString()
+  OIDC_CLIENT_ID: string;
+
+  @IsOptional()
+  @IsString()
+  OIDC_CLIENT_SECRET: string;
+
+  @IsOptional()
+  @IsString()
+  OIDC_REDIRECT_URI: string;
 }
 
 export function validate(config: Record<string, any>) {

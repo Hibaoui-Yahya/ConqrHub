@@ -24,6 +24,7 @@ import { FavoriteModule } from './favorite/favorite.module';
 import { SessionModule } from './session/session.module';
 import { DocHealthModule } from './doc-health/doc-health.module';
 import { ExpertInsightsModule } from './expert-insights/expert-insights.module';
+import { IntegrationModule } from './integration/integration.module';
 import { ClsMiddleware } from 'nestjs-cls';
 
 @Module({
@@ -46,6 +47,7 @@ import { ClsMiddleware } from 'nestjs-cls';
     SessionModule,
     DocHealthModule,
     ExpertInsightsModule,
+    IntegrationModule,
   ],
 })
 export class CoreModule implements NestModule {
@@ -55,6 +57,8 @@ export class CoreModule implements NestModule {
       { path: 'health', method: RequestMethod.GET },
       { path: 'health/live', method: RequestMethod.GET },
       { path: 'billing/stripe/webhook', method: RequestMethod.POST },
+      // Plane webhook has no workspace/session context — skip domain & audit.
+      { path: 'integrations/plane/webhook', method: RequestMethod.POST },
     ];
 
     consumer

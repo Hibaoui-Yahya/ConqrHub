@@ -36,6 +36,11 @@ import {
   MeetingSegments,
   McpOauthClients,
   McpOauthRefreshTokens,
+  IntegrationRelationships,
+  IntegrationProjectSpaceMappings,
+  IntegrationWebhookDeliveries,
+  IntegrationEvents,
+  IntegrationRequirements,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -122,6 +127,39 @@ export type UpdatableUserToken = Updateable<Omit<UserTokens, 'id'>>;
 export type Backlink = Selectable<Backlinks>;
 export type InsertableBacklink = Insertable<Backlink>;
 export type UpdatableBacklink = Updateable<Omit<Backlink, 'id'>>;
+
+// Integration Layer (Conqr ↔ Plane)
+export type IntegrationRelationship = Selectable<IntegrationRelationships>;
+export type InsertableIntegrationRelationship =
+  Insertable<IntegrationRelationships>;
+export type UpdatableIntegrationRelationship = Updateable<
+  Omit<IntegrationRelationships, 'id'>
+>;
+export type IntegrationProjectSpaceMapping =
+  Selectable<IntegrationProjectSpaceMappings>;
+export type InsertableIntegrationProjectSpaceMapping =
+  Insertable<IntegrationProjectSpaceMappings>;
+export type UpdatableIntegrationProjectSpaceMapping = Updateable<
+  Omit<IntegrationProjectSpaceMappings, 'id'>
+>;
+export type IntegrationWebhookDelivery =
+  Selectable<IntegrationWebhookDeliveries>;
+export type InsertableIntegrationWebhookDelivery =
+  Insertable<IntegrationWebhookDeliveries>;
+export type UpdatableIntegrationWebhookDelivery = Updateable<
+  Omit<IntegrationWebhookDeliveries, 'id'>
+>;
+export type IntegrationEvent = Selectable<IntegrationEvents>;
+export type InsertableIntegrationEvent = Insertable<IntegrationEvents>;
+export type UpdatableIntegrationEvent = Updateable<
+  Omit<IntegrationEvents, 'id'>
+>;
+export type IntegrationRequirement = Selectable<IntegrationRequirements>;
+export type InsertableIntegrationRequirement =
+  Insertable<IntegrationRequirements>;
+export type UpdatableIntegrationRequirement = Updateable<
+  Omit<IntegrationRequirements, 'id'>
+>;
 
 // Billing
 export type Billing = Selectable<BillingSubscription>;

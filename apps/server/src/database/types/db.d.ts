@@ -718,6 +718,80 @@ export interface MeetingSegments {
   createdAt: Generated<Timestamp>;
 }
 
+export interface IntegrationRelationships {
+  id: Generated<string>;
+  workspaceId: string;
+  sourceUrn: string;
+  sourceType: string;
+  targetUrn: string;
+  targetType: string;
+  relationType: string;
+  inverseRelationType: string;
+  lifecycleState: Generated<string>;
+  provenance: string | null;
+  createdBy: string | null;
+  sourceVersion: Json | null;
+  metadata: Json | null;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+}
+
+export interface IntegrationProjectSpaceMappings {
+  id: Generated<string>;
+  workspaceId: string;
+  planeProjectId: string;
+  spaceId: string;
+  mappingKind: Generated<string>;
+  createdBy: string | null;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+}
+
+export interface IntegrationWebhookDeliveries {
+  id: Generated<string>;
+  source: Generated<string>;
+  deliveryId: string;
+  eventType: string | null;
+  signatureValid: Generated<boolean>;
+  status: Generated<string>;
+  workspaceId: string | null;
+  error: string | null;
+  attempts: Generated<number>;
+  subject: string | null;
+  action: string | null;
+  receivedAt: Generated<Timestamp>;
+  processedAt: Timestamp | null;
+}
+
+export interface IntegrationRequirements {
+  id: Generated<string>;
+  workspaceId: string;
+  pageId: string;
+  blockId: string;
+  title: string | null;
+  state: Generated<string>;
+  createdBy: string | null;
+  createdAt: Generated<Timestamp>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface IntegrationEvents {
+  id: Generated<string>;
+  workspaceId: string;
+  type: string;
+  source: string;
+  subject: string;
+  correlationId: string;
+  causationId: string | null;
+  actorId: string | null;
+  data: Json | null;
+  status: Generated<string>;
+  createdAt: Generated<Timestamp>;
+  publishedAt: Timestamp | null;
+}
+
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
@@ -738,6 +812,11 @@ export interface DB {
   fileTasks: FileTasks;
   groups: Groups;
   groupUsers: GroupUsers;
+  integrationEvents: IntegrationEvents;
+  integrationProjectSpaceMappings: IntegrationProjectSpaceMappings;
+  integrationRelationships: IntegrationRelationships;
+  integrationRequirements: IntegrationRequirements;
+  integrationWebhookDeliveries: IntegrationWebhookDeliveries;
   mcpOauthClients: McpOauthClients;
   mcpOauthRefreshTokens: McpOauthRefreshTokens;
   meetings: Meetings;

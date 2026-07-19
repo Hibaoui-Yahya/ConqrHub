@@ -385,4 +385,103 @@ export class EnvironmentService {
     if (!Number.isFinite(parsed) || parsed < 0) return 0.2;
     return Math.min(parsed, 1);
   }
+
+  // ---------------------------------------------------------------------------
+  // Plane integration (Conqr Integration Layer). ConqrHub never touches Plane's
+  // database — it calls Plane's REST API and receives signed webhooks.
+  // ---------------------------------------------------------------------------
+
+  /** Base URL of the Plane REST API, e.g. https://plane.example.com/api/v1 */
+  getPlaneApiUrl(): string {
+    const raw = this.configService.get<string>('PLANE_API_URL', '');
+    return raw.replace(/\/+$/, '');
+  }
+
+  /** Plane API key (sent as the `X-Api-Key` header). */
+  getPlaneApiKey(): string {
+    return this.configService.get<string>('PLANE_API_KEY', '');
+  }
+
+  /** Plane workspace slug the API calls are scoped to. */
+  getPlaneWorkspaceSlug(): string {
+    return this.configService.get<string>('PLANE_WORKSPACE_SLUG', '');
+  }
+
+  /**
+   * Base URL of the Plane WEB app (for deep links / app switching), distinct
+   * from the REST API URL. Falls back to deriving from the API URL by stripping
+   * a trailing `/api/...` segment.
+   */
+  getPlaneAppUrl(): string {
+    const explicit = this.configService.get<string>('PLANE_APP_URL', '');
+    if (explicit) return explicit.replace(/\/+$/, '');
+    const api = this.getPlaneApiUrl();
+    return api ? api.replace(/\/api(\/.*)?$/, '') : '';
+  }
+
+  /** Shared secret used to verify Plane webhook HMAC-SHA256 signatures. */
+  getPlaneWebhookSecret(): string {
+    return this.configService.get<string>('PLANE_WEBHOOK_SECRET', '');
+  }
+
+  /**
+   * Documented Plane API-key limit is 60 req/min; we stay a little under it so
+   * caching/batching/backoff have headroom.
+   */
+  getPlaneApiRateLimitPerMinute(): number {
+    const raw = this.configService.get<string>(
+      'PLANE_API_RATE_LIMIT_PER_MINUTE',
+      '55',
+    );
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 55;
+  }
+
+  getPlaneApiTimeoutMs(): number {
+    const raw = this.configService.get<string>('PLANE_API_TIMEOUT_MS', '10000');
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 10_000;
+    return Math.min(parsed, 30_000);
+  }
+
+  /**
+   * The integration is only "enabled" when the API URL + key are configured.
+   * When disabled, cross-product features degrade to `integration_disabled`
+   * rather than erroring.
+   */
+  isPlaneIntegrationEnabled(): boolean {
+    return Boolean(this.getPlaneApiUrl() && this.getPlaneApiKey());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shared-IdP OIDC login (Conqr single sign-on, blueprint §9.1). One OIDC
+  // provider for the suite; when unset, OIDC login is simply unavailable.
+  // ---------------------------------------------------------------------------
+  getOidcIssuerUrl(): string {
+    return this.configService.get<string>('OIDC_ISSUER_URL', '');
+  }
+
+  getOidcClientId(): string {
+    return this.configService.get<string>('OIDC_CLIENT_ID', '');
+  }
+
+  getOidcClientSecret(): string {
+    return this.configService.get<string>('OIDC_CLIENT_SECRET', '');
+  }
+
+  /** Callback URL registered with the IdP; defaults to APP_URL + standard path. */
+  getOidcRedirectUri(): string {
+    return (
+      this.configService.get<string>('OIDC_REDIRECT_URI') ||
+      `${this.getAppUrl()}/api/auth/oidc/callback`
+    );
+  }
+
+  isOidcEnabled(): boolean {
+    return Boolean(
+      this.getOidcIssuerUrl() &&
+        this.getOidcClientId() &&
+        this.getOidcClientSecret(),
+    );
+  }
 }

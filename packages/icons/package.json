@@ -1,0 +1,15 @@
+{
+  "name": "@conqr/icons",
+  "version": "0.1.0",
+  "description": "Conqr shared icon set — one semantic icon vocabulary with accessible labels and RTL rules, shared across ConqrHub and the Plane fork.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "module": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": { ".": "./src/index.tsx" },
+  "peerDependencies": {
+    "@tabler/icons-react": "*",
+    "react": "*"
+  }
+}

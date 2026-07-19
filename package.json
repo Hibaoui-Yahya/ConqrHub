@@ -94,6 +94,7 @@
   },
   "packageManager": "pnpm@10.4.0",
   "pnpm": {
+    "allowNonAppliedPatches": true,
     "patchedDependencies": {
       "react-arborist@3.4.0": "patches/react-arborist@3.4.0.patch"
     },

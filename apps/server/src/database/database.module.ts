@@ -29,6 +29,11 @@ import { ExpertInsightsListener } from '@docmost/db/listeners/expert-insights.li
 import { AiChatRepo } from '@docmost/db/repos/ai-chat/ai-chat.repo';
 import { AiChatMessageRepo } from '@docmost/db/repos/ai-chat/ai-chat-message.repo';
 import { MeetingRepo } from '@docmost/db/repos/meeting/meeting.repo';
+import { RelationshipRepo } from '@docmost/db/repos/integration/relationship.repo';
+import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
+import { WebhookDeliveryRepo } from '@docmost/db/repos/integration/webhook-delivery.repo';
+import { IntegrationEventRepo } from '@docmost/db/repos/integration/integration-event.repo';
+import { RequirementRepo } from '@docmost/db/repos/integration/requirement.repo';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { normalizePostgresUrl } from '../common/helpers';
@@ -95,6 +100,11 @@ import { normalizePostgresUrl } from '../common/helpers';
     AiChatRepo,
     AiChatMessageRepo,
     MeetingRepo,
+    RelationshipRepo,
+    ProjectSpaceMappingRepo,
+    WebhookDeliveryRepo,
+    IntegrationEventRepo,
+    RequirementRepo,
   ],
   exports: [
     WorkspaceRepo,
@@ -119,6 +129,11 @@ import { normalizePostgresUrl } from '../common/helpers';
     AiChatRepo,
     AiChatMessageRepo,
     MeetingRepo,
+    RelationshipRepo,
+    ProjectSpaceMappingRepo,
+    WebhookDeliveryRepo,
+    IntegrationEventRepo,
+    RequirementRepo,
   ],
 })
 export class DatabaseModule implements OnApplicationBootstrap {

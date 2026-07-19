@@ -1,0 +1,16 @@
+{
+  "name": "@conqr/shell",
+  "version": "0.1.0",
+  "description": "Conqr shared shell primitives — product switcher and active-product identity for a stable cross-product frame (blueprint §7.4).",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "module": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": { ".": "./src/index.tsx" },
+  "peerDependencies": {
+    "@mantine/core": "*",
+    "react": "*"
+  },
+  "dependencies": { "@conqr/tokens": "workspace:*" }
+}
