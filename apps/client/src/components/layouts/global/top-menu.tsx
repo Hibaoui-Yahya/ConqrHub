@@ -43,20 +43,15 @@ export default function TopMenu() {
   return (
     <Menu width={250} position="bottom-end" withArrow shadow={"lg"}>
       <Menu.Target>
-        <UnstyledButton>
-          <Group gap={7} wrap={"nowrap"}>
-            <CustomAvatar
-              avatarUrl={workspace?.logo}
-              name={workspace?.name}
-              variant="filled"
-              size="sm"
-              type={AvatarIconType.WORKSPACE_ICON}
-            />
-            <Text fw={500} size="sm" lh={1} mr={3} lineClamp={1}>
-              {workspace?.name}
-            </Text>
-            <IconChevronDown size={16} />
-          </Group>
+        {/* Avatar-only trigger — Plane's top-right user menu is a lone user
+            avatar; the workspace identity lives in the sidebar-bottom menu. */}
+        <UnstyledButton aria-label={t("Account menu")}>
+          <CustomAvatar
+            avatarUrl={user.avatarUrl}
+            name={user.name}
+            variant="filled"
+            size="sm"
+          />
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
