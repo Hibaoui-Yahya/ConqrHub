@@ -21,6 +21,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { WorkspaceInviteForm } from "@/features/workspace/components/members/components/workspace-invite-form";
 import { CustomAvatar } from "@/components/ui/custom-avatar";
 import { AvatarIconType } from "@/features/attachments/types/attachment.types";
+import WorkspaceMenu from "@/components/layouts/global/workspace-menu";
 
 const mainNavItems = [
   { label: "Home", icon: IconHome, path: "/home" },
@@ -59,6 +60,8 @@ export default function GlobalSidebar() {
 
   return (
     <div className={classes.navbar}>
+      {/* Workspace menu — same element as Plane's sidebar header (§7.4) */}
+      <WorkspaceMenu />
       <ScrollArea w="100%" style={{ flex: 1 }}>
         <div className={classes.section}>
           {mainNavItems.map((item) => (

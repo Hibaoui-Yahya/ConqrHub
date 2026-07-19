@@ -1,0 +1,63 @@
+/* Workspace menu trigger + dropdown pieces, matching Plane's sidebar
+   workspace menu (rounded trigger with avatar chip; dropdown with email,
+   workspace row + check, pill buttons, red sign-out). */
+.trigger {
+    display: flex;
+    align-items: center;
+    gap: rem(8px);
+    width: 100%;
+    padding: rem(4px) rem(8px);
+    margin-bottom: rem(4px);
+    border-radius: var(--mantine-radius-md);
+    user-select: none;
+
+    @mixin hover {
+        background-color: var(--bg-layer-transparent-hover);
+    }
+}
+
+.name {
+    flex: 1;
+    min-width: 0;
+    color: var(--txt-primary);
+}
+
+.chevron {
+    color: var(--txt-tertiary);
+    flex-shrink: 0;
+}
+
+.workspaceRow {
+    display: flex;
+    align-items: center;
+    gap: rem(10px);
+    padding: rem(6px) var(--mantine-spacing-sm) rem(10px);
+}
+
+.workspaceInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.check {
+    color: var(--txt-primary);
+    flex-shrink: 0;
+}
+
+.pillButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: rem(6px);
+    padding: rem(6px) rem(10px);
+    font-size: rem(13px);
+    font-weight: 500;
+    color: var(--txt-primary);
+    background-color: var(--bg-layer-1);
+    border: rem(1px) solid var(--border-subtle);
+    border-radius: var(--mantine-radius-md);
+
+    @mixin hover {
+        background-color: var(--bg-layer-1-hover);
+    }
+}

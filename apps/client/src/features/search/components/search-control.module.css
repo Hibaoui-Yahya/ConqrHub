@@ -1,47 +1,37 @@
+/* Matches Plane's Power-K top-nav search pill exactly:
+   w-[364px] h-7 rounded-lg border border-subtle-1 bg-layer-2, 13px text,
+   placeholder color, 14px icon, subtle kbd hint. */
 .root {
-    height: 34px;
-    padding-left: var(--mantine-spacing-sm);
-    padding-right: 4px;
-    /* rounded-lg (8px) to match Plane's Power-K search box. */
-    border-radius: var(--mantine-radius-lg);
-    color: var(--mantine-color-placeholder);
-    border: 1px solid;
+    width: rem(364px);
+    max-width: 60vw;
+    height: rem(28px);
+    padding: 0 rem(8px);
+    border-radius: rem(8px);
+    color: var(--txt-placeholder);
+    border: rem(1px) solid var(--border-subtle-1);
+    background-color: var(--bg-layer-2);
+    transition: background-color 150ms ease;
 
-    @mixin light {
-        border-color: var(--mantine-color-gray-3);
-        background-color: var(--mantine-color-white);
-    }
-
-    @mixin dark {
-        border-color: var(--mantine-color-dark-4);
-        background-color: var(--mantine-color-dark-6);
-    }
-
-    @mixin rtl {
-        padding-left: 4px;
-        padding-right: var(--mantine-spacing-sm);
+    @mixin hover {
+        background-color: var(--bg-layer-1);
     }
 }
 
+.label {
+    font-size: rem(13px);
+    color: var(--txt-placeholder);
+}
+
 .shortcut {
+    margin-left: auto;
     font-size: 11px;
     line-height: 1;
-    padding: 4px 7px;
+    padding: 3px 6px;
     border-radius: var(--mantine-radius-sm);
-    border: 1px solid;
-    font-weight: bold;
+    border: rem(1px) solid var(--border-subtle);
+    background-color: var(--bg-layer-1);
+    color: var(--txt-tertiary);
+    font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
-
-    @mixin light {
-        color: var(--mantine-color-gray-7);
-        border-color: var(--mantine-color-gray-2);
-        background-color: var(--mantine-color-gray-0);
-    }
-
-    @mixin dark {
-        color: var(--mantine-color-dark-0);
-        border-color: var(--mantine-color-dark-7);
-        background-color: var(--mantine-color-dark-7);
-    }
 }
