@@ -48,25 +48,25 @@ Non-goals: renaming Plane's internal i18n keys (`issue.*` — purely internal, 1
 | Deleted-items area | **Trash** (Hub) / **Archive** (Plane) | Different semantics (recoverable deletion vs hide-completed); documented, not merged. |
 | Permission group | **Group** | Hub object. Plane's "group by" is a verb; Plane "Teams/Teamspace" is a distinct people object. Glossary flags the difference. |
 | AI assistant | **Conqr AI** | Replaces "Pi"/"Plane AI" labels in Plane and Hub's inconsistent AI titles (e.g. `"Conqrai AI": "ConqrHub"`). |
-| Suite / products | **Conqr suite**; **ConqrHub** (Knowledge & documentation); **ConqrTasks** (Projects & work management) | The Plane fork's user-visible product name becomes **ConqrTasks** on high-visibility surfaces (Hub app-switcher tile, Plane sidebar wordmark/title, power-k, auth screens, conqr_* i18n blocks). Deep copy (marketing/upgrade strings) is out of scope this pass. |
+| Suite / products | **Conqr suite**; **ConqrHub** (Knowledge & documentation); **ConqrPlane** (Projects & work management) | The Plane fork's user-visible product name is **ConqrPlane** — adopted from in-flight work already present in the plane repo (ConqrPlane wordmark logo, "New to ConqrPlane?" auth copy) instead of the earlier "ConqrTasks" idea. Applied on high-visibility surfaces (Hub app-switcher tile, Plane wordmark/title, power-k, auth screens, conqr_* i18n blocks). Deep copy (marketing/upgrade strings) is out of scope this pass. |
 
 ### 4.2 Concrete term changes
 
 **Plane (`packages/i18n/src/locales/en/*.json`, per the repo's `translate` skill):**
 - All labels where Plane-native pages are called "Pages"/"Docs" → "Project Notes" (namespaces: `navigation`, `page`, `wiki`, `power-k`, `empty-state` as applicable). "Docs" remains only for the ConqrHub-mapped area.
 - "Pi" / "Plane AI" assistant labels → "Conqr AI" (`packages/constants/src/ai.ts` LOADING_TEXTS, `ask-pi-menu.tsx` labels).
-- Product-name strings on high-visibility surfaces → "ConqrTasks".
+- Product-name strings on high-visibility surfaces → "ConqrPlane".
 - English (`en`) locale is source of truth this pass; other 18 locales keep existing values for unchanged keys; changed/new keys get `en` values copied with a follow-up translation note (per translate-skill workflow).
 
 **ConqrHub (`apps/client/public/locales/en-US/translation.json` + source `t()` keys):**
 - Fix `"Conqrai AI": "ConqrHub"` and any assistant-name drift → "Conqr AI".
-- App-switcher: raw literals (`"ConqrHub"`, `"Plane"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`) moved into `t()` + catalog; "Plane" tile → "ConqrTasks".
+- App-switcher: raw literals (`"ConqrHub"`, `"Plane"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`) moved into `t()` + catalog; "Plane" tile → "ConqrPlane".
 - Add the known missing catalog entries surfaced by the audit (doc-health keys: "Score alerts", "Threshold", "Last fired", "Subscribe"; "Switch apps", "Conqr suite") so the catalog stops silently relying on fallback.
 - Minor comment-wording harmonization: keep Hub "Add a comment…" (Plane's notify copy untouched — different context, not a collision).
 
 ### 4.3 Glossary enforcement
 - `docs/Conqr-Suite-Glossary.md` committed in ConqrHub; `plane/CLAUDE.md`-adjacent note (or plane docs) links to it.
-- The plane `translate` skill's do-not-translate terminology list gains the suite terms (Conqr AI, ConqrHub, ConqrTasks, Project Notes).
+- The plane `translate` skill's do-not-translate terminology list gains the suite terms (Conqr AI, ConqrHub, ConqrPlane, Project Notes).
 
 ## 5. Design — Part 2: AI parity
 
@@ -111,7 +111,7 @@ Non-goals: renaming Plane's internal i18n keys (`issue.*` — purely internal, 1
 
 ## 9. Delivery order (slices)
 1. **T1** Glossary doc + translate-skill terminology additions.
-2. **T2** Plane en-locale term changes (Project Notes, Conqr AI, ConqrTasks surfaces).
+2. **T2** Plane en-locale term changes (Project Notes, Conqr AI, ConqrPlane surfaces).
 3. **T3** Hub label fixes + catalog additions + app-switcher i18n/rename.
 4. **A1** Plane `rephrase-grammar` endpoint + editor AI menu wiring.
 5. **A2/M1** Hub cross-product chat/MCP tools + docs.

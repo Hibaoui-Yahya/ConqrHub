@@ -11,13 +11,14 @@
 ## Global Constraints
 
 - Two repos: `C:\Users\admen\Documents\Claude\Projects\ConqrTasks\ConqrHub` (branch `main`) and `C:\Users\admen\Documents\Claude\Projects\ConqrTasks\plane` (branch `conqr/integration`). Commit to each repo separately; never cross-commit.
-- Suite terms (exact copy): assistant = **"Conqr AI"**; Plane fork product name = **"ConqrTasks"**; Plane-native pages = **"Project Notes"**; trackable work = **"Work item"**; Hub docs container = **"Space"**; canonical document = **"Page"**.
+- Suite terms (exact copy): assistant = **"Conqr AI"**; Plane fork product name = **"ConqrPlane"**; Plane-native pages = **"Project Notes"**; trackable work = **"Work item"**; Hub docs container = **"Space"**; canonical document = **"Page"**.
 - Do NOT rename Plane's internal i18n key names (e.g. `issue.*`) — values only.
 - Plane locale edits: `en` is source of truth; when touching `packages/i18n/src/locales`, follow the plane repo's `translate` skill rules (preserve placeholders/tags; do not translate product names).
 - Hub host toolchain works (node 20 OK). Plane web builds need node ≥22.18 — typecheck/build via Docker if host `npx tsc` fails; do not `pnpm install` in plane on host.
 - Hub server tests: `cd apps/server && pnpm run test` must stay green (currently 19+ suites pass).
 - ConqrHub EE paths (`apps/server/src/ee/`, `apps/client/src/ee/`) are enterprise-licensed; core paths are AGPL. New Hub chat tools go in `ee/ai/chat/tools/` (existing pattern).
 - Windows/PowerShell environment; in Git Bash prefix docker exec with `MSYS_NO_PATHCONV=1`.
+- **The plane repo working tree contains in-flight parallel WIP** (ConqrPlane wordmark in `packages/propel/src/icons/brand/`, `conqr_settings` cross-link in `item-categories.tsx` + all 19 `navigation.json` locales, "New to ConqrPlane?" in `en/auth.json`). NEVER run `git add -A` or stage whole directories in the plane repo — stage ONLY the exact files you edited, by path. Never revert or "clean up" the WIP. If a file you must edit already has uncommitted hunks, preserve them exactly and note in the commit body that pre-existing WIP hunks from a parallel session are included in the staged file.
 
 ---
 
@@ -38,23 +39,23 @@ Create `ConqrHub/docs/Conqr-Suite-Glossary.md` with exactly the §4.1 table from
 ```markdown
 # Conqr Suite Glossary
 
-One word per concept across ConqrHub and ConqrTasks (the Plane fork). UI copy,
+One word per concept across ConqrHub and ConqrPlane (the Plane fork). UI copy,
 docs, and i18n values in BOTH repos must use these terms. Internal identifiers
 (i18n key names, DB columns, API fields like `issue_id`) are exempt.
 
 <the spec §4.1 table>
 
 ## Collision rules
-- "Page(s)" in ConqrTasks UI may only refer to canonical ConqrHub pages. Plane-native notes are always "Project Notes".
-- "Docs" in ConqrTasks = the mapped ConqrHub space, nothing else.
+- "Page(s)" in ConqrPlane UI may only refer to canonical ConqrHub pages. Plane-native notes are always "Project Notes".
+- "Docs" in ConqrPlane = the mapped ConqrHub space, nothing else.
 - "Issue" may appear only when naming external GitHub/GitLab objects.
-- Hub page approval lifecycle ("Approval status": Draft → In approval → Approved → Obsolete) is distinct from ConqrTasks work-item "State" — do not merge the words.
+- Hub page approval lifecycle ("Approval status": Draft → In approval → Approved → Obsolete) is distinct from ConqrPlane work-item "State" — do not merge the words.
 - The assistant is "Conqr AI" everywhere (never "Pi", "Plane AI", "Conqrai AI").
 ```
 
 - [ ] **Step 2: Add do-not-translate terms to the plane translate skill**
 
-In `plane/.claude/skills/translate/SKILL.md`, find the do-not-translate / terminology section and add: `Conqr`, `Conqr AI`, `ConqrHub`, `ConqrTasks`, `Project Notes` (Project Notes translates the common-noun part per locale rules only if the section's existing entries do; otherwise list as keep-verbatim). Follow the file's existing list format.
+In `plane/.claude/skills/translate/SKILL.md`, find the do-not-translate / terminology section and add: `Conqr`, `Conqr AI`, `ConqrHub`, `ConqrPlane`, `Project Notes` (Project Notes translates the common-noun part per locale rules only if the section's existing entries do; otherwise list as keep-verbatim). Follow the file's existing list format.
 
 - [ ] **Step 3: Pointer from the plane repo**
 
@@ -64,12 +65,12 @@ Add one line to `plane/CLAUDE.md` (or `plane/README.md` if no CLAUDE.md exists):
 
 ```bash
 cd ConqrHub && git add docs/Conqr-Suite-Glossary.md && git commit -m "docs: canonical Conqr suite glossary"
-cd ../plane && git add -A .claude CLAUDE.md README.md && git commit -m "docs: adopt Conqr suite glossary terminology"
+cd ../plane && git add .claude/skills/translate/SKILL.md && git add CLAUDE.md 2>/dev/null || git add README.md && git commit -m "docs: adopt Conqr suite glossary terminology"
 ```
 
 ---
 
-### Task 2: Plane en-locale terminology sweep (Project Notes, Conqr AI, ConqrTasks)
+### Task 2: Plane en-locale terminology sweep (Project Notes, Conqr AI, ConqrPlane)
 
 **Files:**
 - Modify: `plane/packages/constants/src/ai.ts`
@@ -101,16 +102,16 @@ Fix every user-visible hit to "Conqr AI" phrasing. Expected: only the two files 
 Run: `rg -n '"(Pages|Docs|Wiki)"' packages/i18n/src/locales/en/` and `rg -n 'sidebar\.pages|sidebar\.docs|sidebar\.project_notes' apps/web --type tsx --type ts`
 Decision rule per hit: if the label names Plane-native pages/wiki (`navigation.json` `sidebar.pages`, `wiki.json` feature labels, page empty-states) → value becomes "Project Notes" (or "Project Note" singular). If it names the ConqrHub-mapped docs area (`sidebar.docs`, `conqr_docs.*`) → keep "Docs". Record each change in the commit message body.
 
-- [ ] **Step 4: ConqrTasks product name on high-visibility surfaces**
+- [ ] **Step 4: ConqrPlane product name on high-visibility surfaces**
 
 Run: `rg -n '"[^"]*\bPlane\b[^"]*"' packages/i18n/src/locales/en/navigation.json packages/i18n/src/locales/en/auth.json packages/i18n/src/locales/en/common.json apps/web/core/components/conqr apps/web/core/components/workspace/logo.tsx 2>/dev/null`
-Rename product-name occurrences to "ConqrTasks" ONLY on: sidebar/app title, auth screens, page `<title>`/PageHead defaults, power-k labels, conqr_* i18n blocks. Do NOT touch: upgrade/billing copy ("Plane Pro"), URLs, legal text, code identifiers. List every change in the commit body.
+Rename product-name occurrences to "ConqrPlane" ONLY on: sidebar/app title, auth screens, page `<title>`/PageHead defaults, power-k labels, conqr_* i18n blocks. Do NOT touch: upgrade/billing copy ("Plane Pro"), URLs, legal text, code identifiers. List every change in the commit body.
 
 - [ ] **Step 5: Verify + commit**
 
 Verify: `rg -n 'Ask Pi|Pi is generating|Pi is writing' apps/web packages` returns nothing.
 ```bash
-cd plane && git add -A packages/constants packages/i18n apps/web && git commit -m "i18n: suite terminology — Conqr AI, Project Notes, ConqrTasks surfaces"
+cd plane && git add <only the exact files you edited, listed by path> && git commit -m "i18n: suite terminology — Conqr AI, Project Notes, ConqrPlane surfaces"
 ```
 
 ---
@@ -123,7 +124,7 @@ cd plane && git add -A packages/constants packages/i18n apps/web && git commit -
 
 **Interfaces:**
 - Consumes: glossary (Task 1).
-- Produces: catalog keys `"ConqrTasks"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`, `"Switch apps"`, `"Conqr suite"`, `"Conqr AI"`, doc-health keys.
+- Produces: catalog keys `"ConqrPlane"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`, `"Switch apps"`, `"Conqr suite"`, `"Conqr AI"`, doc-health keys.
 
 - [ ] **Step 1: Fix assistant naming in catalog**
 
@@ -132,9 +133,9 @@ In `translation.json`, find `"Conqrai AI": "ConqrHub"` and change the VALUE to `
 - [ ] **Step 2: Add missing catalog entries**
 
 Add to `translation.json` (alphabetical placement not required; append near related keys), each key = value:
-`"Score alerts"`, `"Threshold"`, `"Last fired"`, `"Subscribe"`, `"Switch apps"`, `"Conqr suite"`, `"ConqrTasks"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`.
+`"Score alerts"`, `"Threshold"`, `"Last fired"`, `"Subscribe"`, `"Switch apps"`, `"Conqr suite"`, `"ConqrPlane"`, `"Knowledge & documentation"`, `"Projects & work management"`, `"Open this space's project"`.
 
-- [ ] **Step 3: app-switcher — i18n + ConqrTasks**
+- [ ] **Step 3: app-switcher — i18n + ConqrPlane**
 
 In `app-switcher.tsx`, `useSuiteApps()` must accept `t` (pass from caller or call `useTranslation()` inside the hook) and return:
 ```tsx
@@ -146,12 +147,12 @@ In `app-switcher.tsx`, `useSuiteApps()` must accept `t` (pass from caller or cal
 },
 {
   key: "plane",
-  name: t("ConqrTasks"),
+  name: t("ConqrPlane"),
   desc: planeContextual ? t("Open this space's project") : t("Projects & work management"),
   ...
 }
 ```
-(`"ConqrHub"` stays a literal — proper noun, same in every locale; `ConqrTasks` goes through `t()` only because the key exists — value identical.)
+(`"ConqrHub"` stays a literal — proper noun, same in every locale; `ConqrPlane` goes through `t()` only because the key exists — value identical.)
 
 - [ ] **Step 4: Verify — client typecheck + tests**
 
@@ -161,7 +162,7 @@ Run: `cd apps/server && pnpm run test` — expected: all suites pass (no server 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ConqrHub && git add apps/client && git commit -m "i18n: Conqr AI naming, ConqrTasks switcher tile, missing catalog entries"
+cd ConqrHub && git add apps/client && git commit -m "i18n: Conqr AI naming, ConqrPlane switcher tile, missing catalog entries"
 ```
 
 ---
@@ -384,11 +385,11 @@ cd plane && git add packages/constants apps/web && git commit -m "feat(web): wor
 - Create: `ConqrHub/apps/server/src/ee/ai/chat/tools/plane-work-items.tools.ts` (5 tools in one focused file — they share the client and the gating rule)
 - Create: `ConqrHub/apps/server/src/ee/ai/chat/tools/plane-work-items.tools.spec.ts`
 - Modify: `ConqrHub/apps/server/src/ee/ai/chat/ai-chat.module.ts`
-- Modify: `ConqrHub/docs/reference/mcp-tools.md` (append a "ConqrTasks work-item tools" section listing the 5 tools + note they appear only when the integration is configured)
+- Modify: `ConqrHub/docs/reference/mcp-tools.md` (append a "ConqrPlane work-item tools" section listing the 5 tools + note they appear only when the integration is configured)
 
 **Interfaces:**
 - Consumes: `PlaneClientService.isEnabled(): boolean`, `getWorkItem(projectId, workItemId)`, `createWorkItem(projectId, {name, description_html?, priority?})`, `listWorkItems(projectId, {search?, perPage?})` — all existing; `ChatTool`/`ChatToolContext` from `chat-tool.types.ts`; `ChatToolRegistry.register()`.
-- Produces: new `PlaneClientService.listProjects(): Promise<{id: string; name: string; identifier?: string}[]>` and `listCycles(projectId: string): Promise<{id: string; name: string; start_date?: string|null; end_date?: string|null}[]>`; tools named `list_conqrtasks_projects`, `search_work_items`, `get_work_item`, `create_work_item`, `get_project_cycles`.
+- Produces: new `PlaneClientService.listProjects(): Promise<{id: string; name: string; identifier?: string}[]>` and `listCycles(projectId: string): Promise<{id: string; name: string; start_date?: string|null; end_date?: string|null}[]>`; tools named `list_conqrplane_projects`, `search_work_items`, `get_work_item`, `create_work_item`, `get_project_cycles`.
 
 - [ ] **Step 1: Failing spec first**
 
@@ -412,7 +413,7 @@ describe('Plane work-item tools', () => {
   it('create_work_item passes name/description/priority to the client', async () => {});
   it('tools surface PlaneApiError as a structured error object, not a throw-through of internals', async () => {
     // listWorkItems rejects with PlaneApiError('..',503,false)
-    // expect execute() to resolve to { error: expect.stringContaining('ConqrTasks') }
+    // expect execute() to resolve to { error: expect.stringContaining('ConqrPlane') }
   });
 });
 ```
@@ -467,15 +468,15 @@ import { ChatToolRegistry } from './chat-tool.registry';
 
 /**
  * Cross-product tools: let the suite assistant (chat + MCP) read and create
- * ConqrTasks work items through the integration layer's Plane REST adapter.
+ * ConqrPlane work items through the integration layer's Plane REST adapter.
  * Registered only when the Plane integration is configured, so an
  * unconfigured deployment never advertises dead tools.
  */
 function toolError(err: unknown): { error: string } {
   if (err instanceof PlaneApiError) {
-    return { error: `ConqrTasks request failed (${err.status || 'network'}): ${err.message}` };
+    return { error: `ConqrPlane request failed (${err.status || 'network'}): ${err.message}` };
   }
-  return { error: `ConqrTasks request failed: ${err instanceof Error ? err.message : String(err)}` };
+  return { error: `ConqrPlane request failed: ${err instanceof Error ? err.message : String(err)}` };
 }
 
 const workItemSummary = (w: any) => ({
@@ -488,10 +489,10 @@ const workItemSummary = (w: any) => ({
 });
 
 @Injectable()
-export class ListConqrTasksProjectsTool implements ChatTool, OnModuleInit {
-  readonly name = 'list_conqrtasks_projects';
+export class ListConqrPlaneProjectsTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_conqrplane_projects';
   readonly description =
-    'List projects in ConqrTasks (the Conqr suite work-management app). Use this to find a project ID before searching or creating work items.';
+    'List projects in ConqrPlane (the Conqr suite work-management app). Use this to find a project ID before searching or creating work items.';
   readonly parameters = z.object({});
   constructor(
     private readonly plane: PlaneClientService,
@@ -513,9 +514,9 @@ export class ListConqrTasksProjectsTool implements ChatTool, OnModuleInit {
 export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
   readonly name = 'search_work_items';
   readonly description =
-    'Search work items in a ConqrTasks project by text. Returns id, name, state, and priority. Cite work items by name and sequenceId.';
+    'Search work items in a ConqrPlane project by text. Returns id, name, state, and priority. Cite work items by name and sequenceId.';
   readonly parameters = z.object({
-    projectId: z.string().describe('ConqrTasks project ID (from list_conqrtasks_projects)'),
+    projectId: z.string().describe('ConqrPlane project ID (from list_conqrplane_projects)'),
     query: z.string().optional().describe('Text to search work item names for'),
     limit: z.number().int().min(1).max(50).optional().default(20),
   });
@@ -542,7 +543,7 @@ export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
 @Injectable()
 export class GetWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'get_work_item';
-  readonly description = 'Get one ConqrTasks work item with its description, state, and priority.';
+  readonly description = 'Get one ConqrPlane work item with its description, state, and priority.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -568,7 +569,7 @@ export class GetWorkItemTool implements ChatTool, OnModuleInit {
 export class CreateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'create_work_item';
   readonly description =
-    'Create a work item in a ConqrTasks project. Use only when the user explicitly asks to create work. Returns the created item.';
+    'Create a work item in a ConqrPlane project. Use only when the user explicitly asks to create work. Returns the created item.';
   readonly parameters = z.object({
     projectId: z.string(),
     name: z.string().min(1).max(255),
@@ -607,7 +608,7 @@ export class CreateWorkItemTool implements ChatTool, OnModuleInit {
 export class GetProjectCyclesTool implements ChatTool, OnModuleInit {
   readonly name = 'get_project_cycles';
   readonly description =
-    'List cycles (iterations) of a ConqrTasks project with their date ranges. Use for status questions like "what is in the current cycle".';
+    'List cycles (iterations) of a ConqrPlane project with their date ranges. Use for status questions like "what is in the current cycle".';
   readonly parameters = z.object({ projectId: z.string() });
   constructor(
     private readonly plane: PlaneClientService,
@@ -626,7 +627,7 @@ export class GetProjectCyclesTool implements ChatTool, OnModuleInit {
 }
 
 export const PLANE_WORK_ITEM_TOOLS = [
-  ListConqrTasksProjectsTool,
+  ListConqrPlaneProjectsTool,
   SearchWorkItemsTool,
   GetWorkItemTool,
   CreateWorkItemTool,
@@ -646,10 +647,10 @@ Note on HTML: `description_html` wraps plain text in `<p>` — if the descriptio
 
 - [ ] **Step 6: Update MCP docs + commit**
 
-Append to `docs/reference/mcp-tools.md` a section "ConqrTasks work-item tools" documenting the five tools (name, params, returns, gating note: present only when `PLANE_API_URL`/`PLANE_API_KEY`/`PLANE_WORKSPACE_SLUG` are configured).
+Append to `docs/reference/mcp-tools.md` a section "ConqrPlane work-item tools" documenting the five tools (name, params, returns, gating note: present only when `PLANE_API_URL`/`PLANE_API_KEY`/`PLANE_WORKSPACE_SLUG` are configured).
 
 ```bash
-cd ConqrHub && git add apps/server docs/reference/mcp-tools.md && git commit -m "feat(ai): ConqrTasks work-item tools in suite chat + MCP"
+cd ConqrHub && git add apps/server docs/reference/mcp-tools.md && git commit -m "feat(ai): ConqrPlane work-item tools in suite chat + MCP"
 ```
 
 ---
@@ -715,7 +716,7 @@ function AgentsMcpSettingsPage() {
           <h3 className="text-xl font-medium">Agents &amp; MCP</h3>
           <p className="text-sm text-secondary">
             AI agents connect to the Conqr suite through one MCP endpoint, hosted by ConqrHub. It exposes
-            documentation tools and ConqrTasks work-item tools (search, create, cycles) with OAuth sign-in.
+            documentation tools and ConqrPlane work-item tools (search, create, cycles) with OAuth sign-in.
           </p>
         </div>
         {mcpUrl ? (
@@ -786,7 +787,7 @@ Same gate as Task 5 Step 5 — this is the critical check for removals. Expected
 - [ ] **Step 4: Commit**
 
 ```bash
-cd plane && git add -A apps/web packages && git commit -m "chore(web): remove dead Slack/GitHub/Jira integration UI (endpoints never existed in this fork)"
+cd plane && git add <each deleted/modified path explicitly — use `git rm` output and your edit list; never -A> && git commit -m "chore(web): remove dead Slack/GitHub/Jira integration UI (endpoints never existed in this fork)"
 ```
 
 ---
@@ -802,11 +803,11 @@ cd plane && git add -A apps/web packages && git commit -m "chore(web): remove de
 
 - [ ] **Step 2: Hub live check (containerized deploy)**
 
-Rebuild/deploy per memory gotchas (client-only changes: `pnpm run client:build` → `docker cp` dist → `chown -R 1000:1000` → NO restart; server changes need image rebuild). Browser-verify: app switcher shows "ConqrTasks" tile; AI chat still loads; if Plane integration env is configured in the container, ask the assistant "list ConqrTasks projects" and confirm a tool call fires (or check `POST /mcp` `tools/list` includes `list_conqrtasks_projects`).
+Rebuild/deploy per memory gotchas (client-only changes: `pnpm run client:build` → `docker cp` dist → `chown -R 1000:1000` → NO restart; server changes need image rebuild). Browser-verify: app switcher shows "ConqrPlane" tile; AI chat still loads; if Plane integration env is configured in the container, ask the assistant "list ConqrPlane projects" and confirm a tool call fires (or check `POST /mcp` `tools/list` includes `list_conqrplane_projects`).
 
 - [ ] **Step 3: Plane live check**
 
-Rebuild `conqr/plane-web:local` + backend image per `plane/deployments/cli/community/docker-compose.override.yml`, redeploy `-p plane`. Browser-verify: editor AI menu opens with the new items; ask flow posts and renders a 400-toast when LLM unconfigured (or real response if configured); Settings shows "Agents & MCP"; integrations dead page is gone; sidebar labels say "Project Notes"/"ConqrTasks" where changed.
+Rebuild `conqr/plane-web:local` + backend image per `plane/deployments/cli/community/docker-compose.override.yml`, redeploy `-p plane`. Browser-verify: editor AI menu opens with the new items; ask flow posts and renders a 400-toast when LLM unconfigured (or real response if configured); Settings shows "Agents & MCP"; integrations dead page is gone; sidebar labels say "Project Notes"/"ConqrPlane" where changed.
 
 - [ ] **Step 4: Wrap up**
 
