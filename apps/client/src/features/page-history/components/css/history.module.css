@@ -18,8 +18,8 @@
   }
 
   & :global(.history-diff-added) {
-    background: light-dark(#e1f3f2, #01654a) !important;
-    color: light-dark(#007b69, #cafff7) !important;
+    background: var(--bg-success-subtle) !important;
+    color: var(--txt-success-primary, var(--txt-primary)) !important;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }

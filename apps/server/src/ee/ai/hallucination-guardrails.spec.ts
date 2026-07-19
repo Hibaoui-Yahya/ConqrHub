@@ -314,6 +314,7 @@ describe('hallucination guardrails | AiChatStreamService.send', () => {
     } as unknown as jest.Mocked<ChatToolRegistry>;
     const pageService = { findById: jest.fn().mockResolvedValue(undefined) };
     const service = new AiChatStreamService(
+      {} as any, // KyselyDB (unused in these tests)
       ai as any,
       chatRepo,
       messageRepo,
