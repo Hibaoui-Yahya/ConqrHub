@@ -349,6 +349,21 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
       );
     });
 
+    it('INDEX_PLANE_WORK_ITEM re-throws when indexWorkItem fails (allows queue retry)', async () => {
+      const workItemIndexer = makeWorkItemIndexer();
+      workItemIndexer.indexWorkItem.mockRejectedValue(new Error('plane down'));
+      const proc = makeProcessor({ workItemIndexer });
+
+      await expect(
+        proc.process(
+          makeJob(QueueJob.INDEX_PLANE_WORK_ITEM, {
+            workItemId: 'wi-1',
+            projectId: 'proj-1',
+          }),
+        ),
+      ).rejects.toThrow('plane down');
+    });
+
     it('DELETE_PLANE_WORK_ITEM_EMBEDDINGS deletes by source', async () => {
       const workItemIndexer = makeWorkItemIndexer();
       const proc = makeProcessor({ workItemIndexer });

@@ -153,14 +153,20 @@ export class AiEmbeddingQueueProcessor
 
       case QueueJob.INDEX_PLANE_WORK_ITEM: {
         const { workItemId, projectId } = job.data as WorkItemJobPayload;
-        const result = await this.workItemIndexer.indexWorkItem(
-          workItemId,
-          projectId,
-        );
-        this.logger.debug(
-          `Work item ${workItemId}: ${result.status}` +
-            (result.chunksIndexed ? ` (${result.chunksIndexed} chunks)` : ''),
-        );
+        try {
+          const result = await this.workItemIndexer.indexWorkItem(
+            workItemId,
+            projectId,
+          );
+          this.logger.debug(
+            `Work item ${workItemId}: ${result.status}` +
+              (result.chunksIndexed ? ` (${result.chunksIndexed} chunks)` : ''),
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Failed to index work item ${workItemId}: ${msg}`);
+          throw err;
+        }
         break;
       }
 
