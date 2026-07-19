@@ -26,13 +26,13 @@ services:
       DATABASE_URL: "postgresql://docmost:docmostdev@db:5432/docmost"
       REDIS_URL: "redis://redis:6379"
       STORAGE_DRIVER: "local"
-      # Conqr suite single sign-on (Keycloak). The container reaches Keycloak on
-      # the host via host.docker.internal; the browser uses localhost:8080 — set
-      # Keycloak KC_HOSTNAME so both resolve to the SAME issuer, and register the
-      # redirect below on Keycloak's `conqrhub` client. Put the real secret in
-      # the shell/.env as OIDC_CLIENT_SECRET.
+      # Conqr suite single sign-on (Keycloak, dynamic hostname). The issuer uses
+      # the machine's LAN IP so browser AND containers hit the SAME IdP host —
+      # required for silent SSO (per-host IdP session cookie). Update the IP here
+      # and in plane/deployments/cli/community if the LAN address changes.
+      # Put the real secret in the shell/.env as OIDC_CLIENT_SECRET.
       OIDC_ENABLED: "true"
-      OIDC_ISSUER_URL: "http://host.docker.internal:8080/realms/conqr"
+      OIDC_ISSUER_URL: "http://192.168.11.104:8080/realms/conqr"
       OIDC_CLIENT_ID: "conqrhub"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-changeme}"
       OIDC_REDIRECT_URI: "http://localhost:5173/api/auth/oidc/callback"
@@ -42,7 +42,7 @@ services:
       # Plane deep links (app switcher, palette, resolver)
       PLANE_APP_URL: "http://localhost"
       # Plane REST adapter (integration layer) — Plane's proxy on the host
-      PLANE_API_URL: "http://host.docker.internal/api"
+      PLANE_API_URL: "http://host.docker.internal/api/v1"
       PLANE_API_KEY: "${PLANE_API_KEY:-}"
       PLANE_WORKSPACE_SLUG: "${PLANE_WORKSPACE_SLUG:-conqrai}"
     extra_hosts:
