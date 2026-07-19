@@ -2,6 +2,7 @@ import { AiEmbeddingQueueProcessor } from './ai-embedding-queue.processor';
 import { EmbeddingIndexerService } from './embedding-indexer.service';
 import { InsightIndexerService } from './insight-indexer.service';
 import { EmbeddingRepository } from './embedding.repository';
+import { WorkItemIndexerService } from './work-item-indexer.service';
 import { QueueJob } from '../../../integrations/queue/constants';
 import { Job } from 'bullmq';
 
@@ -55,6 +56,18 @@ function makeVerification(): { invalidateOnContentChange: jest.Mock } {
   return { invalidateOnContentChange: jest.fn().mockResolvedValue([]) };
 }
 
+function makeWorkItemIndexer(): jest.Mocked<WorkItemIndexerService> {
+  return {
+    indexWorkItem: jest
+      .fn()
+      .mockResolvedValue({ workItemId: 'wi-1', status: 'indexed', chunksIndexed: 2 }),
+    deleteWorkItemEmbeddings: jest.fn().mockResolvedValue(undefined),
+    backfillProject: jest
+      .fn()
+      .mockResolvedValue({ indexed: 1, skipped: 0, failed: 0 }),
+  } as any;
+}
+
 function makeProcessor(
   overrides: {
     pages?: { id: string }[];
@@ -62,6 +75,7 @@ function makeProcessor(
     insightIndexer?: jest.Mocked<InsightIndexerService>;
     repo?: jest.Mocked<EmbeddingRepository>;
     verification?: { invalidateOnContentChange: jest.Mock };
+    workItemIndexer?: jest.Mocked<WorkItemIndexerService>;
   } = {},
 ) {
   return new AiEmbeddingQueueProcessor(
@@ -70,6 +84,7 @@ function makeProcessor(
     overrides.insightIndexer ?? makeInsightIndexer(),
     overrides.repo ?? makeRepo(),
     (overrides.verification ?? makeVerification()) as any,
+    overrides.workItemIndexer ?? makeWorkItemIndexer(),
   );
 }
 
@@ -311,6 +326,53 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
       await proc.process(makeJob(QueueJob.DELETE_INSIGHT_EMBEDDINGS, { insightId: 'i99' }));
 
       expect(insightIndexer.deleteInsightEmbeddings).toHaveBeenCalledWith('i99');
+    });
+  });
+
+  // ── Plane work item jobs ─────────────────────────────────────────────────
+
+  describe('plane work item jobs', () => {
+    it('INDEX_PLANE_WORK_ITEM delegates to the work-item indexer', async () => {
+      const workItemIndexer = makeWorkItemIndexer();
+      const proc = makeProcessor({ workItemIndexer });
+
+      await proc.process(
+        makeJob(QueueJob.INDEX_PLANE_WORK_ITEM, {
+          workItemId: 'wi-1',
+          projectId: 'proj-1',
+        }),
+      );
+
+      expect(workItemIndexer.indexWorkItem).toHaveBeenCalledWith(
+        'wi-1',
+        'proj-1',
+      );
+    });
+
+    it('DELETE_PLANE_WORK_ITEM_EMBEDDINGS deletes by source', async () => {
+      const workItemIndexer = makeWorkItemIndexer();
+      const proc = makeProcessor({ workItemIndexer });
+
+      await proc.process(
+        makeJob(QueueJob.DELETE_PLANE_WORK_ITEM_EMBEDDINGS, {
+          workItemId: 'wi-1',
+        }),
+      );
+
+      expect(workItemIndexer.deleteWorkItemEmbeddings).toHaveBeenCalledWith(
+        'wi-1',
+      );
+    });
+
+    it('BACKFILL_PLANE_WORK_ITEMS backfills the project', async () => {
+      const workItemIndexer = makeWorkItemIndexer();
+      const proc = makeProcessor({ workItemIndexer });
+
+      await proc.process(
+        makeJob(QueueJob.BACKFILL_PLANE_WORK_ITEMS, { projectId: 'proj-1' }),
+      );
+
+      expect(workItemIndexer.backfillProject).toHaveBeenCalledWith('proj-1');
     });
   });
 

@@ -6,6 +6,7 @@ import { EmbeddingIndexerService } from './embedding-indexer.service';
 import { InsightIndexerService } from './insight-indexer.service';
 import { EmbeddingRepository } from './embedding.repository';
 import { PageVerificationService } from '../../page-verification/page-verification.service';
+import { WorkItemIndexerService } from './work-item-indexer.service';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 
@@ -28,6 +29,11 @@ interface InsightJobPayload {
   spaceId: string;
 }
 
+interface WorkItemJobPayload {
+  workItemId: string;
+  projectId: string;
+}
+
 @Processor(QueueName.AI_QUEUE)
 export class AiEmbeddingQueueProcessor
   extends WorkerHost
@@ -41,6 +47,7 @@ export class AiEmbeddingQueueProcessor
     private readonly insightIndexer: InsightIndexerService,
     private readonly repo: EmbeddingRepository,
     private readonly verification: PageVerificationService,
+    private readonly workItemIndexer: WorkItemIndexerService,
   ) {
     super();
   }
@@ -141,6 +148,41 @@ export class AiEmbeddingQueueProcessor
         const { insightId } = job.data as Pick<InsightJobPayload, 'insightId'>;
         await this.insightIndexer.deleteInsightEmbeddings(insightId);
         this.logger.debug(`Deleted embeddings for insight ${insightId}`);
+        break;
+      }
+
+      case QueueJob.INDEX_PLANE_WORK_ITEM: {
+        const { workItemId, projectId } = job.data as WorkItemJobPayload;
+        const result = await this.workItemIndexer.indexWorkItem(
+          workItemId,
+          projectId,
+        );
+        this.logger.debug(
+          `Work item ${workItemId}: ${result.status}` +
+            (result.chunksIndexed ? ` (${result.chunksIndexed} chunks)` : ''),
+        );
+        break;
+      }
+
+      case QueueJob.DELETE_PLANE_WORK_ITEM_EMBEDDINGS: {
+        const { workItemId } = job.data as Pick<
+          WorkItemJobPayload,
+          'workItemId'
+        >;
+        await this.workItemIndexer.deleteWorkItemEmbeddings(workItemId);
+        break;
+      }
+
+      case QueueJob.BACKFILL_PLANE_WORK_ITEMS: {
+        const { projectId } = job.data as Pick<
+          WorkItemJobPayload,
+          'projectId'
+        >;
+        const res = await this.workItemIndexer.backfillProject(projectId);
+        this.logger.log(
+          `Work-item backfill for project ${projectId}: ` +
+            `${res.indexed} indexed, ${res.skipped} skipped, ${res.failed} failed`,
+        );
         break;
       }
 

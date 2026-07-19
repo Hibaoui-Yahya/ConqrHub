@@ -67,6 +67,10 @@ export enum QueueJob {
   GENERATE_INSIGHT_EMBEDDINGS = 'generate-insight-embeddings',
   DELETE_INSIGHT_EMBEDDINGS = 'delete-insight-embeddings',
 
+  INDEX_PLANE_WORK_ITEM = 'index-plane-work-item',
+  DELETE_PLANE_WORK_ITEM_EMBEDDINGS = 'delete-plane-work-item-embeddings',
+  BACKFILL_PLANE_WORK_ITEMS = 'backfill-plane-work-items',
+
   PAGE_HISTORY = 'page-history',
 
   COMMENT_NOTIFICATION = 'comment-notification',
