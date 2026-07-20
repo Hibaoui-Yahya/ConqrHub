@@ -110,7 +110,8 @@ describe('MeetingPipelineService.handleProviderCallback (webhook security + idem
       'meeting-process-transcript',
       expect.objectContaining({ providerJobId: 'job-1', meetingId: 'meet-1' }),
       expect.objectContaining({
-        jobId: 'meeting-process-transcript:meet-1:job-1',
+        // No ':' allowed — BullMQ rejects custom ids containing its separator.
+        jobId: 'meeting-process-transcript--meet-1-job-1',
       }),
     );
     expect(intelRepo.insertEvent).toHaveBeenCalledWith(

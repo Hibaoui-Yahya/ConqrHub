@@ -28,6 +28,7 @@ import {
 } from '../transcription/transcript.types';
 import {
   assertTransition,
+  isProcessingState,
   MeetingPipelineStatus,
   PIPELINE_ENTRY_STATES,
   REANALYZE_STATES,
@@ -199,6 +200,14 @@ export class MeetingPipelineService {
       return (await this.requireMeeting(meeting.id, params.workspaceId))!;
     }
 
+    // Stuck-state recovery: a processing state whose job was lost (crash,
+    // failed enqueue) can re-enqueue its own step. Deterministic job ids
+    // make this a no-op while the original job is still queued/active.
+    if (isProcessingState(status)) {
+      await this.reenqueueCurrentStep(meeting, status);
+      return (await this.requireMeeting(meeting.id, params.workspaceId))!;
+    }
+
     if (!PIPELINE_ENTRY_STATES.includes(status)) {
       throw new ConflictException(
         `Meeting cannot start processing from status "${status}"`,
@@ -219,6 +228,69 @@ export class MeetingPipelineService {
       });
     }
     return (await this.requireMeeting(meeting.id, params.workspaceId))!;
+  }
+
+  /** Re-enqueue the job that corresponds to the meeting's current state. */
+  private async reenqueueCurrentStep(
+    meeting: Meeting,
+    status: MeetingPipelineStatus,
+  ): Promise<void> {
+    const base = { meetingId: meeting.id, workspaceId: meeting.workspaceId };
+    switch (status) {
+      case 'normalizing_audio':
+        await this.enqueue(QueueJob.MEETING_ASSEMBLE_AUDIO, meeting.id, base);
+        return;
+      case 'batch_submitted':
+        await this.enqueue(QueueJob.MEETING_SUBMIT_BATCH, meeting.id, base);
+        return;
+      case 'batch_processing': {
+        const pending = await this.intelRepo.findLatestTranscript(meeting.id, {
+          kind: 'canonical',
+          status: 'processing',
+        });
+        if (pending?.providerJobId) {
+          await this.schedulePoll(
+            meeting.id,
+            meeting.workspaceId,
+            pending.providerJobId,
+            0,
+          );
+        } else {
+          await this.failStep(meeting, status, 'No pending provider job to resume');
+        }
+        return;
+      }
+      case 'transcribed':
+      case 'analyzing':
+      case 'documents_generating':
+      case 'proposals_generating': {
+        const ready = await this.intelRepo.findLatestTranscript(meeting.id, {
+          kind: 'canonical',
+          status: 'ready',
+        });
+        if (!ready) {
+          await this.failStep(meeting, status, 'No canonical transcript to analyze');
+          return;
+        }
+        // Analysis re-entry requires the meeting to be in 'analyzing'.
+        if (status !== 'analyzing') {
+          await this.intelRepo.transitionStatus(
+            meeting.id,
+            meeting.workspaceId,
+            status,
+            'analyzing',
+          );
+        }
+        await this.enqueue(QueueJob.MEETING_ANALYZE, meeting.id, {
+          ...base,
+          transcriptVersion: ready.version,
+          reason: 'retry',
+        });
+        return;
+      }
+      default:
+        return;
+    }
   }
 
   // ---------- queue step handlers (called by the processor) ----------
@@ -970,7 +1042,11 @@ export class MeetingPipelineService {
       { meetingId, workspaceId, providerJobId, attempt },
       {
         delay,
-        jobId: `${QueueJob.MEETING_POLL_BATCH}:${providerJobId}:${attempt}`,
+        // No ':' — BullMQ rejects custom ids containing its key separator.
+        jobId: `${QueueJob.MEETING_POLL_BATCH}--${providerJobId}-${attempt}`.replace(
+          /:/g,
+          '-',
+        ),
         removeOnComplete: true,
         removeOnFail: true,
       },
@@ -982,8 +1058,10 @@ export class MeetingPipelineService {
     dedupeKey: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
+    // BullMQ forbids ':' in custom job ids (its Redis key separator).
+    const jobId = `${job}--${dedupeKey}`.replace(/:/g, '-');
     await this.queue.add(job, payload, {
-      jobId: `${job}:${dedupeKey}`,
+      jobId,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: true,
