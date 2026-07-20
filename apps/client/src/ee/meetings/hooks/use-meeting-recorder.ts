@@ -32,6 +32,7 @@ export type RecorderState =
 interface UseMeetingRecorderOptions {
   captureSystem: boolean;
   title?: string;
+  meetingType?: string;
   onError?: (err: Error) => void;
   onCompleted?: (meetingId: string) => void;
   onCancelled?: () => void;
@@ -63,6 +64,7 @@ export function isSystemAudioSupported(): boolean {
 export function useMeetingRecorder({
   captureSystem,
   title,
+  meetingType,
   onError,
   onCompleted,
   onCancelled,
@@ -146,7 +148,10 @@ export function useMeetingRecorder({
         sysStream = new MediaStream(audioTracks);
       }
 
-      const startResp = await startMeeting(title);
+      const startResp = await startMeeting(title, {
+        consent: true,
+        meetingType,
+      });
       meetingIdRef.current = startResp.id;
       setMeetingId(startResp.id);
 
@@ -196,7 +201,7 @@ export function useMeetingRecorder({
         err instanceof Error ? err : new Error("Failed to start recording"),
       );
     }
-  }, [captureSystem, state, title]);
+  }, [captureSystem, meetingType, state, title]);
 
   const stop = useCallback(async () => {
     if (state !== "recording" && state !== "requesting") return;

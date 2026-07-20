@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ActionIcon,
   Badge,
+  Button,
   Group,
   Loader,
   Paper,
@@ -14,15 +15,14 @@ import {
 import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { IconTrash, IconEye } from "@tabler/icons-react";
+import { IconTrash, IconEye, IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
 import { getAppName } from "@/lib/config";
 import { MeetingRecorder } from "../components/meeting-recorder";
-import {
-  deleteMeeting,
-  listMeetings,
-} from "../services/meeting-service";
+import { MeetingUploadModal } from "../components/meeting-upload-modal";
+import { deleteMeeting, listMeetings } from "../services/meeting-service";
+import { isMeetingProcessing } from "../types/meeting.types";
 import type { Meeting } from "../types/meeting.types";
 
 function formatDuration(ms: number | null): string {
@@ -33,11 +33,22 @@ function formatDuration(ms: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function statusColor(status: string): string {
+  if (status === "completed" || status === "published") return "teal";
+  if (status === "failed" || status === "partially_failed") return "red";
+  if (status === "recording") return "red";
+  if (status === "awaiting_review" || status === "speakers_pending_review")
+    return "yellow";
+  if (isMeetingProcessing(status)) return "blue";
+  return "gray";
+}
+
 export default function MeetingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [items, setItems] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -95,9 +106,23 @@ export default function MeetingsPage() {
         </title>
       </Helmet>
       <Stack gap="lg" p="md">
-        <Title order={2}>{t("Meetings")}</Title>
+        <Group justify="space-between" align="center">
+          <Title order={2}>{t("Meetings")}</Title>
+          <Button
+            variant="default"
+            leftSection={<IconUpload size={16} />}
+            onClick={() => setUploadOpen(true)}
+          >
+            {t("Upload recording")}
+          </Button>
+        </Group>
 
         <MeetingRecorder />
+
+        <MeetingUploadModal
+          opened={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+        />
 
         <Paper p="md" withBorder>
           <Group justify="space-between" mb="sm">
@@ -135,18 +160,7 @@ export default function MeetingsPage() {
                     </Table.Td>
                     <Table.Td>{formatDuration(m.durationMs)}</Table.Td>
                     <Table.Td>
-                      <Badge
-                        size="sm"
-                        color={
-                          m.status === "completed"
-                            ? "teal"
-                            : m.status === "recording"
-                              ? "red"
-                              : m.status === "failed"
-                                ? "red"
-                                : "gray"
-                        }
-                      >
+                      <Badge size="sm" color={statusColor(m.status)}>
                         {t(m.status)}
                       </Badge>
                     </Table.Td>

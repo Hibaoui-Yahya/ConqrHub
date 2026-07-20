@@ -6,6 +6,7 @@ import {
   Group,
   Loader,
   Paper,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -25,6 +26,7 @@ import {
   isSystemAudioSupported,
   useMeetingRecorder,
 } from "../hooks/use-meeting-recorder";
+import { MEETING_TYPE_OPTIONS } from "../types/meeting.types";
 
 function formatStamp(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -39,6 +41,7 @@ export function MeetingRecorder() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [meetingType, setMeetingType] = useState<string | null>(null);
   const [captureSystem, setCaptureSystem] = useState(true);
   const [consent, setConsent] = useState(false);
 
@@ -47,6 +50,7 @@ export function MeetingRecorder() {
   const { state, elapsedMs, start, stop, cancel } = useMeetingRecorder({
     captureSystem,
     title: title.trim() || undefined,
+    meetingType: meetingType || undefined,
     onError: (err) =>
       notifications.show({
         color: "red",
@@ -142,6 +146,19 @@ export function MeetingRecorder() {
           disabled={isBusy}
         />
 
+        <Select
+          label={t("Meeting type (optional)")}
+          placeholder={t("Detect automatically")}
+          data={MEETING_TYPE_OPTIONS.map((o) => ({
+            value: o.value,
+            label: t(o.label),
+          }))}
+          value={meetingType}
+          onChange={setMeetingType}
+          clearable
+          disabled={isBusy}
+        />
+
         <Checkbox
           label={t("Capture system / meeting tab audio")}
           description={
@@ -196,9 +213,7 @@ export function MeetingRecorder() {
               leftSection={<IconMicrophone size={16} />}
               color="red"
             >
-              {state === "requesting"
-                ? t("Starting…")
-                : t("Start recording")}
+              {state === "requesting" ? t("Starting…") : t("Start recording")}
             </Button>
           )}
           {isRecording && (
