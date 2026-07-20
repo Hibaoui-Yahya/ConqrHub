@@ -658,7 +658,9 @@ git add apps/api/plane/db/models/project_update.py apps/api/plane/db/models/__in
 git commit -m "feat(project-updates): ProjectUpdate model + CRUD + health, contract tests (A3)"
 ```
 
----### Task 6: Project updates frontend — route, page, nav, composer
+---
+
+### Task 6: Project updates frontend — route, page, nav, composer
 
 **Files:**
 - Create: `apps/web/core/services/project/project_update.service.ts` (check dir: where does `project.service.ts` live — `core/services/project/`? mirror)
