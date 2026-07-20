@@ -34,6 +34,11 @@ import {
   Templates,
   Meetings,
   MeetingSegments,
+  MeetingTranscripts,
+  MeetingDocuments,
+  MeetingActionProposals,
+  MeetingProcessingEvents,
+  MeetingTemplates,
   McpOauthClients,
   McpOauthRefreshTokens,
   IntegrationRelationships,
@@ -269,3 +274,33 @@ export type UpdatableMeeting = Updateable<Omit<Meetings, 'id'>>;
 export type MeetingSegment = Selectable<MeetingSegments>;
 export type InsertableMeetingSegment = Insertable<MeetingSegments>;
 export type UpdatableMeetingSegment = Updateable<Omit<MeetingSegments, 'id'>>;
+
+// Meeting Transcript
+export type MeetingTranscript = Selectable<MeetingTranscripts>;
+export type InsertableMeetingTranscript = Insertable<MeetingTranscripts>;
+export type UpdatableMeetingTranscript = Updateable<
+  Omit<MeetingTranscripts, 'id'>
+>;
+
+// Meeting Document
+export type MeetingDocument = Selectable<MeetingDocuments>;
+export type InsertableMeetingDocument = Insertable<MeetingDocuments>;
+export type UpdatableMeetingDocument = Updateable<Omit<MeetingDocuments, 'id'>>;
+
+// Meeting Action Proposal
+export type MeetingActionProposal = Selectable<MeetingActionProposals>;
+export type InsertableMeetingActionProposal =
+  Insertable<MeetingActionProposals>;
+export type UpdatableMeetingActionProposal = Updateable<
+  Omit<MeetingActionProposals, 'id'>
+>;
+
+// Meeting Processing Event
+export type MeetingProcessingEvent = Selectable<MeetingProcessingEvents>;
+export type InsertableMeetingProcessingEvent =
+  Insertable<MeetingProcessingEvents>;
+
+// Meeting Template
+export type MeetingTemplate = Selectable<MeetingTemplates>;
+export type InsertableMeetingTemplate = Insertable<MeetingTemplates>;
+export type UpdatableMeetingTemplate = Updateable<Omit<MeetingTemplates, 'id'>>;

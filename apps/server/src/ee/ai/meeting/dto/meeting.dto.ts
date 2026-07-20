@@ -1,7 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
@@ -14,6 +16,19 @@ export class StartMeetingDto {
   @IsString()
   @Length(1, 200)
   title?: string;
+
+  /** Meeting-participant consent confirmation (D18). */
+  @IsOptional()
+  @IsBoolean()
+  consent?: boolean;
+
+  @IsOptional()
+  @IsString()
+  meetingType?: string;
+
+  @IsOptional()
+  @IsObject()
+  languageConfig?: Record<string, unknown>;
 }
 
 export class ChunkMetaDto {

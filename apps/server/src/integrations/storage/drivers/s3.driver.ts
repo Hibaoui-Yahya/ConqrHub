@@ -21,7 +21,14 @@ export class S3Driver implements StorageDriver {
 
   constructor(config: S3StorageConfig) {
     this.config = config;
-    this.s3Client = new S3Client(config as any);
+    this.s3Client = new S3Client({
+      // Backblaze B2 (and some other S3-compatible stores) reject the CRC32
+      // checksum headers AWS SDK >= 3.729 sends by default. WHEN_REQUIRED
+      // restores the pre-2025 behavior and is safe for AWS/MinIO too.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+      ...(config as any),
+    });
   }
 
   async upload(filePath: string, file: Buffer | Readable): Promise<void> {

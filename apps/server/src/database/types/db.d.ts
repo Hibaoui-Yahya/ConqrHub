@@ -15,10 +15,6 @@ export type ExpertInsightType = "correction" | "notice" | "recommendation" | "wa
 
 export type ExpertInsightVoteKind = "helpful" | "not_helpful";
 
-export type MeetingStatus = "recording" | "finalizing" | "completed" | "failed";
-
-export type MeetingSource = "mic" | "system";
-
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
@@ -36,6 +32,10 @@ export type JsonObject = {
 export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+export type MeetingSource = "mic" | "system";
+
+export type MeetingStatus = "analyzing" | "archived" | "awaiting_review" | "batch_processing" | "batch_submitted" | "completed" | "created" | "deleted" | "deletion_pending" | "documents_generating" | "failed" | "finalizing" | "normalizing_audio" | "partially_failed" | "proposals_generating" | "published" | "recording" | "speakers_pending_review" | "stopping" | "transcribed" | "uploaded" | "uploading";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -58,7 +58,7 @@ export interface AiChatMessages {
 
 export interface AiChats {
   createdAt: Generated<Timestamp>;
-  creatorId: string;
+  creatorId: string | null;
   deletedAt: Timestamp | null;
   id: Generated<string>;
   title: string | null;
@@ -339,6 +339,241 @@ export interface GroupUsers {
   id: Generated<string>;
   updatedAt: Generated<Timestamp>;
   userId: string;
+}
+
+export interface IntegrationEvents {
+  actorId: string | null;
+  causationId: string | null;
+  correlationId: string;
+  createdAt: Generated<Timestamp>;
+  data: Json | null;
+  id: Generated<string>;
+  publishedAt: Timestamp | null;
+  source: string;
+  status: Generated<string>;
+  subject: string;
+  type: string;
+  workspaceId: string;
+}
+
+export interface IntegrationProjectSpaceMappings {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  deletedAt: Timestamp | null;
+  id: Generated<string>;
+  mappingKind: Generated<string>;
+  planeProjectId: string;
+  spaceId: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface IntegrationRelationships {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  deletedAt: Timestamp | null;
+  id: Generated<string>;
+  inverseRelationType: string;
+  lifecycleState: Generated<string>;
+  metadata: Json | null;
+  provenance: string | null;
+  relationType: string;
+  sourceType: string;
+  sourceUrn: string;
+  sourceVersion: Json | null;
+  targetType: string;
+  targetUrn: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface IntegrationRequirements {
+  blockId: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  id: Generated<string>;
+  pageId: string;
+  state: Generated<string>;
+  title: string | null;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface IntegrationWebhookDeliveries {
+  action: string | null;
+  attempts: Generated<number>;
+  deliveryId: string;
+  error: string | null;
+  eventType: string | null;
+  id: Generated<string>;
+  processedAt: Timestamp | null;
+  receivedAt: Generated<Timestamp>;
+  signatureValid: Generated<boolean>;
+  source: Generated<string>;
+  status: Generated<string>;
+  subject: string | null;
+  workspaceId: string | null;
+}
+
+export interface McpOauthClients {
+  clientId: string;
+  clientName: string | null;
+  createdAt: Generated<Timestamp>;
+  grantTypes: Generated<Json>;
+  id: Generated<string>;
+  redirectUris: Generated<Json>;
+  responseTypes: Generated<Json>;
+  scope: string | null;
+  tokenEndpointAuthMethod: Generated<string>;
+  workspaceId: string | null;
+}
+
+export interface McpOauthRefreshTokens {
+  apiKeyId: string;
+  clientId: string;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<string>;
+  resource: string | null;
+  rotatedAt: Timestamp | null;
+  scope: string | null;
+  tokenHash: string;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface MeetingActionProposals {
+  automationRuleId: string | null;
+  commitment: Generated<string>;
+  confidence: number;
+  createdAt: Generated<Timestamp>;
+  decidedAt: Timestamp | null;
+  decidedBy: string | null;
+  documentId: string | null;
+  duplicateCheck: Generated<Json>;
+  editedPayload: Json | null;
+  evidence: Json;
+  executionResult: Json | null;
+  id: Generated<string>;
+  idempotencyKey: string;
+  kind: string;
+  meetingId: string;
+  payload: Json;
+  reason: string;
+  riskLevel: Generated<string>;
+  status: Generated<string>;
+  targetApp: string;
+  title: string;
+  transcriptVersion: number;
+  updatedAt: Generated<Timestamp>;
+  validation: Generated<Json>;
+  workspaceId: string;
+}
+
+export interface MeetingDocuments {
+  contentMarkdown: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  meetingId: string;
+  pageId: string | null;
+  status: Generated<string>;
+  structured: Json;
+  templateId: string;
+  templateVersion: number;
+  title: string;
+  transcriptVersion: number;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface MeetingProcessingEvents {
+  actorId: string | null;
+  createdAt: Generated<Timestamp>;
+  detail: Generated<Json>;
+  event: string;
+  fromStatus: string | null;
+  id: Generated<string>;
+  meetingId: string;
+  toStatus: string | null;
+}
+
+export interface Meetings {
+  aiOutputs: Generated<Json | null>;
+  archivedAt: Timestamp | null;
+  audioManifest: Generated<Json>;
+  audioStoragePrefix: string | null;
+  captureKind: Generated<string>;
+  consentConfirmedAt: Timestamp | null;
+  consentConfirmedBy: string | null;
+  cost: Generated<Json>;
+  createdAt: Generated<Timestamp>;
+  deletedAt: Timestamp | null;
+  durationMs: Generated<number | null>;
+  endedAt: Timestamp | null;
+  failureReason: string | null;
+  id: Generated<string>;
+  languageConfig: Generated<Json>;
+  legalHold: Generated<boolean>;
+  meetingType: Generated<string>;
+  meetingTypeConfidence: number | null;
+  meetingTypeSource: Generated<string>;
+  publishedAt: Timestamp | null;
+  retentionUntil: Timestamp | null;
+  settings: Generated<Json | null>;
+  spaceId: string | null;
+  startedAt: Generated<Timestamp>;
+  status: Generated<MeetingStatus>;
+  title: string;
+  transcript: string | null;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface MeetingSegments {
+  createdAt: Generated<Timestamp>;
+  durationMs: number;
+  id: Generated<string>;
+  meetingId: string;
+  sequence: number;
+  source: MeetingSource;
+  startMs: number;
+  text: string;
+}
+
+export interface MeetingTemplates {
+  createdAt: Generated<Timestamp>;
+  definition: Json;
+  enabled: Generated<boolean>;
+  id: Generated<string>;
+  level: Generated<string>;
+  meetingType: string;
+  ownerId: string | null;
+  updatedAt: Generated<Timestamp>;
+  version: Generated<number>;
+  workspaceId: string;
+}
+
+export interface MeetingTranscripts {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  detectedLanguages: Json | null;
+  editedFromVersion: number | null;
+  error: string | null;
+  id: Generated<string>;
+  isProvisional: Generated<boolean>;
+  kind: string;
+  language: string | null;
+  meetingId: string;
+  processingConfig: Generated<Json>;
+  provider: string;
+  providerJobId: string | null;
+  rawPayloadPath: string | null;
+  segments: Generated<Json>;
+  speakers: Generated<Json>;
+  status: Generated<string>;
+  updatedAt: Generated<Timestamp>;
+  version: number;
+  webhookTokenHash: string | null;
 }
 
 export interface Notifications {
@@ -663,135 +898,6 @@ export interface Workspaces {
   updatedAt: Generated<Timestamp>;
 }
 
-export interface McpOauthClients {
-  id: Generated<string>;
-  clientId: string;
-  clientName: string | null;
-  redirectUris: Generated<Json>;
-  grantTypes: Generated<Json>;
-  responseTypes: Generated<Json>;
-  tokenEndpointAuthMethod: Generated<string>;
-  scope: string | null;
-  workspaceId: string | null;
-  createdAt: Generated<Timestamp>;
-}
-
-export interface McpOauthRefreshTokens {
-  id: Generated<string>;
-  tokenHash: string;
-  clientId: string;
-  apiKeyId: string;
-  userId: string;
-  workspaceId: string;
-  scope: string | null;
-  resource: string | null;
-  expiresAt: Timestamp;
-  rotatedAt: Timestamp | null;
-  createdAt: Generated<Timestamp>;
-}
-
-export interface Meetings {
-  id: Generated<string>;
-  workspaceId: string;
-  userId: string;
-  title: string;
-  status: Generated<MeetingStatus>;
-  transcript: string | null;
-  startedAt: Generated<Timestamp>;
-  endedAt: Timestamp | null;
-  durationMs: Generated<number | null>;
-  settings: Generated<Json | null>;
-  aiOutputs: Generated<Json | null>;
-  createdAt: Generated<Timestamp>;
-  updatedAt: Generated<Timestamp>;
-  deletedAt: Timestamp | null;
-}
-
-export interface MeetingSegments {
-  id: Generated<string>;
-  meetingId: string;
-  source: MeetingSource;
-  sequence: number;
-  text: string;
-  startMs: number;
-  durationMs: number;
-  createdAt: Generated<Timestamp>;
-}
-
-export interface IntegrationRelationships {
-  id: Generated<string>;
-  workspaceId: string;
-  sourceUrn: string;
-  sourceType: string;
-  targetUrn: string;
-  targetType: string;
-  relationType: string;
-  inverseRelationType: string;
-  lifecycleState: Generated<string>;
-  provenance: string | null;
-  createdBy: string | null;
-  sourceVersion: Json | null;
-  metadata: Json | null;
-  createdAt: Generated<Timestamp>;
-  updatedAt: Generated<Timestamp>;
-  deletedAt: Timestamp | null;
-}
-
-export interface IntegrationProjectSpaceMappings {
-  id: Generated<string>;
-  workspaceId: string;
-  planeProjectId: string;
-  spaceId: string;
-  mappingKind: Generated<string>;
-  createdBy: string | null;
-  createdAt: Generated<Timestamp>;
-  updatedAt: Generated<Timestamp>;
-  deletedAt: Timestamp | null;
-}
-
-export interface IntegrationWebhookDeliveries {
-  id: Generated<string>;
-  source: Generated<string>;
-  deliveryId: string;
-  eventType: string | null;
-  signatureValid: Generated<boolean>;
-  status: Generated<string>;
-  workspaceId: string | null;
-  error: string | null;
-  attempts: Generated<number>;
-  subject: string | null;
-  action: string | null;
-  receivedAt: Generated<Timestamp>;
-  processedAt: Timestamp | null;
-}
-
-export interface IntegrationRequirements {
-  id: Generated<string>;
-  workspaceId: string;
-  pageId: string;
-  blockId: string;
-  title: string | null;
-  state: Generated<string>;
-  createdBy: string | null;
-  createdAt: Generated<Timestamp>;
-  updatedAt: Generated<Timestamp>;
-}
-
-export interface IntegrationEvents {
-  id: Generated<string>;
-  workspaceId: string;
-  type: string;
-  source: string;
-  subject: string;
-  correlationId: string;
-  causationId: string | null;
-  actorId: string | null;
-  data: Json | null;
-  status: Generated<string>;
-  createdAt: Generated<Timestamp>;
-  publishedAt: Timestamp | null;
-}
-
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
@@ -819,8 +925,13 @@ export interface DB {
   integrationWebhookDeliveries: IntegrationWebhookDeliveries;
   mcpOauthClients: McpOauthClients;
   mcpOauthRefreshTokens: McpOauthRefreshTokens;
+  meetingActionProposals: MeetingActionProposals;
+  meetingDocuments: MeetingDocuments;
+  meetingProcessingEvents: MeetingProcessingEvents;
   meetings: Meetings;
   meetingSegments: MeetingSegments;
+  meetingTemplates: MeetingTemplates;
+  meetingTranscripts: MeetingTranscripts;
   notifications: Notifications;
   pageAccess: PageAccess;
   pageBrokenLinks: PageBrokenLinks;

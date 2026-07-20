@@ -7,6 +7,9 @@ import {
 import { MeetingRepo } from '@docmost/db/repos/meeting/meeting.repo';
 import { Meeting, MeetingSegment } from '@docmost/db/types/entity.types';
 import { SttService } from '../stt/stt.service';
+import { MeetingStorageService } from './meeting-storage.service';
+import { MeetingPipelineService } from './meeting-pipeline.service';
+import { hasMeetingType } from './meeting-types/meeting-type.registry';
 
 const CHUNK_MIME_DEFAULT = 'audio/webm';
 
@@ -17,20 +20,40 @@ export class MeetingService {
   constructor(
     private readonly meetingRepo: MeetingRepo,
     private readonly sttService: SttService,
+    private readonly meetingStorage: MeetingStorageService,
+    private readonly pipeline: MeetingPipelineService,
   ) {}
 
   async start(
     workspaceId: string,
     userId: string,
     title: string | undefined,
+    opts?: {
+      consent?: boolean;
+      meetingType?: string;
+      languageConfig?: Record<string, unknown>;
+    },
   ): Promise<Meeting> {
     const finalTitle = (title?.trim() || '').slice(0, 200) || this.defaultTitle();
+    const meetingType =
+      opts?.meetingType && hasMeetingType(opts.meetingType)
+        ? opts.meetingType
+        : undefined;
     return this.meetingRepo.insert({
       workspaceId,
       userId,
       title: finalTitle,
       status: 'recording',
-    });
+      ...(meetingType
+        ? { meetingType, meetingTypeSource: 'user' }
+        : {}),
+      ...(opts?.languageConfig
+        ? { languageConfig: opts.languageConfig as never }
+        : {}),
+      ...(opts?.consent
+        ? { consentConfirmedAt: new Date(), consentConfirmedBy: userId }
+        : {}),
+    } as never);
   }
 
   async ingestChunk(params: {
@@ -50,6 +73,32 @@ export class MeetingService {
       params.workspaceId,
       params.userId,
     );
+
+    // Durability first (D5): persist the audio chunk to storage BEFORE
+    // transcription so the canonical batch pass can be run later. Storage
+    // failure is non-fatal for the live path — recorded as a manifest gap.
+    try {
+      await this.meetingStorage.saveChunk({
+        meeting,
+        workspaceId: params.workspaceId,
+        audio: params.audio,
+        mime: params.mime || CHUNK_MIME_DEFAULT,
+        source: params.source,
+        sequence: params.sequence,
+        durationMs: params.durationMs,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Chunk persistence failed meeting=${meeting.id} seq=${params.sequence}: ${(err as Error).message}`,
+      );
+      await this.meetingStorage
+        .appendManifestWarning(
+          meeting.id,
+          params.workspaceId,
+          `chunk-${params.source}-${params.sequence}-not-persisted`,
+        )
+        .catch(() => undefined);
+    }
 
     const result = await this.sttService.transcribeAndCorrect(
       params.audio,
@@ -116,12 +165,31 @@ export class MeetingService {
     const startedMs = new Date(meeting.startedAt as unknown as string).getTime();
     const durationMs = Math.max(endedAtMs - startedMs, 0);
 
-    return (await this.meetingRepo.update(meetingId, workspaceId, {
+    const completed = (await this.meetingRepo.update(meetingId, workspaceId, {
       status: 'completed',
       transcript,
       endedAt: new Date(endedAtMs),
       durationMs,
     })) as Meeting;
+
+    // Auto-kick the canonical batch pipeline when consent was confirmed.
+    // Failure to enqueue never breaks stop(): the user can retry via
+    // POST /ai/meeting/:id/process.
+    if (completed.consentConfirmedAt) {
+      try {
+        await this.pipeline.startPipeline({
+          meetingId,
+          workspaceId,
+          actorId: userId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Auto-processing failed to start for meeting ${meetingId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return (await this.meetingRepo.findById(meetingId, workspaceId)) ?? completed;
   }
 
   async getWithSegments(
@@ -154,7 +222,20 @@ export class MeetingService {
     if (!meeting || meeting.userId !== userId) {
       throw new NotFoundException('Meeting not found');
     }
-    await this.meetingRepo.softDelete(meetingId, workspaceId);
+    try {
+      // Full deletion workflow: storage objects + provider data + rows.
+      await this.pipeline.requestDeletion(meetingId, workspaceId, userId);
+    } catch (err) {
+      const message = (err as Error).message ?? '';
+      // Legacy statuses outside the pipeline transition table ('finalizing')
+      // fall back to the original soft delete; real conflicts (legal hold,
+      // deletion already running) propagate.
+      if (message.startsWith('Invalid meeting transition')) {
+        await this.meetingRepo.softDelete(meetingId, workspaceId);
+      } else {
+        throw err;
+      }
+    }
   }
 
   async saveAiOutput(

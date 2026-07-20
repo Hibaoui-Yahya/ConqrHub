@@ -62,12 +62,18 @@ export class MeetingController {
       workspace.id,
       user.id,
       dto.title,
+      {
+        consent: dto.consent,
+        meetingType: dto.meetingType,
+        languageConfig: dto.languageConfig,
+      },
     );
     return {
       id: meeting.id,
       title: meeting.title,
       status: meeting.status,
       startedAt: meeting.startedAt,
+      consentConfirmedAt: meeting.consentConfirmedAt,
     };
   }
 

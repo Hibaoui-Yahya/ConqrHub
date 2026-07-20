@@ -6,6 +6,7 @@ export enum QueueName {
   FILE_TASK_QUEUE = '{file-task-queue}',
   SEARCH_QUEUE = '{search-queue}',
   AI_QUEUE = '{ai-queue}',
+  MEETING_QUEUE = '{meeting-queue}',
   HISTORY_QUEUE = '{history-queue}',
   NOTIFICATION_QUEUE = '{notification-queue}',
   AUDIT_QUEUE = '{audit-queue}',
@@ -96,4 +97,12 @@ export enum QueueJob {
 
   BROKEN_LINKS_SCAN_ALL = 'broken-links-scan-all',
   DUPLICATES_SCAN_ALL = 'duplicates-scan-all',
+
+  MEETING_ASSEMBLE_AUDIO = 'meeting-assemble-audio',
+  MEETING_SUBMIT_BATCH = 'meeting-submit-batch',
+  MEETING_POLL_BATCH = 'meeting-poll-batch',
+  MEETING_PROCESS_TRANSCRIPT = 'meeting-process-transcript',
+  MEETING_ANALYZE = 'meeting-analyze',
+  MEETING_EXECUTE_PROPOSAL = 'meeting-execute-proposal',
+  MEETING_DELETE_DATA = 'meeting-delete-data',
 }

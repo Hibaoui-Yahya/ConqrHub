@@ -26,6 +26,22 @@ export class MeetingRepo {
     'durationMs',
     'settings',
     'aiOutputs',
+    'captureKind',
+    'spaceId',
+    'meetingType',
+    'meetingTypeSource',
+    'meetingTypeConfidence',
+    'languageConfig',
+    'consentConfirmedAt',
+    'consentConfirmedBy',
+    'audioStoragePrefix',
+    'audioManifest',
+    'legalHold',
+    'retentionUntil',
+    'cost',
+    'publishedAt',
+    'archivedAt',
+    'failureReason',
     'createdAt',
     'updatedAt',
     'deletedAt',
@@ -42,6 +58,20 @@ export class MeetingRepo {
       .select(this.baseFields)
       .where('id', '=', meetingId)
       .where('workspaceId', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .executeTakeFirst();
+  }
+
+  /**
+   * Unscoped lookup for provider-webhook processing, where only the job id
+   * is known. Callers MUST authenticate via the per-job webhook token before
+   * acting on the result (see MeetingPipelineService.handleProviderCallback).
+   */
+  async findByIdUnscoped(meetingId: string): Promise<Meeting | undefined> {
+    return this.db
+      .selectFrom('meetings')
+      .select(this.baseFields)
+      .where('id', '=', meetingId)
       .where('deletedAt', 'is', null)
       .executeTakeFirst();
   }
