@@ -209,6 +209,15 @@ export class MeetingStorageService {
     return key;
   }
 
+  /** Presigned fetch_data URLs require an S3-compatible driver (D6). */
+  supportsPresignedFetch(): boolean {
+    return this.storageService.getDriverName() === 's3';
+  }
+
+  async readObject(key: string): Promise<Buffer> {
+    return this.storageService.read(key);
+  }
+
   async getPresignedAudioUrl(
     meeting: Meeting,
     target: 'original' | 'normalized',
@@ -217,7 +226,9 @@ export class MeetingStorageService {
     const manifest = (meeting.audioManifest ?? {}) as AudioManifest;
     const key =
       target === 'original' ? manifest.original?.key : manifest.normalized?.key;
-    if (!key) return null;
+    // The local driver cannot mint signed URLs; playback via presigned
+    // links is an S3/B2-only feature (404s cleanly at the API).
+    if (!key || !this.supportsPresignedFetch()) return null;
     return this.storageService.getSignedUrl(key, expiresInSeconds);
   }
 

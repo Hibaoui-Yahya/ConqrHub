@@ -300,11 +300,21 @@ export class MeetingPipelineService {
         return;
       }
 
-      const audioUrl = await this.storage.getPresignedAudioUrl(
-        meeting,
-        'original',
-        PRESIGN_FETCH_SECONDS,
-      );
+      // fetch_data via presigned GET only works on S3-compatible storage
+      // (D6). The local driver cannot presign — submit the audio directly
+      // (Speechmatics accepts <1 GB request bodies; uploads are capped well
+      // below that).
+      let audioUrl: string | null = null;
+      let audioBuffer: Buffer | undefined;
+      if (this.storage.supportsPresignedFetch()) {
+        audioUrl = await this.storage.getPresignedAudioUrl(
+          meeting,
+          'original',
+          PRESIGN_FETCH_SECONDS,
+        );
+      } else {
+        audioBuffer = await this.storage.readObject(manifest.original.key);
+      }
 
       const webhookToken = randomBytes(32).toString('hex');
       const webhookBase = this.environment.getMeetingWebhookBaseUrl();
@@ -314,6 +324,8 @@ export class MeetingPipelineService {
       const version = await this.intelRepo.nextTranscriptVersion(meetingId);
       const { providerJobId, submittedConfig } = await this.batchProvider.submit({
         audioUrl: audioUrl ?? undefined,
+        audio: audioBuffer,
+        fileName: manifest.original.key.split('/').pop(),
         mime: manifest.original.mime,
         language: {
           language: (languageConfig.language as string) ?? 'en',

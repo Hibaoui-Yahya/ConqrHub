@@ -13,6 +13,7 @@ function buildService() {
       return buf;
     }),
     getSignedUrl: jest.fn(async (key: string) => `https://signed/${key}`),
+    getDriverName: jest.fn(() => 's3'),
     delete: jest.fn(async (key: string) => {
       if (key.includes('sticky')) throw new Error('permission denied');
       objects.delete(key);
@@ -163,5 +164,17 @@ describe('MeetingStorageService', () => {
       'https://signed/k/original.webm',
     );
     expect(await service.getPresignedAudioUrl(meeting, 'normalized', 300)).toBeNull();
+  });
+
+  it('refuses presigned URLs on the local driver (D6: S3/B2-only feature)', async () => {
+    const { service, storageService } = buildService();
+    storageService.getDriverName.mockReturnValue('local');
+    const meeting = meetingRow({
+      audioManifest: { original: { key: 'k/original.webm' } },
+    });
+    expect(service.supportsPresignedFetch()).toBe(false);
+    expect(
+      await service.getPresignedAudioUrl(meeting, 'original', 300),
+    ).toBeNull();
   });
 });

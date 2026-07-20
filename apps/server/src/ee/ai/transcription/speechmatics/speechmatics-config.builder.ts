@@ -32,10 +32,12 @@ export function buildSpeechmaticsJobConfig(
 ): BuiltConfig {
   const warnings: string[] = [];
 
+  // Punctuation stays at provider defaults (all marks enabled) — it also
+  // feeds diarization accuracy. permitted_marks expects an array, so only
+  // ever emit punctuation_overrides with explicit mark lists.
   const transcription: Record<string, unknown> = {
     language: req.language.language ?? 'en',
     operating_point: req.language.operatingPoint ?? defaults.operatingPoint,
-    punctuation_overrides: { permitted_marks: 'all' },
   };
 
   if (req.diarization === 'speaker') {
