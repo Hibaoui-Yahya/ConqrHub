@@ -32,7 +32,7 @@ services:
       # and in plane/deployments/cli/community if the LAN address changes.
       # Put the real secret in the shell/.env as OIDC_CLIENT_SECRET.
       OIDC_ENABLED: "true"
-      OIDC_ISSUER_URL: "http://192.168.11.104:8080/realms/conqr"
+      OIDC_ISSUER_URL: "http://192.168.40.145:8080/realms/conqr"
       OIDC_CLIENT_ID: "conqrhub"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-changeme}"
       OIDC_REDIRECT_URI: "http://localhost:5173/api/auth/oidc/callback"
@@ -48,5 +48,12 @@ services:
       # ConqrHub as the suite IdP (§9.1): Plane trusts the Hub session — being
       # signed into the Hub signs Plane in with the same identity, silently.
       SUITE_IDP_CLIENTS: "${SUITE_IDP_CLIENTS:-plane|plane-suite-secret|http://localhost/auth/oidc/callback/}"
+      # Meeting intelligence: Speechmatics batch transcription + Conqr AI
+      # analysis. Real values live in ConqrHub/.env (compose interpolates).
+      SPEECHMATICS_API_KEY: "${SPEECHMATICS_API_KEY:-}"
+      SPEECHMATICS_REGION: "${SPEECHMATICS_REGION:-eu1}"
+      SPEECHMATICS_OPERATING_POINT: "${SPEECHMATICS_OPERATING_POINT:-enhanced}"
+      AI_DRIVER: "${AI_DRIVER:-}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
