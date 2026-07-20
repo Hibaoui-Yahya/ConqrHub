@@ -154,6 +154,8 @@ export interface MeetingStatusResponse {
   consentConfirmedAt?: string | null;
   failureReason?: string | null;
   cost?: Record<string, unknown> | null;
+  /** True only when an S3/B2 driver is active and original audio is stored. */
+  audioAvailable?: boolean;
   transcriptVersions: TranscriptVersion[];
   events: MeetingProcessingEvent[];
 }

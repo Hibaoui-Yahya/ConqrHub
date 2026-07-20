@@ -224,8 +224,16 @@ export class MeetingIntelligenceController {
       this.intelRepo.listTranscriptVersions(meetingId),
       this.intelRepo.listEvents(meetingId, 50),
     ]);
+    const manifest = meeting.audioManifest as {
+      original?: { key?: string };
+    } | null;
     return {
       status: meeting.status,
+      // Playback needs an S3-compatible driver AND stored audio — lets the
+      // client skip the audio probe instead of eating a guaranteed 404.
+      audioAvailable:
+        this.storage.supportsPresignedFetch() &&
+        Boolean(manifest?.original?.key),
       meetingType: meeting.meetingType,
       meetingTypeSource: meeting.meetingTypeSource,
       meetingTypeConfidence: meeting.meetingTypeConfidence,

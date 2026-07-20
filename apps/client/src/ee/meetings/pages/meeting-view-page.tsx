@@ -142,14 +142,18 @@ export default function MeetingViewPage() {
     }
   }, [effectiveStatus, loadMeeting]);
 
-  // Presigned audio playback — 404 on the local storage driver, in
-  // which case the player is simply not shown.
+  // Presigned audio playback — only probe when the server reports audio
+  // is actually available (S3/B2 driver + stored original); avoids a
+  // guaranteed-404 request on the local storage driver.
   useEffect(() => {
-    if (!meetingId) return;
+    if (!meetingId || !statusInfo?.audioAvailable) {
+      setAudioUrl(null);
+      return;
+    }
     getMeetingAudio(meetingId, "original")
       .then((res) => setAudioUrl(res.url))
       .catch(() => setAudioUrl(null));
-  }, [meetingId]);
+  }, [meetingId, statusInfo?.audioAvailable]);
 
   const runPreset = async (preset: Preset) => {
     if (!meeting?.transcript) {
