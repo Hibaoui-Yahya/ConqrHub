@@ -71,6 +71,24 @@ export async function removeMapping(id: string): Promise<void> {
   await api.post("/integrations/mappings/remove", { id });
 }
 
+export interface PlaneProject {
+  id: string;
+  name: string;
+  identifier?: string;
+}
+
+/** Plane projects in the configured workspace, for the admin mapping picker. */
+export async function getPlaneProjects(): Promise<{
+  items: PlaneProject[];
+  integrationEnabled: boolean;
+}> {
+  const res = await api.post<{
+    items: PlaneProject[];
+    integrationEnabled: boolean;
+  }>("/integrations/plane/projects", {});
+  return res.data;
+}
+
 export async function resolveSmartObjects(
   req: ResolveRequest,
 ): Promise<PresentationModel[]> {

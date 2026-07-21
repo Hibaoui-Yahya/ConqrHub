@@ -23,6 +23,7 @@ import {
   getAllMappings,
   setMapping,
   removeMapping,
+  getPlaneProjects,
 } from "@/features/integration/services/integration-service.ts";
 
 /**
@@ -41,6 +42,11 @@ export default function IntegrationsSettings() {
     queryKey: ["integration-mappings-all"],
     queryFn: getAllMappings,
   });
+  const { data: planeProjects, isLoading: projectsLoading } = useQuery({
+    queryKey: ["integration-plane-projects"],
+    queryFn: getPlaneProjects,
+    enabled: isAdmin,
+  });
 
   const spaces = spacesPage?.items ?? [];
   const spaceName = useMemo(() => {
@@ -48,6 +54,19 @@ export default function IntegrationsSettings() {
     spaces.forEach((s: any) => m.set(s.id, s.name));
     return m;
   }, [spaces]);
+
+  const projects = planeProjects?.items ?? [];
+  // Plane env creds unset, or no projects returned → fall back to the raw field
+  // so admins are never blocked from mapping.
+  const useProjectPicker =
+    (planeProjects?.integrationEnabled ?? false) && projects.length > 0;
+  const projectName = useMemo(() => {
+    const m = new Map<string, string>();
+    projects.forEach((p) =>
+      m.set(p.id, p.identifier ? `${p.name} (${p.identifier})` : p.name),
+    );
+    return m;
+  }, [projects]);
 
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
@@ -100,13 +119,36 @@ export default function IntegrationsSettings() {
             searchable
             w={220}
           />
-          <TextInput
-            label={t("Plane project ID")}
-            placeholder="project_…"
-            value={projectId}
-            onChange={(e) => setProjectId(e.currentTarget.value)}
-            w={220}
-          />
+          {useProjectPicker ? (
+            <Select
+              label={t("Plane project")}
+              placeholder={t("Select project")}
+              data={projects.map((p) => ({
+                value: p.id,
+                label: p.identifier ? `${p.name} (${p.identifier})` : p.name,
+              }))}
+              value={projectId || null}
+              onChange={(v) => setProjectId(v ?? "")}
+              searchable
+              nothingFoundMessage={t("No projects found")}
+              w={260}
+            />
+          ) : (
+            <TextInput
+              label={t("Plane project ID")}
+              placeholder={
+                projectsLoading ? t("Loading projects…") : "project_…"
+              }
+              description={
+                planeProjects && !planeProjects.integrationEnabled
+                  ? t("Plane not connected — enter the project ID manually")
+                  : undefined
+              }
+              value={projectId}
+              onChange={(e) => setProjectId(e.currentTarget.value)}
+              w={260}
+            />
+          )}
           <Select
             label={t("Type")}
             data={["primary", "secondary"]}
@@ -145,9 +187,20 @@ export default function IntegrationsSettings() {
               <Table.Tr key={m.id}>
                 <Table.Td>{spaceName.get(m.spaceId) ?? m.spaceId}</Table.Td>
                 <Table.Td>
-                  <Text ff="monospace" size="sm">
-                    {m.planeProjectId}
-                  </Text>
+                  {projectName.get(m.planeProjectId) ? (
+                    <Stack gap={0}>
+                      <Text size="sm">
+                        {projectName.get(m.planeProjectId)}
+                      </Text>
+                      <Text ff="monospace" size="xs" c="var(--txt-tertiary)">
+                        {m.planeProjectId}
+                      </Text>
+                    </Stack>
+                  ) : (
+                    <Text ff="monospace" size="sm">
+                      {m.planeProjectId}
+                    </Text>
+                  )}
                 </Table.Td>
                 <Table.Td>
                   <Badge

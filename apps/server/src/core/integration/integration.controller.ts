@@ -227,6 +227,20 @@ export class IntegrationController {
     });
   }
 
+  /**
+   * List Plane projects in the configured workspace so the admin mapping UI can
+   * show a picker of real project names instead of a raw UUID field (§8.3).
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('plane/projects')
+  async listPlaneProjects() {
+    if (!this.plane.isEnabled()) {
+      return { items: [], integrationEnabled: false };
+    }
+    const items = await this.plane.listProjects();
+    return { items, integrationEnabled: true };
+  }
+
   /** Search existing Plane work items to embed/link in a Hub page (§5.1C). */
   @HttpCode(HttpStatus.OK)
   @Post('work-items/search')
