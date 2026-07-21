@@ -98,3 +98,93 @@ describe('SuiteIdpService (ConqrHub as suite IdP, §9.1)', () => {
     expect(doc.userinfo_endpoint).toBe('http://host.docker.internal:5173/api/idp/userinfo');
   });
 });
+
+/** Refresh tokens (ConqrMeet BFF sessions — CONQRMEET_PLATFORM_DESIGN.md M4). */
+describe('SuiteIdpService refresh tokens', () => {
+  const CLIENTS =
+    'plane|plane-secret|http://localhost/auth/oidc/callback/;conqrmeet|meet-secret|http://localhost:5273/auth/callback';
+
+  beforeEach(() => {
+    process.env.SUITE_IDP_CLIENTS = CLIENTS;
+  });
+  afterEach(() => {
+    delete process.env.SUITE_IDP_CLIENTS;
+  });
+
+  /** Stateful redis mock: set stores, getdel consumes (rotation semantics). */
+  function makeStateful() {
+    const jwt = new JwtService({ secret: 'test-secret' });
+    const environment = { getAppUrl: () => 'http://localhost:5173' };
+    const store = new Map<string, string>();
+    const redis = {
+      set: jest.fn(async (key: string, value: string) => {
+        store.set(key, value);
+        return 'OK';
+      }),
+      getdel: jest.fn(async (key: string) => {
+        const value = store.get(key) ?? null;
+        store.delete(key);
+        return value;
+      }),
+    };
+    const service = new SuiteIdpService(
+      jwt as any,
+      environment as any,
+      { getOrThrow: () => redis } as any,
+    );
+    return { service, store };
+  }
+
+  it('issues an access + refresh pair and tracks the refresh jti', async () => {
+    const { service, store } = makeStateful();
+    const client = service.findClient('conqrmeet')!;
+    const pair = await service.issueTokenPair('u1', 'ws1', client);
+    expect(pair.access_token).toBeTruthy();
+    expect(pair.refresh_token).toBeTruthy();
+    expect(
+      [...store.keys()].some((k) => k.startsWith('suite-idp:refresh:')),
+    ).toBe(true);
+  });
+
+  it('rotates a refresh token exactly once (replay rejected, chain continues)', async () => {
+    const { service } = makeStateful();
+    const client = service.findClient('conqrmeet')!;
+    const pair = await service.issueTokenPair('u1', 'ws1', client);
+
+    const rotated = await service.rotateRefreshToken(pair.refresh_token, client);
+    expect(rotated.refresh_token).not.toEqual(pair.refresh_token);
+
+    await expect(
+      service.rotateRefreshToken(pair.refresh_token, client),
+    ).rejects.toThrow(UnauthorizedException);
+
+    const again = await service.rotateRefreshToken(
+      rotated.refresh_token,
+      client,
+    );
+    expect(again.access_token).toBeTruthy();
+  });
+
+  it('rejects refresh tokens presented by a different client', async () => {
+    const { service } = makeStateful();
+    const meet = service.findClient('conqrmeet')!;
+    const plane = service.findClient('plane')!;
+    const pair = await service.issueTokenPair('u1', 'ws1', meet);
+    await expect(
+      service.rotateRefreshToken(pair.refresh_token, plane),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects access tokens used as refresh tokens (audience gate)', async () => {
+    const { service } = makeStateful();
+    const client = service.findClient('conqrmeet')!;
+    const pair = await service.issueTokenPair('u1', 'ws1', client);
+    await expect(
+      service.rotateRefreshToken(pair.access_token, client),
+    ).rejects.toThrow(UnauthorizedException);
+    // And refresh tokens never authenticate as access tokens.
+    await expect(service.verifyAccessToken(pair.refresh_token)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+});

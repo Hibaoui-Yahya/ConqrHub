@@ -9,6 +9,7 @@ import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
 import { SessionActivityService } from '../../session/session-activity.service';
 import { FastifyRequest } from 'fastify';
 import { extractBearerTokenFromHeader, isUserDisabled } from '../../../common/helpers';
+import { SUITE_IDP_ACCESS_AUD } from '../idp/suite-idp.service';
 import { ModuleRef } from '@nestjs/core';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
@@ -80,6 +81,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       return this.validateApiKey(req, payload as JwtApiKeyPayload);
     }
 
+    // Suite-IdP access tokens (trusted first-party clients: ConqrPlane,
+    // ConqrMeet). Strict audience match — the IdP's code and refresh tokens
+    // share the signing key but carry different audiences and are rejected.
+    // Short-lived (5 min) and only obtainable through a Hub-session-backed
+    // authorize by a statically registered client.
+    if (
+      payload.type === undefined &&
+      (payload as { aud?: string }).aud === SUITE_IDP_ACCESS_AUD
+    ) {
+      return this.validateSuiteToken(payload);
+    }
+
     if (payload.type !== JwtType.ACCESS) {
       throw new UnauthorizedException();
     }
@@ -143,6 +156,21 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       this.logger.debug(`JWT cache write failed: ${(err as Error).message}`);
     }
 
+    return { user, workspace };
+  }
+
+  /** Stateless (no Hub session row): resolve and validate user + workspace. */
+  private async validateSuiteToken(
+    payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
+  ): Promise<CachedAuthResult> {
+    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    if (!workspace) {
+      throw new UnauthorizedException();
+    }
+    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
+    if (!user || isUserDisabled(user)) {
+      throw new UnauthorizedException();
+    }
     return { user, workspace };
   }
 

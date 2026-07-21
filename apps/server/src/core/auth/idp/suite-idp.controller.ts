@@ -99,20 +99,29 @@ export class SuiteIdpController {
     if (!client || body.client_secret !== client.clientSecret) {
       return res.code(401).send({ error: 'invalid_client' });
     }
-    if (body.grant_type !== 'authorization_code' || !body.code) {
-      return res.code(400).send({ error: 'unsupported_grant_type' });
+    if (body.grant_type === 'authorization_code' && body.code) {
+      try {
+        const { userId, workspaceId } = await this.idp.exchangeCode(
+          body.code,
+          client,
+        );
+        return res
+          .header('Cache-Control', 'no-store')
+          .send(await this.idp.issueTokenPair(userId, workspaceId, client));
+      } catch {
+        return res.code(400).send({ error: 'invalid_grant' });
+      }
     }
-    try {
-      const { userId, workspaceId } = await this.idp.exchangeCode(
-        body.code,
-        client,
-      );
-      return res
-        .header('Cache-Control', 'no-store')
-        .send(this.idp.issueAccessToken(userId, workspaceId));
-    } catch {
-      return res.code(400).send({ error: 'invalid_grant' });
+    if (body.grant_type === 'refresh_token' && body.refresh_token) {
+      try {
+        return res
+          .header('Cache-Control', 'no-store')
+          .send(await this.idp.rotateRefreshToken(body.refresh_token, client));
+      } catch {
+        return res.code(400).send({ error: 'invalid_grant' });
+      }
     }
+    return res.code(400).send({ error: 'unsupported_grant_type' });
   }
 
   @Public()

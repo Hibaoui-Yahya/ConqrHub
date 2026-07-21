@@ -4,6 +4,7 @@ import {
   IconExternalLink,
   IconLayoutGrid,
   IconLayoutKanban,
+  IconMicrophone,
   IconNotebook,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
@@ -30,6 +31,12 @@ const PLANE_URL =
   process.env.PLANE_APP_URL ||
   (import.meta as any)?.env?.VITE_PLANE_URL ||
   "http://localhost";
+
+/** ConqrMeet base URL (build-time), then legacy Vite var, then dev default. */
+const MEET_URL =
+  process.env.MEET_APP_URL ||
+  (import.meta as any)?.env?.VITE_MEET_URL ||
+  "http://localhost:5273";
 
 type SuiteApp = {
   key: string;
@@ -83,6 +90,15 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       external: true,
       icon: IconLayoutKanban,
       color: "var(--extended-color-indigo-500, #5b57d1)",
+    },
+    {
+      key: "meet",
+      name: t("ConqrMeet"),
+      desc: t("Meeting intelligence"),
+      href: MEET_URL,
+      external: true,
+      icon: IconMicrophone,
+      color: "var(--extended-color-teal-500, #12b886)",
     },
   ];
 }

@@ -8,8 +8,13 @@ import { EnvironmentService } from '../../../integrations/environment/environmen
 
 const CODE_AUD = 'conqr-suite-idp-code';
 const ACCESS_AUD = 'conqr-suite-idp-access';
+const REFRESH_AUD = 'conqr-suite-idp-refresh';
 const CODE_TTL = '60s';
 const ACCESS_TTL_SECONDS = 300;
+const REFRESH_TTL_SECONDS = 14 * 24 * 60 * 60;
+
+/** Exported for JwtStrategy: suite access tokens are accepted on the API. */
+export const SUITE_IDP_ACCESS_AUD = ACCESS_AUD;
 
 export interface SuiteIdpClient {
   clientId: string;
@@ -124,6 +129,70 @@ export class SuiteIdpService {
       { expiresIn: ACCESS_TTL_SECONDS },
     );
     return { access_token, token_type: 'Bearer', expires_in: ACCESS_TTL_SECONDS };
+  }
+
+  /**
+   * Access + rotating refresh token pair. The refresh jti is tracked in
+   * Redis; rotation consumes it atomically, so a replayed refresh token is
+   * rejected even inside its JWT lifetime (and implicitly revokes the chain).
+   */
+  async issueTokenPair(
+    userId: string,
+    workspaceId: string,
+    client: SuiteIdpClient,
+  ): Promise<{
+    access_token: string;
+    token_type: 'Bearer';
+    expires_in: number;
+    refresh_token: string;
+  }> {
+    const jti = randomUUID();
+    const refresh_token = this.jwtService.sign(
+      {
+        sub: userId,
+        workspaceId,
+        aud: REFRESH_AUD,
+        client_id: client.clientId,
+        jti,
+      },
+      { expiresIn: REFRESH_TTL_SECONDS },
+    );
+    await this.redis.set(
+      `suite-idp:refresh:${jti}`,
+      '1',
+      'EX',
+      REFRESH_TTL_SECONDS,
+    );
+    return { ...this.issueAccessToken(userId, workspaceId), refresh_token };
+  }
+
+  /** Rotate a refresh token (one-time use) into a fresh token pair. */
+  async rotateRefreshToken(
+    refreshToken: string,
+    client: SuiteIdpClient,
+  ): Promise<{
+    access_token: string;
+    token_type: 'Bearer';
+    expires_in: number;
+    refresh_token: string;
+  }> {
+    let payload: any;
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        audience: REFRESH_AUD,
+      });
+    } catch {
+      throw new UnauthorizedException('invalid_grant');
+    }
+    if (payload.client_id !== client.clientId || !payload.jti) {
+      throw new UnauthorizedException('invalid_grant');
+    }
+    // GETDEL = atomic consume; a second use of the same token fails here.
+    const existed = await this.redis.getdel(`suite-idp:refresh:${payload.jti}`);
+    if (existed !== '1') {
+      throw new UnauthorizedException('invalid_grant');
+    }
+    return this.issueTokenPair(payload.sub, payload.workspaceId, client);
   }
 
   async verifyAccessToken(
