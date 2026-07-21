@@ -599,6 +599,17 @@ export class MeetingPipelineService {
       // Data minimization: provider-side deletion once we own the data.
       await this.batchProvider.deleteJob(providerJobId);
 
+      // Silent/empty audio: a valid provider response with zero segments is
+      // a clear user-facing failure, not a speaker-review case.
+      if (canonical.segments.length === 0) {
+        await this.failStep(
+          meeting,
+          'batch_processing',
+          'No speech was detected in the audio. Check the microphone/input source and try again.',
+        );
+        return;
+      }
+
       const needsSpeakerReview = this.needsSpeakerReview(canonical);
       const moved = await this.transition(
         meetingId,

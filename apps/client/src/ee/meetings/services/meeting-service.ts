@@ -107,7 +107,8 @@ export interface UploadMeetingOpts {
 
 export async function uploadMeeting(opts: UploadMeetingOpts): Promise<Meeting> {
   const form = new FormData();
-  form.append("file", opts.file, opts.file.name);
+  // Fields BEFORE the file part: multipart is parsed sequentially, so the
+  // server can validate consent without first draining the file stream.
   form.append("consent", opts.consent ? "true" : "false");
   if (opts.title) form.append("title", opts.title);
   if (opts.meetingType) form.append("meetingType", opts.meetingType);
@@ -117,6 +118,7 @@ export async function uploadMeeting(opts: UploadMeetingOpts): Promise<Meeting> {
   if (opts.autoProcess !== undefined) {
     form.append("autoProcess", String(opts.autoProcess));
   }
+  form.append("file", opts.file, opts.file.name);
   const body = await api.post("/ai/meeting/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });

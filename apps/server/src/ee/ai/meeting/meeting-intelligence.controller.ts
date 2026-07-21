@@ -103,6 +103,12 @@ export class MeetingIntelligenceController {
       throw new BadRequestException(`Unsupported media type: ${mime}`);
     }
 
+    // Drain the file BEFORE reading fields: multipart parts are parsed
+    // sequentially, so fields sent after the file part only exist once the
+    // file stream is consumed (same pattern as the chunk endpoint).
+    const buffer: Buffer = await fileData.toBuffer();
+    if (buffer.length === 0) throw new BadRequestException('Empty file');
+
     const fields = fileData.fields ?? {};
     const consent = String(fields.consent?.value ?? '') === 'true';
     if (!consent) {
@@ -128,9 +134,6 @@ export class MeetingIntelligenceController {
       }
     }
     const autoProcess = String(fields.autoProcess?.value ?? 'true') !== 'false';
-
-    const buffer: Buffer = await fileData.toBuffer();
-    if (buffer.length === 0) throw new BadRequestException('Empty file');
 
     // Duplicate content detection (workspace-scoped sha256).
     const sha = this.storage.sha256(buffer);

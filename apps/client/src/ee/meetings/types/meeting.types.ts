@@ -32,12 +32,14 @@ export type MeetingCaptureKind = "live" | "upload";
 export type MeetingTypeId =
   | "generic-meeting"
   | "daily-standup"
+  | "sprint-planning"
   | "sales-discovery"
   | "recruitment-interview";
 
 export const MEETING_TYPE_OPTIONS: { value: MeetingTypeId; label: string }[] = [
   { value: "generic-meeting", label: "Generic meeting" },
   { value: "daily-standup", label: "Daily stand-up" },
+  { value: "sprint-planning", label: "Sprint planning" },
   { value: "sales-discovery", label: "Sales discovery" },
   { value: "recruitment-interview", label: "Recruitment interview" },
 ];

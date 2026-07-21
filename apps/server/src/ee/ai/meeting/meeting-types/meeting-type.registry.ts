@@ -1,6 +1,7 @@
 import { MeetingTypeDefinition } from './meeting-type.types';
 import { genericMeeting } from './types/generic-meeting';
 import { dailyStandup } from './types/daily-standup';
+import { sprintPlanning } from './types/sprint-planning';
 import { salesDiscovery } from './types/sales-discovery';
 import { recruitmentInterview } from './types/recruitment-interview';
 
@@ -12,9 +13,13 @@ import { recruitmentInterview } from './types/recruitment-interview';
  * definitions in later phases.
  */
 const REGISTRY = new Map<string, MeetingTypeDefinition>(
-  [genericMeeting, dailyStandup, salesDiscovery, recruitmentInterview].map(
-    (d) => [d.id, d] as const,
-  ),
+  [
+    genericMeeting,
+    dailyStandup,
+    sprintPlanning,
+    salesDiscovery,
+    recruitmentInterview,
+  ].map((d) => [d.id, d] as const),
 );
 
 export const DEFAULT_MEETING_TYPE = genericMeeting.id;
