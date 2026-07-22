@@ -3,86 +3,214 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-type Intent = "help" | "bug" | "suggestion";
-const ACTIONS: Array<{ id: Intent; label: string; color: string; icon: string }> = [
-  { id: "help", label: "Get help", color: "#111827", icon: "?" },
-  { id: "bug", label: "Report a problem", color: "#ff8a00", icon: "!" },
-  { id: "suggestion", label: "Share an idea", color: "#7c4dff", icon: "\u25cb" },
-];
+/**
+ * Universal ConqrService launcher trigger embedded in ConqrHub.
+ *
+ * Collapsed: a floating dark circular `+` (bottom-right). Clicking it opens the
+ * ConqrService `/launcher` panel, which shows the full intent list (Need help /
+ * Make a request / Report a problem / Share an idea) and drives the whole Case
+ * flow itself. The host only positions the trigger and frames the panel — no
+ * Case rules live here.
+ */
 
-const circle = (background: string): React.CSSProperties => ({
-  width: 44,
-  height: 44,
-  display: "grid",
-  placeItems: "center",
-  border: 0,
-  borderRadius: "50%",
-  background,
-  color: "#fff",
-  boxShadow: "0 5px 14px rgba(15, 23, 42, .2)",
-  font: "600 17px/1 Inter, system-ui, sans-serif",
-  cursor: "pointer",
-  transition: "transform 150ms ease, box-shadow 150ms ease",
-});
+// Configured ConqrService origin (vite define); localhost is the dev fallback.
+const SERVICE_URL: string =
+  (typeof process !== "undefined" &&
+    (process.env as Record<string, string | undefined>)?.SERVICE_APP_URL) ||
+  "http://localhost:5175";
+
+function hostIsDark(): boolean {
+  const el = document.documentElement;
+  return (
+    el.classList.contains("dark") ||
+    el.dataset.mantineColorScheme === "dark" ||
+    /(?:^|;\s*)conqr-theme=dark(?:;|$)/.test(document.cookie) ||
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+}
 
 export function ConqrServiceLauncher({ productId }: { productId: string }) {
   const [mounted, setMounted] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (document.querySelector('[data-conqr-service-runtime]')) return;
+    // Never double-mount alongside the standalone embed runtime.
+    if (document.querySelector("[data-conqr-service-runtime]")) return;
     setMounted(true);
   }, []);
+
   const close = () => {
-    setIntent(null);
-    setExpanded(false);
+    setOpen(false);
     window.setTimeout(() => buttonRef.current?.focus(), 0);
   };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && (intent || expanded)) close();
+      if (event.key === "Escape" && open) close();
+      // Alt+S opens the launcher from anywhere.
       if (event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        setExpanded(true);
+        setOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, intent]);
+  }, [open]);
 
   if (!mounted) return null;
-  const hostTheme = document.documentElement.classList.contains("dark") || document.documentElement.dataset.mantineColorScheme === "dark" || /(?:^|;\s*)conqr-theme=dark(?:;|$)/.test(document.cookie) || window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  const launcherUrl = intent
-    ? `http://localhost:5175/launcher?intent=${intent}&product=${encodeURIComponent(productId)}&theme=${hostTheme}&route=${encodeURIComponent(window.location.pathname + window.location.search)}&locale=${encodeURIComponent(navigator.language)}&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`
-    : "";
+
+  const theme = hostIsDark() ? "dark" : "light";
+  const panelUrl =
+    `${SERVICE_URL.replace(/\/+$/, "")}/launcher` +
+    `?product=${encodeURIComponent(productId)}` +
+    `&theme=${theme}` +
+    `&route=${encodeURIComponent(window.location.pathname + window.location.search)}` +
+    `&locale=${encodeURIComponent(navigator.language)}` +
+    `&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`;
+
+  const dark = theme === "dark";
+  const surface = dark ? "#1a1b1e" : "#ffffff";
+  const border = dark ? "rgba(255,255,255,.10)" : "rgba(15,23,42,.10)";
 
   return createPortal(
     <>
-      {intent && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2147483000, fontFamily: "Inter, system-ui, sans-serif" }}>
-          <button aria-label="Close ConqrService" onClick={close} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", padding: 0, border: 0, background: "rgba(15, 23, 42, .30)", cursor: "default" }} />
-          <section role="dialog" aria-modal="true" aria-label="ConqrService" style={{ position: "absolute", top: "50%", left: "50%", width: "min(420px, calc(100vw - 24px))", height: "min(520px, calc(100vh - 24px))", transform: "translate(-50%, -50%)", overflow: "hidden", border: "1px solid var(--border-subtle, var(--mantine-color-default-border, #e2e8f0))", borderRadius: 16, background: "var(--bg-surface-1, var(--mantine-color-body, #fff))", boxShadow: "0 24px 70px rgba(15, 23, 42, .24)" }}>
-            <button aria-label="Close ConqrService" onClick={close} style={{ position: "absolute", top: 10, right: 10, zIndex: 2, width: 34, height: 34, border: 0, borderRadius: 8, background: "transparent", color: "#94a3b8", fontSize: 20, cursor: "pointer" }}>{"\u00d7"}</button>
-            <iframe title="ConqrService request" src={launcherUrl} style={{ display: "block", width: "100%", height: "100%", border: 0, background: "var(--bg-surface-1, var(--mantine-color-body, #fff))" }} />
+      {open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483000,
+            fontFamily: "'Inter Variable', Inter, system-ui, sans-serif",
+          }}
+        >
+          {/* Backdrop */}
+          <button
+            aria-label="Close ConqrService"
+            onClick={close}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              padding: 0,
+              border: 0,
+              background: dark ? "rgba(0,0,0,.55)" : "rgba(15,23,42,.32)",
+              backdropFilter: "blur(2px)",
+              cursor: "default",
+              animation: "cqr-fade 140ms ease",
+            }}
+          />
+          {/* Panel — anchored bottom-right above the trigger, like a launcher.
+              Falls back to a comfortable size on small screens. */}
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="ConqrService"
+            style={{
+              position: "absolute",
+              right: "max(24px, env(safe-area-inset-right))",
+              bottom: "calc(84px + env(safe-area-inset-bottom))",
+              width: "min(400px, calc(100vw - 32px))",
+              height: "min(560px, calc(100vh - 120px))",
+              overflow: "hidden",
+              border: `1px solid ${border}`,
+              borderRadius: 18,
+              background: surface,
+              boxShadow: dark
+                ? "0 24px 70px rgba(0,0,0,.55)"
+                : "0 24px 70px rgba(15,23,42,.24)",
+              transformOrigin: "bottom right",
+              animation: "cqr-pop 170ms cubic-bezier(.2,.9,.3,1.2)",
+            }}
+          >
+            <iframe
+              title="ConqrService"
+              src={panelUrl}
+              style={{
+                display: "block",
+                width: "100%",
+                height: "100%",
+                border: 0,
+                background: surface,
+              }}
+            />
           </section>
         </div>
       )}
 
-      {!intent && (
-        <div data-conqr-service-launcher style={{ position: "fixed", right: "max(28px, env(safe-area-inset-right))", bottom: "max(28px, env(safe-area-inset-bottom))", zIndex: 2147483000, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none" }}>
-          {expanded && ACTIONS.map((action) => (
-            <button key={action.id} aria-label={action.label} title={action.label} onClick={() => setIntent(action.id)} style={{ ...circle(action.color), pointerEvents: "auto" }} onMouseEnter={(event) => { event.currentTarget.style.transform = "translateY(-1px) scale(1.04)"; }} onMouseLeave={(event) => { event.currentTarget.style.transform = "none"; }}>
-              {action.icon}
-            </button>
-          ))}
-          <button ref={buttonRef} aria-label={expanded ? "Close ConqrService" : "Open ConqrService"} aria-expanded={expanded} title="ConqrService (Alt+S)" onClick={() => setExpanded((value) => !value)} style={{ ...circle(expanded ? "#111827" : "#006387"), pointerEvents: "auto", marginTop: expanded ? 2 : 0, fontSize: expanded ? 18 : 25, boxShadow: expanded ? "0 5px 14px rgba(15, 23, 42, .2)" : "0 8px 22px rgba(0, 99, 135, .42), 0 0 0 3px rgba(255,255,255,.88)" }}>
-            {expanded ? "\u00d7" : "+"}
-          </button>
-        </div>
-      )}
+      {/* Floating dark circular trigger, bottom-right. */}
+      <div
+        data-conqr-service-launcher
+        style={{
+          position: "fixed",
+          right: "max(24px, env(safe-area-inset-right))",
+          bottom: "max(24px, env(safe-area-inset-bottom))",
+          zIndex: 2147483001,
+        }}
+      >
+        <button
+          ref={buttonRef}
+          aria-label={open ? "Close ConqrService" : "Open ConqrService"}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          title="Get help or send a request (Alt+S)"
+          onClick={() => setOpen((v) => !v)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            width: 52,
+            height: 52,
+            display: "grid",
+            placeItems: "center",
+            border: 0,
+            borderRadius: "50%",
+            background: dark ? "#f8fafc" : "#111827",
+            color: dark ? "#111827" : "#ffffff",
+            fontSize: 26,
+            fontWeight: 400,
+            lineHeight: 1,
+            cursor: "pointer",
+            boxShadow: hovered
+              ? "0 12px 28px rgba(15,23,42,.34)"
+              : "0 8px 20px rgba(15,23,42,.26)",
+            transform: hovered
+              ? "translateY(-2px) scale(1.05)"
+              : "translateY(0) scale(1)",
+            transition: "transform 160ms ease, box-shadow 160ms ease",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              transition: "transform 200ms cubic-bezier(.2,.9,.3,1.2)",
+              transform: open ? "rotate(45deg)" : "rotate(0deg)",
+            }}
+          >
+            +
+          </span>
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes cqr-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes cqr-pop {
+          from { opacity: 0; transform: translateY(8px) scale(.96) }
+          to { opacity: 1; transform: translateY(0) scale(1) }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-conqr-service-launcher] button { transition: none !important }
+        }
+        @media (max-width: 640px) {
+          section[aria-label="ConqrService"] {
+            right: 8px !important; left: 8px !important;
+            width: auto !important;
+            bottom: 8px !important;
+            height: min(78vh, 560px) !important;
+          }
+        }
+      `}</style>
     </>,
     document.body,
   );
