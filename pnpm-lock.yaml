@@ -250,6 +250,21 @@ importers:
       '@casl/react':
         specifier: ^5.0.1
         version: 5.0.1(@casl/ability@6.8.0)(react@18.3.1)
+      '@conqr/icons':
+        specifier: workspace:*
+        version: link:../../packages/icons
+      '@conqr/integration-ui':
+        specifier: workspace:*
+        version: link:../../packages/integration-ui
+      '@conqr/shell':
+        specifier: workspace:*
+        version: link:../../packages/shell
+      '@conqr/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@conqr/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@docmost/editor-ext':
         specifier: workspace:*
         version: link:../../packages/editor-ext
@@ -262,6 +277,9 @@ importers:
       '@excalidraw/excalidraw':
         specifier: 0.18.0-3a5ef40
         version: 0.18.0-3a5ef40(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@fontsource-variable/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@mantine/core':
         specifier: ^8.3.18
         version: 8.3.18(@mantine/hooks@8.3.18(react@18.3.1))(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -834,6 +852,56 @@ importers:
       marked:
         specifier: 17.0.5
         version: 17.0.5
+
+  packages/icons:
+    dependencies:
+      '@tabler/icons-react':
+        specifier: '*'
+        version: 3.40.0(react@18.3.1)
+      react:
+        specifier: '*'
+        version: 18.3.1
+
+  packages/integration-ui:
+    dependencies:
+      '@conqr/tokens':
+        specifier: workspace:*
+        version: link:../tokens
+      '@mantine/core':
+        specifier: '*'
+        version: 8.3.18(@mantine/hooks@8.3.18(react@18.3.1))(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@tabler/icons-react':
+        specifier: '*'
+        version: 3.40.0(react@18.3.1)
+      react:
+        specifier: '*'
+        version: 18.3.1
+
+  packages/shell:
+    dependencies:
+      '@conqr/tokens':
+        specifier: workspace:*
+        version: link:../tokens
+      '@mantine/core':
+        specifier: '*'
+        version: 8.3.18(@mantine/hooks@8.3.18(react@18.3.1))(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: '*'
+        version: 18.3.1
+
+  packages/tokens: {}
+
+  packages/ui:
+    dependencies:
+      '@conqr/tokens':
+        specifier: workspace:*
+        version: link:../tokens
+      '@mantine/core':
+        specifier: '*'
+        version: 8.3.18(@mantine/hooks@8.3.18(react@18.3.1))(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: '*'
+        version: 18.3.1
 
 packages:
 
@@ -1793,6 +1861,7 @@ packages:
 
   '@clickhouse/client-common@1.18.2':
     resolution: {integrity: sha512-J0SG6q9V31ydxonglpj9xhNRsUxCsF71iEZ784yldqMYwsHixj/9xHFDgBDX3DuMiDx/kPDfXnf+pimp08wIBA==}
+    deprecated: 'Deprecated: import from @clickhouse/client or @clickhouse/client-web instead.'
 
   '@clickhouse/client@1.18.2':
     resolution: {integrity: sha512-fuquQswRSHWM6D079ZeuGqkMOsqtcUPL06UdTnowmoeeYjVrqisfVmvnw8pc3OeKS4kVb91oygb/MfLDiMs0TQ==}
@@ -2309,6 +2378,9 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
 
   '@hocuspocus/common@3.4.4':
     resolution: {integrity: sha512-RykIJ0tsHHMP4Xk+4UCbc7SO5LgGxGUSTdbh6anJEsaALAyqinf1Nn5HYuMjLPolAmsar1v++m9zufR09NLpXA==}
@@ -9782,6 +9854,7 @@ packages:
 
   sliced@1.0.1:
     resolution: {integrity: sha512-VZBmZP8WU3sMOZm1bdgTadsQbcscK0UM8oKxKVBs4XAhUo2Xxzm/OFMGBkPusxw9xL3Uy8LrzEqGqJhclsr0yA==}
+    deprecated: Unsupported
 
   socket.io-adapter@2.5.4:
     resolution: {integrity: sha512-wDNHGXGewWAjQPt3pyeYBtpWSq9cLE5UW1ZUPL/2eGK9jtse/FpXib7epSTsz0Q0m+6sg6Y4KtcFTlah1bdOVg==}
@@ -12674,6 +12747,8 @@ snapshots:
       tabbable: 6.2.0
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@fontsource-variable/inter@5.3.0': {}
 
   '@hocuspocus/common@3.4.4':
     dependencies:

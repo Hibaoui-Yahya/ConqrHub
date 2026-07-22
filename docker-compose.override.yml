@@ -26,13 +26,15 @@ services:
       DATABASE_URL: "postgresql://docmost:docmostdev@db:5432/docmost"
       REDIS_URL: "redis://redis:6379"
       STORAGE_DRIVER: "local"
-      # Conqr suite single sign-on (Keycloak, dynamic hostname). The issuer uses
-      # the machine's LAN IP so browser AND containers hit the SAME IdP host —
-      # required for silent SSO (per-host IdP session cookie). Update the IP here
-      # and in plane/deployments/cli/community if the LAN address changes.
+      # Conqr suite single sign-on (Keycloak). The issuer is the STABLE custom
+      # hostname `keycloak.conqr.local`, pinned on Keycloak via KC_HOSTNAME so the
+      # browser AND this container resolve the SAME issuer regardless of LAN IP:
+      #   - browser: Windows hosts entry `127.0.0.1  keycloak.conqr.local`
+      #   - container: extra_hosts `keycloak.conqr.local:host-gateway` (below)
+      # Drift-proof — no edits needed when the machine's LAN address changes.
       # Put the real secret in the shell/.env as OIDC_CLIENT_SECRET.
       OIDC_ENABLED: "true"
-      OIDC_ISSUER_URL: "http://192.168.40.145:8080/realms/conqr"
+      OIDC_ISSUER_URL: "http://kubernetes.docker.internal:8080/realms/conqr"
       OIDC_CLIENT_ID: "conqrhub"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-changeme}"
       OIDC_REDIRECT_URI: "http://localhost:5173/api/auth/oidc/callback"
@@ -57,3 +59,5 @@ services:
       MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "keycloak.conqr.local:host-gateway"
+      - "kubernetes.docker.internal:host-gateway"

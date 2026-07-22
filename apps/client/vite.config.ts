@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => {
     OIDC_ENABLED,
     PLANE_APP_URL,
     PLANE_WORKSPACE_SLUG,
+    MEET_APP_URL,
+    SERVICE_APP_URL,
   } = loadEnv(mode, envPath, "");
 
   return {
@@ -37,6 +39,8 @@ export default defineConfig(({ mode }) => {
         OIDC_ENABLED,
         PLANE_APP_URL,
         PLANE_WORKSPACE_SLUG,
+        MEET_APP_URL,
+        SERVICE_APP_URL,
       },
       APP_VERSION: JSON.stringify(process.env.npm_package_version),
     },

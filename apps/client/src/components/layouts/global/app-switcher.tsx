@@ -1,6 +1,7 @@
 import { Box, Group, Menu, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconCheck,
+  IconClipboardList,
   IconExternalLink,
   IconLayoutGrid,
   IconLayoutKanban,
@@ -38,6 +39,14 @@ const MEET_URL =
   (import.meta as any)?.env?.VITE_MEET_URL ||
   "http://localhost:5273";
 
+/**
+ * ConqrService base URL (build-time), then legacy Vite var, then dev default.
+ */
+const SERVICE_URL =
+  process.env.SERVICE_APP_URL ||
+  (import.meta as any)?.env?.VITE_SERVICE_URL ||
+  "http://localhost:5175";
+
 type SuiteApp = {
   key: string;
   name: string;
@@ -69,7 +78,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   const planeHref = target?.url || PLANE_URL;
   const planeContextual = Boolean(target?.url);
 
-  return [
+  const apps: SuiteApp[] = [
     {
       key: "hub",
       name: "ConqrHub",
@@ -101,6 +110,18 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       color: "var(--extended-color-teal-500, #12b886)",
     },
   ];
+
+  apps.push({
+      key: "service",
+      name: t("ConqrService"),
+      desc: t("Service management"),
+      href: SERVICE_URL,
+      external: true,
+      icon: IconClipboardList,
+      color: "var(--extended-color-orange-500, #e8590c)",
+  });
+
+  return apps;
 }
 
 function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void }) {

@@ -21,11 +21,12 @@ export function Surface({
   return (
     <Card
       withBorder
-      radius="sm"
+      radius="lg"
       padding="sm"
       style={{
         background: level === 2 ? "var(--bg-surface-2)" : "var(--bg-surface-1)",
         borderColor: "var(--border-subtle)",
+        borderWidth: "0.5px",
         ...style,
       }}
     >

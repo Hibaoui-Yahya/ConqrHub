@@ -21,6 +21,7 @@ import ContentHeader from "@/components/layouts/global/content-header.tsx";
 import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
 import { Tooltip } from "@mantine/core";
 import { useTranslation } from "react-i18next";
+import { ConqrServiceLauncher } from "@/components/conqr-service-launcher";
 
 export default function GlobalAppShell({
   children,
@@ -88,7 +89,7 @@ export default function GlobalAppShell({
     <AppShell
       header={{ height: 40 }}
       navbar={{
-        width: isSpaceRoute ? sidebarWidth : 300,
+        width: isSpaceRoute ? sidebarWidth : 260,
         breakpoint: "sm",
         collapsed: {
           mobile: !mobileOpened,
@@ -162,6 +163,7 @@ export default function GlobalAppShell({
           </div>
         </AppShell.Aside>
       )}
+      <ConqrServiceLauncher productId="conqrhub" />
     </AppShell>
   );
 }

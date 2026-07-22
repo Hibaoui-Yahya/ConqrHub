@@ -358,6 +358,50 @@
   --padding-page: 1.35rem;
 }
 
+/* Plane component contract for Mantine-based Conqr applications. */
+.mantine-Input-input,
+.mantine-TextInput-input,
+.mantine-Textarea-input,
+.mantine-Select-input,
+.mantine-MultiSelect-input,
+.mantine-PasswordInput-input,
+.mantine-NumberInput-input,
+.mantine-Autocomplete-input {
+  border-width: 0.5px;
+  border-color: var(--border-subtle-1);
+  border-radius: 6px;
+  background: var(--bg-layer-2);
+  color: var(--txt-primary);
+  font-size: 13px;
+}
+.mantine-Input-input::placeholder,
+.mantine-TextInput-input::placeholder,
+.mantine-Textarea-input::placeholder,
+.mantine-Select-input::placeholder,
+.mantine-MultiSelect-input::placeholder,
+.mantine-PasswordInput-input::placeholder,
+.mantine-NumberInput-input::placeholder,
+.mantine-Autocomplete-input::placeholder { color: var(--txt-placeholder); opacity: 1; }
+.mantine-Input-input:focus,
+.mantine-TextInput-input:focus,
+.mantine-Textarea-input:focus,
+.mantine-Select-input:focus,
+.mantine-MultiSelect-input:focus,
+.mantine-PasswordInput-input:focus,
+.mantine-NumberInput-input:focus,
+.mantine-Autocomplete-input:focus { border-color: var(--border-strong); outline: none; }
+.mantine-InputWrapper-label { color: var(--txt-primary); font-size: 13px; font-weight: 500; }
+.mantine-InputWrapper-description { color: var(--txt-tertiary); font-size: 12px; }
+.mantine-Button-root { border-radius: 4px; font-size: 13px; font-weight: 500; }
+.mantine-Button-root[data-variant='default'] { border-color: var(--border-subtle); background: var(--bg-surface-1); color: var(--txt-secondary); }
+.mantine-ActionIcon-root { border-radius: 4px; }
+.mantine-Badge-root { border-radius: 4px; font-size: 11px; font-weight: 500; }
+.mantine-Menu-item { border-radius: 4px; font-size: 13px; }
+.mantine-Menu-label { color: var(--txt-tertiary); font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+.mantine-Tabs-tab { font-size: 13px; font-weight: 500; }
+.mantine-Table-table { color: var(--txt-primary); font-size: 13px; }
+.mantine-Table-th { color: var(--txt-tertiary); font-size: 11px; font-weight: 600; }
+
 /* ==================== Dark scheme overrides ==================== */
 [data-mantine-color-scheme="dark"] {
   /* Neutral */

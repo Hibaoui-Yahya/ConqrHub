@@ -62,7 +62,7 @@ export default function HealthAlertCard() {
   };
 
   return (
-    <Card withBorder padding="lg" radius="md">
+    <Card withBorder padding="lg" radius="lg">
       <Stack gap="md">
         <Group gap="xs" align="center">
           <IconBell size={18} />

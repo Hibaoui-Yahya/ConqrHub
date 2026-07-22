@@ -1,3 +1,6 @@
+// Self-hosted Inter variable font — same source as Plane, so both apps render
+// identical type. Loaded before all other styles.
+import "@fontsource-variable/inter";
 import "@mantine/core/styles.css";
 import "@mantine/spotlight/styles.css";
 import "@mantine/notifications/styles.css";

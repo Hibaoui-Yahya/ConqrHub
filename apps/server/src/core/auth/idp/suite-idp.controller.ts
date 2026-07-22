@@ -106,6 +106,7 @@ export class SuiteIdpController {
           client,
         );
         return res
+          .code(200)
           .header('Cache-Control', 'no-store')
           .send(await this.idp.issueTokenPair(userId, workspaceId, client));
       } catch {
@@ -115,6 +116,7 @@ export class SuiteIdpController {
     if (body.grant_type === 'refresh_token' && body.refresh_token) {
       try {
         return res
+          .code(200)
           .header('Cache-Control', 'no-store')
           .send(await this.idp.rotateRefreshToken(body.refresh_token, client));
       } catch {

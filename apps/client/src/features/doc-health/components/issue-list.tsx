@@ -105,7 +105,7 @@ export default function IssueList({
         </Button>
       </Group>
 
-      <Card withBorder padding={0} radius="md">
+      <Card withBorder padding={0} radius="lg">
         {isLoading ? (
           <Center p="xl">
             <Loader size="sm" />

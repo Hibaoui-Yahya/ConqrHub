@@ -14,14 +14,16 @@ import {
   Badge,
   Alert,
 } from "@mantine/core";
-import { IconPlus, IconSearch } from "@tabler/icons-react";
+import { IconPlus, IconSearch, IconSettings } from "@tabler/icons-react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
+import { useNavigate } from "react-router-dom";
 import {
   useCreateRelationshipMutation,
   useCreateWorkItemFromHubMutation,
   useSearchWorkItems,
 } from "@/features/integration/queries/integration-query";
+import useUserRole from "@/hooks/use-user-role";
 
 /**
  * Link an existing Plane work item to the current Hub object, or create a new
@@ -41,6 +43,8 @@ export function LinkOrCreateWorkItem({
   /** When set (e.g. from an editor selection), prefill + default to "create". */
   initialTitle?: string;
 }) {
+  const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [search, setSearch] = useState("");
   const [debounced] = useDebouncedValue(search, 300);
   const { data: searchData, isFetching } = useSearchWorkItems(
@@ -99,8 +103,27 @@ export function LinkOrCreateWorkItem({
     <Modal opened={opened} onClose={onClose} title="Link or create work item" centered>
       {noProject && (
         <Alert color="yellow" variant="light" mb="sm" radius="sm">
-          This space isn't mapped to a Plane project yet, so work items can't be
-          resolved. Ask an admin to set a project mapping.
+          <Stack gap="xs" align="flex-start">
+            <Text size="sm">
+              This space isn't mapped to a Plane project yet, so work items
+              can't be resolved.
+              {!isAdmin && " Ask an admin to set a project mapping."}
+            </Text>
+            {isAdmin && (
+              <Button
+                size="xs"
+                variant="light"
+                color="yellow"
+                leftSection={<IconSettings size={14} />}
+                onClick={() => {
+                  onClose();
+                  navigate("/settings/integrations");
+                }}
+              >
+                Set up mapping
+              </Button>
+            )}
+          </Stack>
         </Alert>
       )}
       <Tabs defaultValue={initialTitle ? "create" : "link"}>

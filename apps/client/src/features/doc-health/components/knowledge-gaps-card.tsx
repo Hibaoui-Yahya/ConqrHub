@@ -195,7 +195,7 @@ export default function KnowledgeGapsCard() {
   const items = data?.items ?? [];
 
   return (
-    <Card withBorder padding="lg" radius="md">
+    <Card withBorder padding="lg" radius="lg">
       <Stack gap="md">
         <Group justify="space-between" align="center" wrap="wrap">
           <Group gap="xs" align="center">

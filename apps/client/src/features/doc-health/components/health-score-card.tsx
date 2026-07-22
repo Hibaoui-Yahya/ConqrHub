@@ -45,7 +45,7 @@ export default function HealthScoreCard({
 
   if (isLoading) {
     return (
-      <Card withBorder padding="lg" radius="md">
+      <Card withBorder padding="lg" radius="lg">
         <Text c="dimmed">{t("Loading score…")}</Text>
       </Card>
     );
@@ -53,7 +53,7 @@ export default function HealthScoreCard({
 
   if (!data) {
     return (
-      <Card withBorder padding="lg" radius="md">
+      <Card withBorder padding="lg" radius="lg">
         <Text c="dimmed">{t("No data available.")}</Text>
       </Card>
     );
@@ -63,7 +63,7 @@ export default function HealthScoreCard({
   const color = scoreColor(score);
 
   return (
-    <Card withBorder padding="lg" radius="md">
+    <Card withBorder padding="lg" radius="lg">
       <Group align="flex-start" gap="xl" wrap="nowrap">
         <Stack gap="xs" align="center">
           {data.insufficientData ? (

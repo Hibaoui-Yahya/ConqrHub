@@ -55,7 +55,7 @@ export default function DocHealthPage() {
           }
         />
 
-        <Card withBorder padding="lg" radius="md">
+        <Card withBorder padding="lg" radius="lg">
           <HealthTrendChart
             scope={trendScope}
             onScopeChange={setTrendScope}

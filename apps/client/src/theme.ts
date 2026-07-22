@@ -99,12 +99,12 @@ export const theme = createTheme({
   primaryShade: 6,
   autoContrast: false,
   fontFamily:
-    'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    '"Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   fontFamilyMonospace:
     'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
   headings: {
     fontFamily:
-      'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      '"Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   // 4px default = Plane's dominant `rounded-sm` (Tailwind v4). Keeps buttons,
   // inputs, list items, badges at the same tightness as Plane's chrome.
@@ -142,12 +142,24 @@ export const theme = createTheme({
     // Surface radii matched to Plane: cards/panels = rounded-lg (8px), modals =
     // rounded-xl (12px), dropdown menus/popovers = rounded-md (6px), tooltips =
     // rounded-sm (4px).
-    Modal: Modal.extend({ defaultProps: { radius: "xl" } }),
-    Card: Card.extend({ defaultProps: { radius: "lg" } }),
-    Paper: Paper.extend({ defaultProps: { radius: "lg" } }),
+    Modal: Modal.extend({ defaultProps: { radius: "lg" } }),
+    Card: Card.extend({
+      defaultProps: { radius: "lg" },
+      styles: {
+        root: {
+          background: "var(--bg-surface-1)",
+          borderColor: "var(--border-subtle)",
+          borderWidth: "0.5px",
+        },
+      },
+    }),
+    Paper: Paper.extend({
+      defaultProps: { radius: "lg" },
+      styles: { root: { borderColor: "var(--border-subtle)", borderWidth: "0.5px" } },
+    }),
     Menu: Menu.extend({ defaultProps: { radius: "md", shadow: "md" } }),
     Popover: Popover.extend({ defaultProps: { radius: "md", shadow: "md" } }),
-    Tooltip: Tooltip.extend({ defaultProps: { radius: "sm" } }),
+    Tooltip: Tooltip.extend({ defaultProps: { radius: "md" } }),
   },
 });
 
@@ -162,7 +174,9 @@ export const mantineCssResolver: CSSVariablesResolver = (theme) => ({
     "--mantine-color-anchor": "var(--txt-link-primary)",
   },
   light: {
-    "--mantine-color-dark-light-color": "#4e5359",
+    // Foreground for `subtle`/`light` dark-variant controls — was a hardcoded
+    // mid-gray (#4e5359); use the matching Plane semantic text token instead.
+    "--mantine-color-dark-light-color": "var(--txt-secondary)",
     "--mantine-color-dark-light-hover": "var(--mantine-color-gray-light-hover)",
     // Text colour for `subtle`/`light` brand variants (e.g. the "View all spaces"
     // button). On white, the default brand shade reads fine.

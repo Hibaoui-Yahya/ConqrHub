@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Center, Loader, Stack, Text, Anchor } from "@mantine/core";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { Center, Loader, Stack, Text, Anchor, Button } from "@mantine/core";
+import { IconSettings } from "@tabler/icons-react";
 import {
   getProjectDocs,
   ProjectDocsResolution,
 } from "@/features/integration/services/integration-service";
+import useUserRole from "@/hooks/use-user-role";
 
 /**
  * Landing route for Plane's "Docs" nav item (blueprint §5.2A). Plane deep-links
@@ -15,6 +17,7 @@ import {
 export default function PlaneDocsRedirect() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [state, setState] = useState<
     "loading" | "unmapped" | "error" | "choose"
   >("loading");
@@ -75,11 +78,26 @@ export default function PlaneDocsRedirect() {
 
   return (
     <Center h="60vh">
-      <Text size="sm" c="var(--txt-tertiary)">
-        {state === "error"
-          ? "Couldn't load project documentation."
-          : "This project isn't mapped to a ConqrHub space yet."}
-      </Text>
+      <Stack align="center" gap="sm">
+        <Text size="sm" c="var(--txt-tertiary)">
+          {state === "error"
+            ? "Couldn't load project documentation."
+            : isAdmin
+              ? "This project isn't mapped to a ConqrHub space yet."
+              : "This project isn't mapped to a ConqrHub space yet. Ask an admin to set a project mapping."}
+        </Text>
+        {state === "unmapped" && isAdmin && (
+          <Button
+            component={Link}
+            to="/settings/integrations"
+            size="xs"
+            variant="light"
+            leftSection={<IconSettings size={14} />}
+          >
+            Set up mapping
+          </Button>
+        )}
+      </Stack>
     </Center>
   );
 }

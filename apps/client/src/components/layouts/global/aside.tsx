@@ -25,9 +25,12 @@ export default function Aside() {
   const { data: spaceMappings } = useSpaceMappings(
     tab === "links" ? currentPage?.spaceId : undefined,
   );
-  const primaryProjectId = spaceMappings?.find(
-    (m) => m.mappingKind === "primary",
-  )?.planeProjectId;
+  // Prefer the space's primary Plane project, else fall back to the first
+  // mapping — mirrors the server's resolveSpacePlaneTarget so a space mapped
+  // only as a secondary docs space still resolves work items (§8.3).
+  const mappedProjectId =
+    spaceMappings?.find((m) => m.mappingKind === "primary")?.planeProjectId ??
+    spaceMappings?.[0]?.planeProjectId;
 
   let title: string;
   let component: ReactNode;
@@ -49,7 +52,7 @@ export default function Aside() {
       component = currentPage?.id ? (
         <KnowledgePanel
           urn={`conqr://hub/page/${currentPage.id}`}
-          planeProjectId={primaryProjectId}
+          planeProjectId={mappedProjectId}
         />
       ) : null;
       title = "Related work & knowledge";

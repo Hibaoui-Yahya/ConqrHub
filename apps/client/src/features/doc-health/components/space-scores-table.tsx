@@ -20,14 +20,14 @@ export default function SpaceScoresTable({ spaces }: Props) {
 
   if (spaces.length === 0) {
     return (
-      <Card withBorder padding="lg" radius="md">
+      <Card withBorder padding="lg" radius="lg">
         <Text c="dimmed">{t("No spaces yet.")}</Text>
       </Card>
     );
   }
 
   return (
-    <Card withBorder padding={0} radius="md">
+    <Card withBorder padding={0} radius="lg">
       <Table verticalSpacing="sm" highlightOnHover>
         <Table.Thead>
           <Table.Tr>
