@@ -7,6 +7,15 @@ FROM base AS builder
 
 WORKDIR /app
 
+# Suite app-switcher URLs are baked into the client at build time (vite define).
+# Railway passes matching service variables in as build args automatically.
+ARG PLANE_APP_URL
+ARG MEET_APP_URL
+ARG SERVICE_APP_URL
+ENV PLANE_APP_URL=$PLANE_APP_URL \
+    MEET_APP_URL=$MEET_APP_URL \
+    SERVICE_APP_URL=$SERVICE_APP_URL
+
 COPY . .
 
 RUN pnpm install --frozen-lockfile
