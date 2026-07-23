@@ -1,9 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
+  Get,
+  Header,
   HttpCode,
   HttpStatus,
   Logger,
+  MethodNotAllowedException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -51,5 +55,35 @@ export class McpController {
         error: { code: -32603, message },
       };
     }
+  }
+
+  /**
+   * MCP Streamable HTTP: a client opens a server->client SSE stream with
+   * `GET /mcp`. This server is request/response only (no server-initiated
+   * messages), so the spec requires HTTP 405 here — NOT a 404. Returning 404
+   * (route-not-found) makes strict clients (e.g. Claude, ChatGPT) treat the
+   * endpoint as invalid and abort the connection after a successful
+   * `initialize`. The `Allow` header advertises the supported method.
+   */
+  @SkipTransform()
+  @Get()
+  @Header('Allow', 'POST')
+  openStream(): never {
+    throw new MethodNotAllowedException(
+      'This MCP endpoint is request/response only and does not offer a server-initiated SSE stream. Use POST.',
+    );
+  }
+
+  /**
+   * MCP Streamable HTTP session termination (`DELETE /mcp`). We use no
+   * server-managed session, so respond 405 (not 404) per the same rule.
+   */
+  @SkipTransform()
+  @Delete()
+  @Header('Allow', 'POST')
+  terminateSession(): never {
+    throw new MethodNotAllowedException(
+      'Explicit session termination is not supported; sessions are stateless.',
+    );
   }
 }
