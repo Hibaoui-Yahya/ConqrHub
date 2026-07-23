@@ -22,6 +22,7 @@ import {
   McpContentResult,
 } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
+import { rasterizeSvgToPng } from './svg-raster.util';
 
 const MAX_IMAGES = 8;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -105,18 +106,24 @@ export class ReadPageMediaTool implements ChatTool, OnModuleInit {
     for (const a of rows) {
       const size = a.fileSize ? Number(a.fileSize) : 0;
       const mime = a.mimeType ?? 'image/png';
-      // SVG (incl. Excalidraw/Drawio renders) can't be sent as a vision image
-      // block — point the model at read_attachment, which returns its markup.
-      if (mime === 'image/svg+xml') {
-        skipped.push(`${a.fileName} (SVG drawing — read_attachment id=${a.id} for its source)`);
-        continue;
-      }
       if (size > MAX_IMAGE_BYTES) {
         skipped.push(`${a.fileName} (too large)`);
         continue;
       }
       try {
         const buf = await this.storage.read(a.filePath);
+        // SVG (incl. Excalidraw/Drawio renders): rasterise to PNG so it's a
+        // real viewable image. Fall back to skipping if rasterisation fails.
+        if (mime === 'image/svg+xml') {
+          const png = await rasterizeSvgToPng(buf, { maxWidth: 1400 });
+          if (png) {
+            blocks.push({ type: 'image', data: png.toString('base64'), mimeType: 'image/png' });
+            loaded.push(`${a.fileName ?? a.id} (drawing)`);
+          } else {
+            skipped.push(`${a.fileName} (SVG — read_attachment id=${a.id} for source)`);
+          }
+          continue;
+        }
         blocks.push({ type: 'image', data: buf.toString('base64'), mimeType: mime });
         loaded.push(a.fileName ?? a.id);
       } catch {

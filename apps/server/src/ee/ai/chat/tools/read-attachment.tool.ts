@@ -19,6 +19,7 @@ import {
   McpContentResult,
 } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
+import { rasterizeSvgToPng } from './svg-raster.util';
 
 // Cap the raw bytes we inline into a chat message so a huge file can't blow up
 // the response. ~7 MB of base64 ≈ 5 MB source.
@@ -81,10 +82,32 @@ export class ReadAttachmentTool implements ChatTool, OnModuleInit {
     };
     const size = att.fileSize ? Number(att.fileSize) : 0;
 
-    // 1. Raster images (and image-rendered drawings) -> viewable image block.
-    // SVG (incl. Excalidraw/Drawio SVG renders) is XML the model reads as text —
-    // and Claude/most vision models reject image/svg+xml as an image block — so
-    // it falls through to the text path below.
+    // 1a. SVG (incl. Excalidraw/Drawio renders): rasterise to PNG so the model
+    // can actually SEE the drawing (vision APIs reject image/svg+xml). On any
+    // rasterisation failure, fall through to returning the SVG source as text.
+    if (mime === 'image/svg+xml' && size <= MAX_INLINE_BYTES) {
+      const svg = await this.storage.read(att.filePath);
+      const png = await rasterizeSvgToPng(svg, { maxWidth: 1400 });
+      if (png) {
+        return {
+          __mcpContent: [
+            { type: 'image', data: png.toString('base64'), mimeType: 'image/png' },
+          ],
+          meta: { ...meta, renderedFrom: 'svg' },
+        };
+      }
+      return {
+        __mcpContent: [
+          {
+            type: 'text',
+            text: `SVG source of "${att.fileName}" (could not rasterise; here is the markup):\n\n${svg.toString('utf8').slice(0, MAX_TEXT_CHARS)}`,
+          },
+        ],
+        meta,
+      };
+    }
+
+    // 1b. Raster images (and image-rendered drawings) -> viewable image block.
     if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
       if (size > MAX_INLINE_BYTES) {
         return {
