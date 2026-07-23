@@ -9,6 +9,7 @@ import { CommentModule } from '../../../core/comment/comment.module';
 import { WorkspaceModule } from '../../../core/workspace/workspace.module';
 import { UserModule } from '../../../core/user/user.module';
 import { IntegrationModule } from '../../../core/integration/integration.module';
+import { PageVerificationModule } from '../../page-verification/page-verification.module';
 import { AiChatController } from './ai-chat.controller';
 import { AiChatStreamController } from './ai-chat-stream.controller';
 import { AiChatService } from './ai-chat.service';
@@ -58,6 +59,11 @@ import { AddDiagramTool } from './tools/add-diagram.tool';
 import { ReadAttachmentTool } from './tools/read-attachment.tool';
 import { ListPageAttachmentsTool } from './tools/list-page-attachments.tool';
 import { ReadPageMediaTool } from './tools/read-page-media.tool';
+// Verification tools (control RAG eligibility)
+import { GetVerificationStatusTool } from './tools/get-verification-status.tool';
+import { ListUnverifiedPagesTool } from './tools/list-unverified-pages.tool';
+import { VerifyPageTool } from './tools/verify-page.tool';
+import { VERIFICATION_LIFECYCLE_TOOLS } from './tools/verification-lifecycle.tools';
 // Self-documenting guide tool (deep how-tos on using all the tools)
 import { GetGuideTool } from './tools/get-guide.tool';
 // Cross-product ConqrPlane tools
@@ -77,6 +83,7 @@ import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
     WorkspaceModule,
     UserModule,
     IntegrationModule,
+    PageVerificationModule,
   ],
   controllers: [AiChatController, AiChatStreamController],
   providers: [
@@ -125,6 +132,11 @@ import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
     ReadAttachmentTool,
     ListPageAttachmentsTool,
     ReadPageMediaTool,
+    // Verification tools (control RAG eligibility)
+    GetVerificationStatusTool,
+    ListUnverifiedPagesTool,
+    VerifyPageTool,
+    ...VERIFICATION_LIFECYCLE_TOOLS,
     // Self-documenting guide tool
     GetGuideTool,
     // Cross-product ConqrPlane tools

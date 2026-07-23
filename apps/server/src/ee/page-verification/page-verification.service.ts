@@ -380,6 +380,57 @@ export class PageVerificationService {
     return { items: result, nextCursor: hasMore ? items[items.length - 1].id : null };
   }
 
+  /**
+   * Pages that are NOT effectively verified — i.e. invisible to RAG /
+   * rag_retrieve / Ask HR. A page counts as verified only when its
+   * verification row has status 'verified' or 'expiring' AND has no past
+   * expiry (mirrors isEffectivelyVerified in embedding-indexer.service.ts).
+   * Scoped to the caller's accessible spaces; spaceIds === [] => [].
+   */
+  async listUnverifiedPages(
+    workspaceId: string,
+    spaceIds: string[] | undefined,
+    limit: number,
+  ): Promise<
+    Array<{ id: string; title: string | null; spaceId: string; status: string }>
+  > {
+    if (spaceIds && spaceIds.length === 0) return [];
+
+    const now = new Date();
+    const rows = await (this.db as any)
+      .selectFrom('pages as p')
+      .leftJoin('pageVerifications as pv', 'pv.pageId', 'p.id')
+      .select([
+        'p.id as id',
+        'p.title as title',
+        'p.spaceId as spaceId',
+        'pv.status as verificationStatus',
+      ])
+      .where('p.workspaceId', '=', workspaceId)
+      .where('p.deletedAt', 'is', null)
+      .$if(!!spaceIds, (qb: any) => qb.where('p.spaceId', 'in', spaceIds))
+      .where((eb: any) =>
+        eb.or([
+          eb('pv.status', 'is', null),
+          eb('pv.status', 'not in', ['verified', 'expiring']),
+          eb.and([
+            eb('pv.expiresAt', 'is not', null),
+            eb('pv.expiresAt', '<=', now),
+          ]),
+        ]),
+      )
+      .orderBy('p.updatedAt', 'desc')
+      .limit(limit)
+      .execute();
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      title: r.title ?? null,
+      spaceId: r.spaceId,
+      status: r.verificationStatus ?? 'none',
+    }));
+  }
+
   private async getPermissions(pageId: string, spaceId: string, verification: any, verifiers: any[], user: User) {
     const wAbility = this.workspaceAbility.createForUser(user, { id: verification?.workspaceId ?? '' } as Workspace);
     const isWorkspaceAdmin = wAbility.can(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings);

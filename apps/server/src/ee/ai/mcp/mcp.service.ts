@@ -20,6 +20,13 @@ export interface McpContext {
 }
 
 function categorizeTool(name: string): string {
+  if (
+    name.includes('verif') ||
+    name === 'submit_for_approval' ||
+    name === 'mark_obsolete'
+  ) {
+    return 'Verification';
+  }
   if (name.includes('attachment')) return 'Attachments';
   if (name === 'rag_retrieve' || name === 'search_pages') return 'Search & RAG';
   if (name.endsWith('_comment') || name.endsWith('_comments')) {

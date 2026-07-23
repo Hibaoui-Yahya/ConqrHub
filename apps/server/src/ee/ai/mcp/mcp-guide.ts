@@ -21,6 +21,7 @@ export const SERVER_INSTRUCTIONS = `ConqrHub is the ConqrAI suite's collaborativ
 
 CORE RULES
 - Ground every answer in real content. Before answering anything about the user's workspace, call rag_retrieve (semantic search over indexed knowledge) or search_pages (keyword/title search). Never invent page ids, space slugs, or facts.
+- Knowledge-base gate: rag_retrieve / Ask HR only return VERIFIED pages. Creating or editing a page does NOT index it, and editing a verified page resets it to draft and drops it from RAG. If a search returns nothing, check get_verification_status / list_unverified_pages and use verify_page to make content retrievable — do not assume "indexing lag".
 - To SEE or READ a file, use read_attachment: images come back as viewable pictures; PDFs and Word docs come back as extracted text; text/markdown/CSV/JSON are returned inline. Find attachment ids with list_page_attachments or search_attachments. Use read_page_media to view every image on a page at once.
 - Use get_current_user when you need the caller's name, email, role, or the "me" context; list_workspace_members to resolve other people.
 - Writes mutate real data for everyone in the workspace. create_/update_/delete_/move_/duplicate_ tools are not reversible from here — confirm intent before deleting or overwriting. Prefer update_page_content (body) and update_page_title (title) over a blind update_page.
@@ -35,7 +36,7 @@ TYPICAL FLOWS
 - "What's the status of project P?" → list_conqrplane_projects → get_project_cycles / search_work_items.
 
 DEEPER GUIDANCE
-Call get_conqrhub_guide (topic = search | pages | attachments | diagrams | conqrplane | comments | spaces), or read the conqrhub://guide/* resources, for detailed how-tos. Common jobs are also available as ready-made prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description).`;
+Call get_conqrhub_guide (topic = search | pages | attachments | diagrams | conqrplane | comments | spaces | verification), or read the conqrhub://guide/* resources, for detailed how-tos. Common jobs are also available as ready-made prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description, verify-space).`;
 
 export interface GuideSection {
   slug: string;
@@ -60,6 +61,7 @@ Tool groups:
 - Comments: get_comments, get_page_comments (read); create_comment, update_comment, delete_comment (write)
 - People: get_current_user, list_workspace_members
 - ConqrPlane (project mgmt): list_conqrplane_projects, get_project_cycles, get_work_item, search_work_items, create_work_item
+- Verification (controls RAG eligibility): get_verification_status, list_unverified_pages, verify_page, create_verification, submit_for_approval, mark_obsolete
 
 Golden rule: read before you write, and cite what you read.`,
   },
@@ -133,6 +135,20 @@ Use these when the user asks about status, tasks, sprints, or issues. Use pages/
     title: 'Spaces',
     description: 'The top-level containers for pages.',
     body: `Spaces group pages (e.g. a team or project area). list_spaces to enumerate, get_space / get_space_info for details and membership. create_space / update_space are administrative writes — confirm intent, and don't create a space when a page in an existing space would do.`,
+  },
+  {
+    slug: 'verification',
+    title: 'Verification (what makes a page retrievable)',
+    description: 'How pages enter and leave the knowledge base.',
+    body: `The knowledge base (rag_retrieve / Ask HR) contains ONLY verified pages. A page is retrievable exactly when its verification status is "verified" (or "expiring" but not past its expiry). Everything else — no verification, draft, in_approval, approved, expired, obsolete — is invisible to retrieval.
+
+Key rules:
+- Creating or editing a page does NOT index it. Editing a verified page resets it to draft and removes it from RAG until re-verified.
+- To make a page retrievable: verify_page (one step — auto-creates a verification with you as verifier if none exists, then verifies). Retrieval is available seconds later (embeddings are async).
+- To see state: get_verification_status (one page) or list_unverified_pages (everything not yet retrievable, optionally per space).
+- QMS flow: create_verification (draft) -> submit_for_approval -> verify_page (approve) -> verify_page again (final verify).
+- To remove a page from the knowledge base: mark_obsolete.
+- Permissions: verifying/creating/obsoleting requires space-manage (or workspace-manage). If you get a permission error, the API user needs manage rights on that space.`,
   },
 ];
 
@@ -232,5 +248,22 @@ export const MCP_PROMPTS: McpPromptDef[] = [
       `Add a diagram to page ${arg(v, 'pageId', '<pageId>')} using add_diagram.\n` +
       `The diagram should show: ${arg(v, 'description', '<describe the diagram>')}.\n` +
       `After creating it, read it back with read_attachment to confirm it renders as intended.`,
+  },
+  {
+    name: 'verify-space',
+    title: 'Verify all pages in a space',
+    description:
+      'Find every unverified page in a space and verify them so they become retrievable.',
+    arguments: [
+      { name: 'space', description: 'Space name, slug, or id to verify.', required: true },
+    ],
+    build: (v) =>
+      `Verify all unverified pages in the ConqrHub space "${arg(v, 'space', '<space>')}" so they enter the knowledge base.\n\n` +
+      `Steps:\n` +
+      `1. list_spaces to resolve the space id if you were given a name/slug.\n` +
+      `2. list_unverified_pages with that spaceId to see what is not yet retrievable.\n` +
+      `3. Show me the list and confirm before proceeding.\n` +
+      `4. For each page, call verify_page.\n` +
+      `5. Report which pages are now verified (and any that failed on permissions).`,
   },
 ];

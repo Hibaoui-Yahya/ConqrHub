@@ -188,6 +188,16 @@ describe('McpService prompts & resources (the skill layer)', () => {
       svc.handleRequest({ method: 'resources/read', params: { uri: 'conqrhub://guide/bogus' } }, ctx),
     ).rejects.toThrow(/Unknown guide section/);
   });
+
+  it('advertises the verification guide section and verify-space prompt', async () => {
+    const resList = await svc.handleRequest({ method: 'resources/list' }, ctx);
+    expect(
+      resList.resources.some((r: any) => r.uri === 'conqrhub://guide/verification'),
+    ).toBe(true);
+
+    const promptList = await svc.handleRequest({ method: 'prompts/list' }, ctx);
+    expect(promptList.prompts.some((p: any) => p.name === 'verify-space')).toBe(true);
+  });
 });
 
 describe('McpService.getToolsCatalog', () => {
@@ -222,5 +232,18 @@ describe('McpService.getToolsCatalog', () => {
       get_current_user: 'Users',
       list_workspace_members: 'Users',
     });
+  });
+
+  it('categorizes verification tools as Verification', () => {
+    const tools: ChatTool[] = [
+      { name: 'get_verification_status', description: 'd', parameters: z.object({}), execute: async () => null },
+      { name: 'list_unverified_pages', description: 'd', parameters: z.object({}), execute: async () => null },
+      { name: 'verify_page', description: 'd', parameters: z.object({}), execute: async () => null },
+      { name: 'create_verification', description: 'd', parameters: z.object({}), execute: async () => null },
+      { name: 'submit_for_approval', description: 'd', parameters: z.object({}), execute: async () => null },
+      { name: 'mark_obsolete', description: 'd', parameters: z.object({}), execute: async () => null },
+    ];
+    const catalog = makeService(tools).getToolsCatalog();
+    expect(catalog.every((t) => t.category === 'Verification')).toBe(true);
   });
 });
