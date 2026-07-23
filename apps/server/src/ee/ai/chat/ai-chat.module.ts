@@ -54,6 +54,10 @@ import { UpdateCommentTool } from './tools/update-comment.tool';
 import { DeletePageTool } from './tools/delete-page.tool';
 import { DeleteCommentTool } from './tools/delete-comment.tool';
 import { AddDiagramTool } from './tools/add-diagram.tool';
+// Attachment / media reading (documents + images + drawings into the chat)
+import { ReadAttachmentTool } from './tools/read-attachment.tool';
+import { ListPageAttachmentsTool } from './tools/list-page-attachments.tool';
+import { ReadPageMediaTool } from './tools/read-page-media.tool';
 // Cross-product ConqrPlane tools
 import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
 
@@ -115,6 +119,10 @@ import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
     DeletePageTool,
     DeleteCommentTool,
     AddDiagramTool,
+    // Attachment / media reading (documents + images + drawings into the chat)
+    ReadAttachmentTool,
+    ListPageAttachmentsTool,
+    ReadPageMediaTool,
     // Cross-product ConqrPlane tools
     ...PLANE_WORK_ITEM_TOOLS,
   ],

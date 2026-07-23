@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { ChatToolRegistry } from '../chat/tools/chat-tool.registry';
+import { isMcpContentResult } from '../chat/tools/chat-tool.types';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -270,6 +271,20 @@ export class McpService {
 
     try {
       const result = await tool.execute(args, toolCtx as any);
+
+      // A tool may return rich MCP content (e.g. an image the model can view,
+      // a document's extracted text) via `{ __mcpContent: [...] }`. Forward
+      // those blocks verbatim instead of JSON-stringifying them.
+      if (isMcpContentResult(result)) {
+        const content = [...result.__mcpContent];
+        if (result.meta && Object.keys(result.meta).length > 0) {
+          content.push({
+            type: 'text' as const,
+            text: JSON.stringify(result.meta, null, 2),
+          });
+        }
+        return { content };
+      }
 
       const text = result === undefined || result === null
         ? 'null'

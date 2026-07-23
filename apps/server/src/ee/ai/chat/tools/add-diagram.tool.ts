@@ -25,7 +25,7 @@ export class AddDiagramTool implements ChatTool, OnModuleInit {
     'Add a diagram block to an existing ConqrHub page. ' +
     'Today only Mermaid diagrams are supported via this tool — pass the raw Mermaid source as `source`. ' +
     'Mermaid supports flowcharts, sequence, class, state, ERD, gantt, mindmap, gitGraph, and pie. ' +
-    'Excalidraw and Drawio diagrams are not creatable via MCP yet because they require image attachment rendering; create those in the web UI. ' +
+    'Excalidraw and Drawio drawings are authored in the web canvas and cannot be created here, but you CAN read existing ones as images with read_attachment / read_page_media. ' +
     'Use only when the user explicitly asks for a diagram or flowchart.';
 
   readonly parameters = z.object({
