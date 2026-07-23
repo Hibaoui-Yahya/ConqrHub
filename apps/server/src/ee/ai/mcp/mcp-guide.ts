@@ -1,0 +1,236 @@
+/**
+ * ConqrHub MCP "skill" content.
+ *
+ * This is how we teach any MCP client (Claude, ChatGPT, etc.) to use the
+ * ConqrHub tools well, in three layers:
+ *
+ *  1. SERVER_INSTRUCTIONS — a compact, always-loaded playbook returned on the
+ *     `initialize` handshake. The client injects it into the model's context,
+ *     so it is present for every turn. Keep it tight.
+ *  2. GUIDE_SECTIONS — deeper, on-demand how-tos, exposed both as MCP
+ *     resources (`conqrhub://guide/<slug>`) and via the `get_conqrhub_guide`
+ *     tool, so clients that surface neither prompts nor resources still work.
+ *  3. MCP_PROMPTS — reusable, parameterised multi-tool workflows surfaced as
+ *     slash-command / starter prompts.
+ *
+ * All content references REAL registered tool names — keep it in sync when
+ * tools are added or renamed.
+ */
+
+export const SERVER_INSTRUCTIONS = `ConqrHub is the ConqrAI suite's collaborative wiki and knowledge base: a workspace of spaces → pages → rich content, with file attachments, comments, and Excalidraw/Drawio diagrams. It also cross-links to ConqrPlane (project management). These tools let you read and edit that knowledge — use them instead of guessing.
+
+CORE RULES
+- Ground every answer in real content. Before answering anything about the user's workspace, call rag_retrieve (semantic search over indexed knowledge) or search_pages (keyword/title search). Never invent page ids, space slugs, or facts.
+- To SEE or READ a file, use read_attachment: images come back as viewable pictures; PDFs and Word docs come back as extracted text; text/markdown/CSV/JSON are returned inline. Find attachment ids with list_page_attachments or search_attachments. Use read_page_media to view every image on a page at once.
+- Use get_current_user when you need the caller's name, email, role, or the "me" context; list_workspace_members to resolve other people.
+- Writes mutate real data for everyone in the workspace. create_/update_/delete_/move_/duplicate_ tools are not reversible from here — confirm intent before deleting or overwriting. Prefer update_page_content (body) and update_page_title (title) over a blind update_page.
+- Diagrams: add_diagram creates an Excalidraw or Drawio drawing on a page. Read drawings back as images via read_attachment or read_page_media.
+- Project management (tasks/issues/cycles) lives in ConqrPlane, not in pages: list_conqrplane_projects, get_project_cycles, search_work_items, get_work_item, create_work_item.
+
+TYPICAL FLOWS
+- "What do our docs say about X?" → rag_retrieve → get_page for the top hits → answer with citations (page titles + ids).
+- "Summarize space Y" → list_spaces → list_space_pages → get_page on the key pages.
+- "Read this PDF / look at this diagram" → list_page_attachments → read_attachment.
+- "Write up Z" → search_pages first (avoid duplicates) → create_page → optionally add_diagram.
+- "What's the status of project P?" → list_conqrplane_projects → get_project_cycles / search_work_items.
+
+DEEPER GUIDANCE
+Call get_conqrhub_guide (topic = search | pages | attachments | diagrams | conqrplane | comments | spaces), or read the conqrhub://guide/* resources, for detailed how-tos. Common jobs are also available as ready-made prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description).`;
+
+export interface GuideSection {
+  slug: string;
+  title: string;
+  description: string;
+  body: string;
+}
+
+export const GUIDE_SECTIONS: GuideSection[] = [
+  {
+    slug: 'overview',
+    title: 'ConqrHub overview',
+    description: 'What ConqrHub is and how the tools map to it.',
+    body: `ConqrHub organises knowledge as: workspace → spaces → pages (tree of parent/child) → page content (rich text), with attachments, comments, and diagrams hanging off pages.
+
+Tool groups:
+- Search & RAG: rag_retrieve, search_pages, search_attachments, search_work_items
+- Pages (read): get_page, get_page_breadcrumbs, get_page_history, list_child_pages, list_recent_pages, list_space_pages, list_page_attachments
+- Pages (write): create_page, update_page, update_page_content, update_page_title, delete_page, move_page, duplicate_page, copy_page_to_space, move_page_to_space, add_diagram
+- Attachments & media: read_attachment, read_page_media, list_page_attachments, search_attachments
+- Spaces: list_spaces, get_space, get_space_info (read); create_space, update_space (write)
+- Comments: get_comments, get_page_comments (read); create_comment, update_comment, delete_comment (write)
+- People: get_current_user, list_workspace_members
+- ConqrPlane (project mgmt): list_conqrplane_projects, get_project_cycles, get_work_item, search_work_items, create_work_item
+
+Golden rule: read before you write, and cite what you read.`,
+  },
+  {
+    slug: 'search',
+    title: 'Finding knowledge (search & RAG)',
+    description: 'How to locate the right pages and files before answering.',
+    body: `Two complementary search tools:
+- rag_retrieve — semantic retrieval over indexed workspace knowledge. Use for conceptual questions ("what's our refund policy?"). Returns the most relevant passages; follow up with get_page to read the full page and cite it.
+- search_pages — keyword / title match. Use when you know a term, page name, or want to check whether something already exists before creating it.
+
+For files, use search_attachments (by filename/type) and for project work, search_work_items.
+
+Best practice: never answer a workspace question from memory. Retrieve first, then read the source page, then cite it (title + page id). If retrieval returns nothing, say so rather than inventing an answer.`,
+  },
+  {
+    slug: 'pages',
+    title: 'Reading and editing pages',
+    description: 'Navigating the page tree and safely making changes.',
+    body: `Reading: get_page (full content + metadata), get_page_breadcrumbs (where it sits in the tree), list_child_pages / list_space_pages (navigate), list_recent_pages (what changed lately), get_page_history (past versions).
+
+Writing (mutates shared data — confirm intent first):
+- create_page — new page; check with search_pages first to avoid duplicates.
+- update_page_title / update_page_content — targeted edits; PREFER these over update_page so you don't accidentally blank a field.
+- move_page / move_page_to_space / copy_page_to_space / duplicate_page — reorganise.
+- delete_page — destructive; confirm before calling.
+
+When editing content, fetch the current page first so you preserve structure rather than overwriting blindly.`,
+  },
+  {
+    slug: 'attachments',
+    title: 'Reading files, images, and documents',
+    description: 'How to actually see images and read PDFs/Word/text.',
+    body: `read_attachment returns real content to the conversation:
+- Images (png/jpg/gif/webp) → viewable image blocks you can analyse directly.
+- SVG / Excalidraw / Drawio → rasterised to PNG so you can see the drawing.
+- PDF and Word (.docx) → text extracted on the fly (or from ConqrHub's index) so you can read them even if they were never indexed.
+- text / markdown / csv / json → returned inline.
+Files over 5 MB are summarised, not inlined; scanned/image-only PDFs may yield little text.
+
+Discover ids first: list_page_attachments (everything on a page, with a kind hint) or search_attachments (across the workspace). To review every image on a page in one call, use read_page_media (up to 8 images).`,
+  },
+  {
+    slug: 'diagrams',
+    title: 'Creating and reading diagrams',
+    description: 'Excalidraw / Drawio drawings on pages.',
+    body: `add_diagram creates an Excalidraw or Drawio drawing and attaches it to a page. Describe the diagram you want; it is stored as an image attachment on the page.
+
+To read an existing drawing back, use read_attachment (or read_page_media) — SVG/Excalidraw/Drawio renders are rasterised to PNG so you can see them like any other image. This means you can iterate: read the current diagram, then add_diagram an improved version.`,
+  },
+  {
+    slug: 'conqrplane',
+    title: 'Project management (ConqrPlane)',
+    description: 'Tasks, issues, and cycles — separate from wiki pages.',
+    body: `Project/task work is NOT stored as wiki pages. Use the ConqrPlane tools:
+- list_conqrplane_projects — available projects.
+- get_project_cycles — sprints/cycles for a project.
+- search_work_items / get_work_item — find and read tasks/issues.
+- create_work_item — create a task/issue (a write — confirm intent).
+
+Use these when the user asks about status, tasks, sprints, or issues. Use pages/spaces for documentation and knowledge.`,
+  },
+  {
+    slug: 'comments',
+    title: 'Comments',
+    description: 'Reading and writing page discussion.',
+    body: `Read discussion with get_page_comments (a page's thread) or get_comments. Add or edit with create_comment / update_comment, and delete_comment (destructive — confirm). Comments are user-visible; write them as you would a teammate's note, and attribute context clearly.`,
+  },
+  {
+    slug: 'spaces',
+    title: 'Spaces',
+    description: 'The top-level containers for pages.',
+    body: `Spaces group pages (e.g. a team or project area). list_spaces to enumerate, get_space / get_space_info for details and membership. create_space / update_space are administrative writes — confirm intent, and don't create a space when a page in an existing space would do.`,
+  },
+];
+
+export interface McpPromptArg {
+  name: string;
+  description: string;
+  required?: boolean;
+}
+
+export interface McpPromptDef {
+  name: string;
+  title: string;
+  description: string;
+  arguments: McpPromptArg[];
+  /** Build the user-message text from supplied arguments. */
+  build: (args: Record<string, string>) => string;
+}
+
+const arg = (v: Record<string, string>, k: string, fallback = '') =>
+  (v?.[k] ?? '').trim() || fallback;
+
+export const MCP_PROMPTS: McpPromptDef[] = [
+  {
+    name: 'research-topic',
+    title: 'Research a topic in the wiki',
+    description:
+      'Search ConqrHub knowledge for a topic and synthesise a cited answer.',
+    arguments: [
+      { name: 'topic', description: 'The topic or question to research.', required: true },
+    ],
+    build: (v) =>
+      `Research this topic using ConqrHub: "${arg(v, 'topic', '<topic>')}".\n\n` +
+      `Steps:\n` +
+      `1. Call rag_retrieve for the topic; if thin, also try search_pages with key terms.\n` +
+      `2. Open the most relevant pages with get_page.\n` +
+      `3. Synthesise a clear answer and cite each source as "Page Title (id)".\n` +
+      `If nothing relevant is found, say so plainly — do not invent facts.`,
+  },
+  {
+    name: 'draft-page',
+    title: 'Draft a new wiki page',
+    description: 'Create a well-structured new page, avoiding duplicates.',
+    arguments: [
+      { name: 'title', description: 'Title of the page to create.', required: true },
+      { name: 'notes', description: 'Raw notes / bullet points to base it on.', required: false },
+      { name: 'space', description: 'Target space name or slug (optional).', required: false },
+    ],
+    build: (v) =>
+      `Draft a new ConqrHub page titled "${arg(v, 'title', '<title>')}".\n\n` +
+      (arg(v, 'space') ? `Target space: ${arg(v, 'space')}.\n` : '') +
+      (arg(v, 'notes') ? `Base it on these notes:\n${arg(v, 'notes')}\n\n` : '\n') +
+      `Steps:\n` +
+      `1. search_pages first to make sure it doesn't already exist (offer to update instead if it does).\n` +
+      `2. If needed, list_spaces to pick the right space.\n` +
+      `3. create_page with clear headings and structure.\n` +
+      `4. Add an add_diagram only if a diagram genuinely helps.\n` +
+      `Confirm the target space with me before creating.`,
+  },
+  {
+    name: 'summarize-space',
+    title: 'Summarise a space',
+    description: 'Give an overview of the pages in a space.',
+    arguments: [
+      { name: 'space', description: 'Space name or slug to summarise.', required: true },
+    ],
+    build: (v) =>
+      `Summarise the ConqrHub space "${arg(v, 'space', '<space>')}".\n\n` +
+      `Steps:\n` +
+      `1. list_spaces to resolve the space, then get_space_info.\n` +
+      `2. list_space_pages to see its pages.\n` +
+      `3. get_page on the most important pages and produce a structured summary ` +
+      `(purpose, key pages, notable gaps). Cite page titles + ids.`,
+  },
+  {
+    name: 'review-attachment',
+    title: 'Review a file or diagram',
+    description: 'Read an attachment (image, PDF, Word, diagram) and analyse it.',
+    arguments: [
+      { name: 'attachmentId', description: 'Attachment id, if known.', required: false },
+      { name: 'hint', description: 'Filename or page to locate it, if id unknown.', required: false },
+    ],
+    build: (v) =>
+      arg(v, 'attachmentId')
+        ? `Read attachment ${arg(v, 'attachmentId')} with read_attachment and analyse its content.`
+        : `Find and review an attachment (${arg(v, 'hint', 'describe what to look for')}).\n` +
+          `Use search_attachments or list_page_attachments to locate it, then read_attachment to view/read it, then analyse.`,
+  },
+  {
+    name: 'diagram-from-description',
+    title: 'Add a diagram to a page',
+    description: 'Create an Excalidraw/Drawio diagram on a page from a description.',
+    arguments: [
+      { name: 'pageId', description: 'Page to attach the diagram to.', required: true },
+      { name: 'description', description: 'What the diagram should show.', required: true },
+    ],
+    build: (v) =>
+      `Add a diagram to page ${arg(v, 'pageId', '<pageId>')} using add_diagram.\n` +
+      `The diagram should show: ${arg(v, 'description', '<describe the diagram>')}.\n` +
+      `After creating it, read it back with read_attachment to confirm it renders as intended.`,
+  },
+];

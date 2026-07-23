@@ -104,8 +104,13 @@ describe('McpService.initialize', () => {
       ctx,
     );
     expect(res.protocolVersion).toBe('2025-03-26');
-    expect(res.capabilities).toEqual({ tools: {} });
+    expect(res.capabilities.tools).toEqual({});
+    expect(res.capabilities.prompts).toBeDefined();
+    expect(res.capabilities.resources).toBeDefined();
     expect(res.serverInfo.name).toBe('ConqrHub MCP');
+    // The always-loaded "skill" playbook is advertised on connect.
+    expect(typeof res.instructions).toBe('string');
+    expect(res.instructions).toContain('ConqrHub');
   });
 
   it('falls back to the latest supported version on unknown client version', async () => {
@@ -124,6 +129,64 @@ describe('McpService.initialize', () => {
       ctx,
     );
     expect(res.protocolVersion).toBe('2025-06-18');
+  });
+});
+
+describe('McpService prompts & resources (the skill layer)', () => {
+  const ctx = { user: {} as any, workspace: {} as any };
+  const svc = makeService([]);
+
+  it('lists reusable workflow prompts with argument metadata', async () => {
+    const res = await svc.handleRequest({ method: 'prompts/list' }, ctx);
+    expect(Array.isArray(res.prompts)).toBe(true);
+    expect(res.prompts.length).toBeGreaterThan(0);
+    const research = res.prompts.find((p: any) => p.name === 'research-topic');
+    expect(research).toBeDefined();
+    expect(research.arguments.some((a: any) => a.name === 'topic')).toBe(true);
+  });
+
+  it('builds a prompt with substituted arguments', async () => {
+    const res = await svc.handleRequest(
+      { method: 'prompts/get', params: { name: 'research-topic', arguments: { topic: 'refund policy' } } },
+      ctx,
+    );
+    expect(res.messages[0].role).toBe('user');
+    expect(res.messages[0].content.text).toContain('refund policy');
+    expect(res.messages[0].content.text).toContain('rag_retrieve');
+  });
+
+  it('rejects a prompt/get missing a required argument', async () => {
+    await expect(
+      svc.handleRequest({ method: 'prompts/get', params: { name: 'research-topic', arguments: {} } }, ctx),
+    ).rejects.toThrow(/Missing required argument/);
+  });
+
+  it('throws on an unknown prompt', async () => {
+    await expect(
+      svc.handleRequest({ method: 'prompts/get', params: { name: 'nope' } }, ctx),
+    ).rejects.toThrow(/Prompt not found/);
+  });
+
+  it('lists guide resources under the conqrhub://guide/ scheme', async () => {
+    const res = await svc.handleRequest({ method: 'resources/list' }, ctx);
+    expect(res.resources.length).toBeGreaterThan(0);
+    expect(res.resources.every((r: any) => r.uri.startsWith('conqrhub://guide/'))).toBe(true);
+    expect(res.resources.some((r: any) => r.uri === 'conqrhub://guide/attachments')).toBe(true);
+  });
+
+  it('reads a guide resource body', async () => {
+    const res = await svc.handleRequest(
+      { method: 'resources/read', params: { uri: 'conqrhub://guide/attachments' } },
+      ctx,
+    );
+    expect(res.contents[0].uri).toBe('conqrhub://guide/attachments');
+    expect(res.contents[0].text).toContain('read_attachment');
+  });
+
+  it('throws on an unknown resource uri', async () => {
+    await expect(
+      svc.handleRequest({ method: 'resources/read', params: { uri: 'conqrhub://guide/bogus' } }, ctx),
+    ).rejects.toThrow(/Unknown guide section/);
   });
 });
 

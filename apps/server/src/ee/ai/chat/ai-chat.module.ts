@@ -58,6 +58,8 @@ import { AddDiagramTool } from './tools/add-diagram.tool';
 import { ReadAttachmentTool } from './tools/read-attachment.tool';
 import { ListPageAttachmentsTool } from './tools/list-page-attachments.tool';
 import { ReadPageMediaTool } from './tools/read-page-media.tool';
+// Self-documenting guide tool (deep how-tos on using all the tools)
+import { GetGuideTool } from './tools/get-guide.tool';
 // Cross-product ConqrPlane tools
 import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
 
@@ -123,6 +125,8 @@ import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
     ReadAttachmentTool,
     ListPageAttachmentsTool,
     ReadPageMediaTool,
+    // Self-documenting guide tool
+    GetGuideTool,
     // Cross-product ConqrPlane tools
     ...PLANE_WORK_ITEM_TOOLS,
   ],

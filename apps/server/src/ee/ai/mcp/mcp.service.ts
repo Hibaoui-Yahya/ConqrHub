@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { ChatToolRegistry } from '../chat/tools/chat-tool.registry';
 import { isMcpContentResult } from '../chat/tools/chat-tool.types';
+import {
+  SERVER_INSTRUCTIONS,
+  GUIDE_SECTIONS,
+  MCP_PROMPTS,
+} from './mcp-guide';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -164,13 +169,27 @@ export class McpService {
       case 'tools/call':
         return this.callTool(request.params, ctx);
 
+      case 'prompts/list':
+        return this.listPrompts();
+
+      case 'prompts/get':
+        return this.getPrompt(request.params);
+
       case 'resources/list':
-        return { resources: [] };
+        return this.listResources();
+
+      case 'resources/read':
+        return this.readResource(request.params);
+
+      case 'resources/templates/list':
+        return { resourceTemplates: [] };
 
       default:
         throw new Error(`Unknown method: ${request.method}`);
     }
   }
+
+  private readonly guideUriPrefix = 'conqrhub://guide/';
 
   private initialize(params: any) {
     const requested =
@@ -184,8 +203,86 @@ export class McpService {
 
     return {
       protocolVersion: negotiated,
-      capabilities: { tools: {} },
+      capabilities: {
+        tools: {},
+        // We serve reusable workflow prompts and on-demand guide resources,
+        // but never push list-changed notifications (stateless per request).
+        prompts: { listChanged: false },
+        resources: { listChanged: false, subscribe: false },
+      },
       serverInfo: this.serverInfo,
+      // The always-loaded "skill": how to use these tools well. MCP clients
+      // inject this into the model's context on connect.
+      instructions: SERVER_INSTRUCTIONS,
+    };
+  }
+
+  private listPrompts() {
+    return {
+      prompts: MCP_PROMPTS.map((p) => ({
+        name: p.name,
+        title: p.title,
+        description: p.description,
+        arguments: p.arguments,
+      })),
+    };
+  }
+
+  private getPrompt(params: any) {
+    const name = params?.name;
+    const def = MCP_PROMPTS.find((p) => p.name === name);
+    if (!def) {
+      throw new Error(`Prompt not found: ${name}`);
+    }
+    const args = (params?.arguments ?? {}) as Record<string, string>;
+    const missing = def.arguments
+      .filter((a) => a.required && !((args?.[a.name] ?? '').trim()))
+      .map((a) => a.name);
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required argument(s) for prompt "${name}": ${missing.join(', ')}`,
+      );
+    }
+    return {
+      description: def.description,
+      messages: [
+        {
+          role: 'user',
+          content: { type: 'text', text: def.build(args) },
+        },
+      ],
+    };
+  }
+
+  private listResources() {
+    return {
+      resources: GUIDE_SECTIONS.map((s) => ({
+        uri: `${this.guideUriPrefix}${s.slug}`,
+        name: s.title,
+        description: s.description,
+        mimeType: 'text/markdown',
+      })),
+    };
+  }
+
+  private readResource(params: any) {
+    const uri: string = params?.uri ?? '';
+    if (!uri.startsWith(this.guideUriPrefix)) {
+      throw new Error(`Unknown resource: ${uri}`);
+    }
+    const slug = uri.slice(this.guideUriPrefix.length);
+    const section = GUIDE_SECTIONS.find((s) => s.slug === slug);
+    if (!section) {
+      throw new Error(`Unknown guide section: ${slug}`);
+    }
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/markdown',
+          text: `# ${section.title}\n\n${section.body}`,
+        },
+      ],
     };
   }
 
