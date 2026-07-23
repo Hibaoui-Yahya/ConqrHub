@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipTransform } from '../../../../common/decorators/skip-transform.decorator';
 import { EnvironmentService } from '../../../../integrations/environment/environment.service';
@@ -27,8 +27,6 @@ interface ResolvedSession {
 
 @Controller('oauth/authorize')
 export class OauthAuthorizeController {
-  private readonly logger = new Logger(OauthAuthorizeController.name);
-
   constructor(
     private readonly service: McpOauthService,
     private readonly tokenService: TokenService,
@@ -47,18 +45,12 @@ export class OauthAuthorizeController {
     @Res() res: FastifyReply,
     @Query() query: Record<string, string>,
   ) {
-    this.logger.log(
-      `[mcp-oauth] authorize GET: host=${req.headers['x-forwarded-host'] || req.headers.host} ` +
-        `client=${query.client_id} redirect=${query.redirect_uri} ` +
-        `cookie_authToken=${(req as any).cookies?.authToken ? 'present' : 'none'}`,
-    );
     const workspace = await resolveRequestWorkspace(
       req,
       this.workspaceRepo,
       this.environmentService,
     );
     if (!isMcpEnabledForWorkspace(workspace)) {
-      this.logger.warn(`[mcp-oauth] authorize GET -> MCP not enabled (ws=${workspace?.id})`);
       return this.errorPage(res, 404, 'MCP is not enabled for this workspace.');
     }
 
@@ -72,14 +64,10 @@ export class OauthAuthorizeController {
     // 1. Client + redirect_uri must be valid before we ever redirect back.
     const client = clientId ? await this.service.getClient(clientId) : undefined;
     if (!client) {
-      this.logger.warn(`[mcp-oauth] authorize GET -> unknown client_id=${clientId}`);
       return this.errorPage(res, 400, 'Unknown or missing client_id.');
     }
     const registered = this.service.clientRedirectUris(client);
     if (!redirectUri || !redirectUriMatches(registered, redirectUri)) {
-      this.logger.warn(
-        `[mcp-oauth] authorize GET -> redirect mismatch: got=${redirectUri} registered=${JSON.stringify(registered)}`,
-      );
       return this.errorPage(
         res,
         400,
@@ -90,7 +78,6 @@ export class OauthAuthorizeController {
     // 2. Remaining params — redirect_uri is now trusted, so errors redirect back.
     const paramError = this.validateAuthParams(query, urls.resource);
     if (paramError) {
-      this.logger.warn(`[mcp-oauth] authorize GET -> param error: ${paramError.error}`);
       return this.redirectBack(res, redirectUri, urls.issuer, {
         error: paramError.error,
         error_description: paramError.description,
@@ -101,11 +88,9 @@ export class OauthAuthorizeController {
     // 3. Session — bounce to login if absent.
     const session = await this.resolveSession(req, workspace);
     if (!session) {
-      this.logger.warn(`[mcp-oauth] authorize GET -> no session, redirecting to login`);
       const loginUrl = `${urls.origin}/login?redirect=${encodeURIComponent(req.url)}`;
       return this.redirect(res, loginUrl);
     }
-    this.logger.log(`[mcp-oauth] authorize GET -> consent rendered for ${session.userEmail}`);
 
     // 4. Render consent.
     const scope = this.service.resolveScope(query.scope);
@@ -157,25 +142,17 @@ export class OauthAuthorizeController {
     // own embedded webview, sending `Origin: https://chatgpt.com`, `null`, etc.;
     // rejecting those origins 403'd the approval and broke the connect flow
     // ("consent appeared, then stuck").
-    this.logger.log(
-      `[mcp-oauth] consent POST: host=${req.headers['x-forwarded-host'] || req.headers.host} ` +
-        `client=${body.client_id} redirect=${body.redirect_uri} decision=${body.decision} ` +
-        `cookie_authToken=${(req as any).cookies?.authToken ? 'present' : 'none'} ` +
-        `has_challenge=${Boolean(body.code_challenge)} ct=${req.headers['content-type']}`,
-    );
     const workspace = await resolveRequestWorkspace(
       req,
       this.workspaceRepo,
       this.environmentService,
     );
     if (!isMcpEnabledForWorkspace(workspace)) {
-      this.logger.warn(`[mcp-oauth] consent POST -> MCP not enabled`);
       return this.errorPage(res, 404, 'MCP is not enabled for this workspace.');
     }
 
     const session = await this.resolveSession(req, workspace);
     if (!session) {
-      this.logger.warn(`[mcp-oauth] consent POST -> session null (cookie not accepted)`);
       return this.errorPage(res, 401, 'Your session has expired. Please retry.');
     }
 
@@ -184,17 +161,14 @@ export class OauthAuthorizeController {
 
     const client = clientId ? await this.service.getClient(clientId) : undefined;
     if (!client) {
-      this.logger.warn(`[mcp-oauth] consent POST -> unknown client=${clientId}`);
       return this.errorPage(res, 400, 'Unknown client.');
     }
     const registered = this.service.clientRedirectUris(client);
     if (!redirectUri || !redirectUriMatches(registered, redirectUri)) {
-      this.logger.warn(`[mcp-oauth] consent POST -> redirect mismatch got=${redirectUri}`);
       return this.errorPage(res, 400, 'Invalid redirect_uri.');
     }
 
     if (body.decision !== 'approve') {
-      this.logger.warn(`[mcp-oauth] consent POST -> decision=${body.decision} (denied)`);
       return this.redirectBack(res, redirectUri, urls.issuer, {
         error: 'access_denied',
         error_description: 'User denied access',
@@ -205,7 +179,6 @@ export class OauthAuthorizeController {
     // Re-validate PKCE + resource on the trusted submission.
     const paramError = this.validateAuthParams(body, urls.resource);
     if (paramError) {
-      this.logger.warn(`[mcp-oauth] consent POST -> param error: ${paramError.error}`);
       return this.redirectBack(res, redirectUri, urls.issuer, {
         error: paramError.error,
         error_description: paramError.description,
@@ -222,12 +195,6 @@ export class OauthAuthorizeController {
       scope: this.service.resolveScope(body.scope),
       resource: body.resource || urls.resource,
     });
-
-    // TEMP diagnostics (MCP connector debugging).
-    this.logger.log(
-      `[mcp-oauth] consent APPROVED: client=${clientId} redirect=${redirectUri} ` +
-        `resource=${body.resource || urls.resource} issuer=${urls.issuer} code issued`,
-    );
 
     return this.redirectBack(res, redirectUri, urls.issuer, {
       code,
