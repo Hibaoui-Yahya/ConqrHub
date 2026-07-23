@@ -115,6 +115,11 @@ export class OauthAuthorizeController {
       workspaceName: session.workspaceName,
       scopes: scope.split(' ').filter(Boolean),
       hidden: {
+        // response_type MUST be echoed back: the consent POST re-runs
+        // validateAuthParams, which requires response_type=code. Omitting it
+        // made every real browser submission fail with unsupported_response_type
+        // (only manual POSTs that added it by hand succeeded).
+        response_type: query.response_type,
         client_id: clientId,
         redirect_uri: redirectUri,
         code_challenge: query.code_challenge,
