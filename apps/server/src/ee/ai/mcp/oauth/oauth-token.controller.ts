@@ -1,4 +1,4 @@
-import { Body, Controller, Options, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Logger, Options, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipTransform } from '../../../../common/decorators/skip-transform.decorator';
 import { EnvironmentService } from '../../../../integrations/environment/environment.service';
@@ -13,6 +13,8 @@ import { resolveOAuthUrls } from './oauth-url.util';
  */
 @Controller('oauth')
 export class OauthTokenController {
+  private readonly logger = new Logger(OauthTokenController.name);
+
   constructor(
     private readonly service: McpOauthService,
     private readonly environmentService: EnvironmentService,
@@ -41,6 +43,15 @@ export class OauthTokenController {
       defaultHttps: this.environmentService.isHttps(),
     });
     const params = body ?? {};
+
+    // TEMP diagnostics (MCP connector debugging): what the client actually sent.
+    this.logger.log(
+      `[mcp-oauth] token request: grant_type=${params.grant_type} client_id=${params.client_id} ` +
+        `ct=${req.headers['content-type']} has_code=${Boolean(params.code)} ` +
+        `has_verifier=${Boolean(params.code_verifier)} redirect_uri=${params.redirect_uri} ` +
+        `resource=${params.resource} has_secret=${Boolean(params.client_secret)} ` +
+        `authz=${req.headers['authorization'] ? 'present' : 'none'}`,
+    );
 
     try {
       let tokenResponse;
@@ -83,7 +94,15 @@ export class OauthTokenController {
         .header('Access-Control-Allow-Origin', '*')
         .send(JSON.stringify(tokenResponse));
     } catch (err) {
-      if (err instanceof OAuthError) return this.error(res, err);
+      if (err instanceof OAuthError) {
+        this.logger.warn(
+          `[mcp-oauth] token FAILED: ${err.error} — ${err.errorDescription}`,
+        );
+        return this.error(res, err);
+      }
+      this.logger.error(
+        `[mcp-oauth] token threw: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw err;
     }
   }

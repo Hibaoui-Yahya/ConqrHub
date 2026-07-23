@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SkipTransform } from '../../../../common/decorators/skip-transform.decorator';
 import { EnvironmentService } from '../../../../integrations/environment/environment.service';
@@ -27,6 +27,8 @@ interface ResolvedSession {
 
 @Controller('oauth/authorize')
 export class OauthAuthorizeController {
+  private readonly logger = new Logger(OauthAuthorizeController.name);
+
   constructor(
     private readonly service: McpOauthService,
     private readonly tokenService: TokenService,
@@ -190,6 +192,12 @@ export class OauthAuthorizeController {
       scope: this.service.resolveScope(body.scope),
       resource: body.resource || urls.resource,
     });
+
+    // TEMP diagnostics (MCP connector debugging).
+    this.logger.log(
+      `[mcp-oauth] consent APPROVED: client=${clientId} redirect=${redirectUri} ` +
+        `resource=${body.resource || urls.resource} issuer=${urls.issuer} code issued`,
+    );
 
     return this.redirectBack(res, redirectUri, urls.issuer, {
       code,
