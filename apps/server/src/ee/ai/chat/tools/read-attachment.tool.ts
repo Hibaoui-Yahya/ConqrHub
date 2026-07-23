@@ -20,6 +20,7 @@ import {
 } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
 import { rasterizeSvgToPng } from './svg-raster.util';
+import { extractDocumentText } from './document-extract.util';
 
 // Cap the raw bytes we inline into a chat message so a huge file can't blow up
 // the response. ~7 MB of base64 ≈ 5 MB source.
@@ -32,7 +33,7 @@ export class ReadAttachmentTool implements ChatTool, OnModuleInit {
   readonly description =
     'Read a file/attachment from ConqrHub and return its content to the conversation so you can actually SEE or READ it. ' +
     'Images (png/jpg/gif/webp/svg) are returned as viewable image content you can analyse directly. ' +
-    'Documents with extracted text (PDF, Word, etc. that ConqrHub has indexed) and plain-text/markdown/CSV/JSON files are returned as text. ' +
+    'Documents are returned as text: PDFs and Word (.docx) files have their text extracted on the fly (or from ConqrHub’s index), and plain-text/markdown/CSV/JSON files are returned directly. ' +
     'Excalidraw and Drawio drawings are stored as images and come back as viewable images. ' +
     'Find an attachment id with search_attachments or list_page_attachments. Files over 5 MB are summarised, not inlined.';
 
@@ -164,12 +165,30 @@ export class ReadAttachmentTool implements ChatTool, OnModuleInit {
       };
     }
 
-    // 4. Binary with no extracted text.
+    // 4. PDF / Word (.docx) — extract text on the fly (pdfjs / mammoth) when
+    // ConqrHub hasn't already indexed textContent for it.
+    if (size <= MAX_INLINE_BYTES) {
+      const buf = await this.storage.read(att.filePath);
+      const extracted = await extractDocumentText(buf, mime, att.fileExt);
+      if (extracted) {
+        return {
+          __mcpContent: [
+            {
+              type: 'text',
+              text: `Extracted text of "${att.fileName}":\n\n${extracted}`,
+            },
+          ],
+          meta: { ...meta, extracted: true },
+        };
+      }
+    }
+
+    // 5. Binary / unsupported / extraction-empty.
     return {
       __mcpContent: [
         {
           type: 'text',
-          text: `"${att.fileName}" (${mime}) has no inline-readable content. It may be a binary file, or a document ConqrHub hasn't indexed text for. Open it in ConqrHub to view.`,
+          text: `"${att.fileName}" (${mime}) has no inline-readable text. It may be a binary file, an image-only/scanned PDF, or an unsupported format. Open it in ConqrHub to view.`,
         },
       ],
       meta,

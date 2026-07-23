@@ -10,12 +10,18 @@ jest.mock('../../../../integrations/storage/storage.service', () => ({
 jest.mock('./svg-raster.util', () => ({
   rasterizeSvgToPng: jest.fn(),
 }));
+jest.mock('./document-extract.util', () => ({
+  extractDocumentText: jest.fn(),
+  MAX_EXTRACT_CHARS: 30000,
+}));
 
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReadAttachmentTool } from './read-attachment.tool';
 import { rasterizeSvgToPng } from './svg-raster.util';
+import { extractDocumentText } from './document-extract.util';
 
 const mockRasterize = rasterizeSvgToPng as jest.Mock;
+const mockExtract = extractDocumentText as jest.Mock;
 
 const mockAbility = { cannot: jest.fn() };
 const attachmentRepo = { findByIdWithContent: jest.fn() };
@@ -116,6 +122,34 @@ describe('ReadAttachmentTool', () => {
     const res = await newTool().execute({ attachmentId: 'a4' }, ctx);
     expect(res.__mcpContent[0].type).toBe('text');
     expect(storage.read).not.toHaveBeenCalled();
+  });
+
+  it('extracts text from a PDF that has no indexed textContent', async () => {
+    attachmentRepo.findByIdWithContent.mockResolvedValue({
+      id: 'a-pdf', fileName: 'contract.pdf', mimeType: 'application/pdf',
+      fileSize: '50000', filePath: '/x/a-pdf.pdf', spaceId: 'sp-1', pageId: null,
+      textContent: null, fileExt: 'pdf',
+    });
+    storage.read.mockResolvedValue(Buffer.from('%PDF-1.7 ...'));
+    mockExtract.mockResolvedValue('This agreement is made between the parties...');
+    const res = await newTool().execute({ attachmentId: 'a-pdf' }, ctx);
+    expect(res.__mcpContent[0].type).toBe('text');
+    expect((res.__mcpContent[0] as any).text).toContain('This agreement is made');
+    expect(mockExtract).toHaveBeenCalledTimes(1);
+    expect(res.meta?.extracted).toBe(true);
+  });
+
+  it('falls back to a message when PDF extraction yields nothing (scanned/image-only)', async () => {
+    attachmentRepo.findByIdWithContent.mockResolvedValue({
+      id: 'a-scan', fileName: 'scan.pdf', mimeType: 'application/pdf',
+      fileSize: '50000', filePath: '/x/a-scan.pdf', spaceId: 'sp-1', pageId: null,
+      textContent: null, fileExt: 'pdf',
+    });
+    storage.read.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    mockExtract.mockResolvedValue(null);
+    const res = await newTool().execute({ attachmentId: 'a-scan' }, ctx);
+    expect(res.__mcpContent[0].type).toBe('text');
+    expect((res.__mcpContent[0] as any).text).toContain('no inline-readable text');
   });
 
   it('404s an unknown attachment', async () => {
