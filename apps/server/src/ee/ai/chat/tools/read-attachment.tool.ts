@@ -81,8 +81,11 @@ export class ReadAttachmentTool implements ChatTool, OnModuleInit {
     };
     const size = att.fileSize ? Number(att.fileSize) : 0;
 
-    // 1. Images (and image-rendered drawings) -> viewable image block.
-    if (mime.startsWith('image/')) {
+    // 1. Raster images (and image-rendered drawings) -> viewable image block.
+    // SVG (incl. Excalidraw/Drawio SVG renders) is XML the model reads as text —
+    // and Claude/most vision models reject image/svg+xml as an image block — so
+    // it falls through to the text path below.
+    if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
       if (size > MAX_INLINE_BYTES) {
         return {
           __mcpContent: [

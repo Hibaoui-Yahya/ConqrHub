@@ -105,6 +105,12 @@ export class ReadPageMediaTool implements ChatTool, OnModuleInit {
     for (const a of rows) {
       const size = a.fileSize ? Number(a.fileSize) : 0;
       const mime = a.mimeType ?? 'image/png';
+      // SVG (incl. Excalidraw/Drawio renders) can't be sent as a vision image
+      // block — point the model at read_attachment, which returns its markup.
+      if (mime === 'image/svg+xml') {
+        skipped.push(`${a.fileName} (SVG drawing — read_attachment id=${a.id} for its source)`);
+        continue;
+      }
       if (size > MAX_IMAGE_BYTES) {
         skipped.push(`${a.fileName} (too large)`);
         continue;

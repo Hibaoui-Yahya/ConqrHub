@@ -50,6 +50,18 @@ describe('ReadAttachmentTool', () => {
     expect(res.meta?.fileName).toBe('diagram.png');
   });
 
+  it('returns an SVG drawing (e.g. Excalidraw) as text markup, not an image block', async () => {
+    attachmentRepo.findByIdWithContent.mockResolvedValue({
+      id: 'a-svg', fileName: 'diagram.excalidraw.svg', mimeType: 'image/svg+xml',
+      fileSize: '2048', filePath: '/x/a-svg.svg', spaceId: 'sp-1', pageId: null,
+      textContent: null, fileExt: 'svg',
+    });
+    storage.read.mockResolvedValue(Buffer.from('<svg><rect/></svg>'));
+    const res = await newTool().execute({ attachmentId: 'a-svg' }, ctx);
+    expect(res.__mcpContent[0].type).toBe('text');
+    expect((res.__mcpContent[0] as any).text).toContain('<svg>');
+  });
+
   it('returns extracted textContent for an indexed document', async () => {
     attachmentRepo.findByIdWithContent.mockResolvedValue({
       id: 'a2', fileName: 'policy.pdf', mimeType: 'application/pdf',
