@@ -25,7 +25,7 @@ CORE RULES
 - To SEE or READ a file, use read_attachment: images come back as viewable pictures; PDFs and Word docs come back as extracted text; text/markdown/CSV/JSON are returned inline. Find attachment ids with list_page_attachments or search_attachments. Use read_page_media to view every image on a page at once.
 - Use get_current_user when you need the caller's name, email, role, or the "me" context; list_workspace_members to resolve other people.
 - Writes mutate real data for everyone in the workspace. create_/update_/delete_/move_/duplicate_ tools are not reversible from here — confirm intent before deleting or overwriting. Prefer update_page_content (body) and update_page_title (title) over a blind update_page.
-- Diagrams: add_diagram creates an Excalidraw or Drawio drawing on a page. Read drawings back as images via read_attachment or read_page_media.
+- Diagrams: add_diagram authors a Mermaid diagram (flowchart, sequence, class, state, ERD, gantt, mindmap, gitGraph, pie) as a code block on a page — it is the only diagram type creatable here. Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas and cannot be created via MCP, but you CAN read existing ones as images via read_attachment or read_page_media.
 - Project management (tasks/issues/cycles) lives in ConqrPlane, not in pages: list_conqrplane_projects, get_project_cycles, search_work_items, get_work_item, create_work_item.
 
 TYPICAL FLOWS
@@ -107,10 +107,10 @@ Discover ids first: list_page_attachments (everything on a page, with a kind hin
   {
     slug: 'diagrams',
     title: 'Creating and reading diagrams',
-    description: 'Excalidraw / Drawio drawings on pages.',
-    body: `add_diagram creates an Excalidraw or Drawio drawing and attaches it to a page. Describe the diagram you want; it is stored as an image attachment on the page.
+    description: 'Mermaid (creatable) and Excalidraw / Drawio (read-only) on pages.',
+    body: `add_diagram authors a MERMAID diagram only. Pass the raw Mermaid source (no \`\`\` fences — the tool adds them) as \`source\`; it is appended (or prepended) to the page body as a mermaid code block. Mermaid covers flowchart, sequence, class, state, ERD, gantt, mindmap, gitGraph, and pie. This is the only diagram type that can be created programmatically.
 
-To read an existing drawing back, use read_attachment (or read_page_media) — SVG/Excalidraw/Drawio renders are rasterised to PNG so you can see them like any other image. This means you can iterate: read the current diagram, then add_diagram an improved version.`,
+Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — there is NO MCP endpoint to create or edit them. You CAN read existing ones: read_attachment (or read_page_media) rasterises SVG/Excalidraw/Drawio to PNG so you can see them like any other image. So the iterate-on-a-drawing flow is read-only from here; to change an Excalidraw/Drawio drawing, the user edits it on the canvas.`,
   },
   {
     slug: 'conqrplane',
@@ -238,16 +238,17 @@ export const MCP_PROMPTS: McpPromptDef[] = [
   },
   {
     name: 'diagram-from-description',
-    title: 'Add a diagram to a page',
-    description: 'Create an Excalidraw/Drawio diagram on a page from a description.',
+    title: 'Add a Mermaid diagram to a page',
+    description: 'Create a Mermaid diagram on a page from a description.',
     arguments: [
-      { name: 'pageId', description: 'Page to attach the diagram to.', required: true },
+      { name: 'pageId', description: 'Page to add the diagram to.', required: true },
       { name: 'description', description: 'What the diagram should show.', required: true },
     ],
     build: (v) =>
-      `Add a diagram to page ${arg(v, 'pageId', '<pageId>')} using add_diagram.\n` +
+      `Add a Mermaid diagram to page ${arg(v, 'pageId', '<pageId>')} using add_diagram (type "mermaid").\n` +
       `The diagram should show: ${arg(v, 'description', '<describe the diagram>')}.\n` +
-      `After creating it, read it back with read_attachment to confirm it renders as intended.`,
+      `Pick the best Mermaid kind (flowchart, sequence, state, ERD, etc.), pass the raw source without \`\`\` fences, then get_page to confirm the block was added.\n` +
+      `Note: Excalidraw/Drawio drawings cannot be created here — only Mermaid.`,
   },
   {
     name: 'verify-space',
