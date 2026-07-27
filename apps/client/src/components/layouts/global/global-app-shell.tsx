@@ -22,6 +22,7 @@ import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
 import { Tooltip } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { ConqrServiceLauncher } from "@/components/conqr-service-launcher";
+import { extractPageSlugId } from "@/lib";
 
 export default function GlobalAppShell({
   children,
@@ -83,6 +84,20 @@ export default function GlobalAppShell({
   const isSpaceRoute = location.pathname.startsWith("/s/");
   const isAiRoute = location.pathname.startsWith("/ai");
   const isPageRoute = location.pathname.includes("/p/");
+
+  // Tell ConqrService what the user is looking at, so "report a problem" from a
+  // page arrives naming that page instead of asking them to describe it. Only
+  // identifiers travel — ConqrService allow-lists these keys and shows them
+  // back as removable chips before anything is submitted.
+  const pageSlug = location.pathname.match(/\/p\/([^/?#]+)/)?.[1];
+  const pageSlugId = pageSlug ? extractPageSlugId(pageSlug) : undefined;
+  const serviceContext = pageSlugId
+    ? {
+        entityUrn: `conqr://hub/page/${pageSlugId}`,
+        entityType: "page",
+        module: isSpaceRoute ? "spaces" : undefined,
+      }
+    : { module: isSettingsRoute ? "settings" : isAiRoute ? "ai" : undefined };
   const showGlobalSidebar = !isSpaceRoute && !isSettingsRoute && !isAiRoute;
 
   return (
@@ -163,7 +178,7 @@ export default function GlobalAppShell({
           </div>
         </AppShell.Aside>
       )}
-      <ConqrServiceLauncher productId="conqrhub" />
+      <ConqrServiceLauncher productId="conqrhub" context={serviceContext} />
     </AppShell>
   );
 }

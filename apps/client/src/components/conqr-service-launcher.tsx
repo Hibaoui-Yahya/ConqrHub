@@ -168,13 +168,32 @@ function palette(dark: boolean): Palette {
       };
 }
 
+/**
+ * What the user is looking at when they ask for help. ConqrService allow-lists
+ * exactly these keys on its side and shows them back as removable chips before
+ * anything is sent, so the host may pass them freely — but only these, and only
+ * identifiers: never a title, never page content.
+ */
+export type ConqrServiceContext = {
+  /** Stable cross-product name, e.g. `conqr://hub/page/<slugId>`. */
+  entityUrn?: string;
+  /** `page`, `work-item`, `meeting`… */
+  entityType?: string;
+  /** Area of the host app, e.g. `spaces`, `cycles`. */
+  module?: string;
+};
+
 export function ConqrServiceLauncher({
   productId,
   serviceUrl,
+  context,
 }: {
   productId: string;
   /** Runtime override (ConqrMeet passes the URL its BFF reports). */
   serviceUrl?: string | null;
+  /** Recomputed by the host on every render, so it always describes the
+   *  screen the user is on at the moment they open the panel. */
+  context?: ConqrServiceContext;
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -273,6 +292,13 @@ export function ConqrServiceLauncher({
 
   const dark = hostIsDark();
   const colors = palette(dark);
+  // Only the keys ConqrService allow-lists, and only when the host filled them
+  // in: an empty value must not become an empty chip in the intake form.
+  const entityContext = (["entityUrn", "entityType", "module"] as const)
+    .map((key) => [key, context?.[key]] as const)
+    .filter((pair): pair is readonly [(typeof pair)[0], string] => Boolean(pair[1]))
+    .map(([key, value]) => `&${key}=${encodeURIComponent(value)}`)
+    .join("");
   const panelUrl =
     `${resolvedUrl}/launcher` +
     `?product=${encodeURIComponent(productId)}` +
@@ -280,7 +306,8 @@ export function ConqrServiceLauncher({
     `&embedded=1` +
     `&route=${encodeURIComponent(window.location.pathname + window.location.search)}` +
     `&locale=${encodeURIComponent(navigator.language)}` +
-    `&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`;
+    `&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}` +
+    entityContext;
 
   const iconButton = (label: string, onClick: () => void, children: ReactNode) => (
     <button
