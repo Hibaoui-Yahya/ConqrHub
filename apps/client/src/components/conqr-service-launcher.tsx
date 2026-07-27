@@ -57,16 +57,25 @@ function viteEnv(): ViteEnv {
 }
 
 /**
+ * Only some of the host apps have Node types in their client tsconfig, and the
+ * text `process.env` has to survive verbatim (see below). A local ambient
+ * declaration shadows the global where there is one and supplies it where
+ * there isn't, so this file compiles unchanged in all three repos.
+ */
+declare const process: { env?: Record<string, string | undefined> };
+
+/**
  * ConqrHub injects suite URLs by replacing the literal text `process.env` with
  * an object literal at build time (vite `define`). Guarding that read with
  * `typeof process !== "undefined"` silently defeats it — `process` itself is
  * never defined in the browser, so the guard is false and the injected object
- * is discarded. Read it directly and let the try/catch cover the apps where
- * the define does not exist.
+ * is discarded. Read it directly, keeping `process.env` intact for the
+ * substitution, and let the try/catch cover the apps where there is no define
+ * and evaluating it throws.
  */
 function defineInjectedServiceUrl(): string | undefined {
   try {
-    return (process.env as Record<string, string | undefined> | undefined)?.SERVICE_APP_URL;
+    return process.env?.SERVICE_APP_URL;
   } catch {
     return undefined;
   }
