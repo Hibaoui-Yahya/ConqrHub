@@ -13,6 +13,7 @@ function makeResolver(overrides: {
   };
   const pageRepo = { findById: overrides.findPage ?? jest.fn() };
   const environment = {
+    getAppUrl: () => 'https://hub.example.com',
     getPlaneApiUrl: () => 'https://plane.example.com/api/v1',
     getPlaneAppUrl: () => 'https://plane.example.com',
     getPlaneWorkspaceSlug: () => 'acme',
@@ -96,6 +97,9 @@ describe('SmartObjectResolverService', () => {
     const m = await r.resolve('conqr://hub/page/p1', ctx);
     expect(m.state).toBe(ResolutionState.Live);
     expect(m.title).toBe('PRD');
+    // Absolute: other products render these links in their own origin (the
+    // ConqrService launcher iframe), where a relative href goes nowhere.
+    expect(m.deepLink).toBe('https://hub.example.com/p/prd-1');
   });
 
   it('returns not_found for a Hub page in a different workspace', async () => {

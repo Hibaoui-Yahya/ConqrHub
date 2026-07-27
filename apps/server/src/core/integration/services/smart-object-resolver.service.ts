@@ -146,7 +146,12 @@ export class SmartObjectResolverService {
         state: ResolutionState.Live,
         title: page.title ?? 'Untitled',
         fields: { spaceId: page.spaceId, icon: page.icon ?? null },
-        deepLink: `/p/${page.slugId ?? page.id}`,
+        // Absolute, like every other deep link this app hands out (page
+        // promotion, space mapping). Resolve is answered for *other* products —
+        // ConqrService renders these citations inside its launcher iframe,
+        // where a relative href resolves against ConqrService and lands
+        // nowhere. `/p/:slugId` redirects to the page's space route.
+        deepLink: `${this.environment.getAppUrl()}/p/${page.slugId ?? page.id}`,
         sourceVersion: page.updatedAt
           ? new Date(page.updatedAt as unknown as string).toISOString()
           : undefined,

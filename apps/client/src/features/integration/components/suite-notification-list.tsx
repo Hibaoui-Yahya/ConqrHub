@@ -101,11 +101,18 @@ export function SuiteNotificationList({
             </Text>
           </Group>
         );
+        // Resolve deep links are absolute now (other products render them in
+        // their own origin). Ours still navigate in place; only a link that
+        // leaves ConqrHub opens a tab.
+        const external =
+          !!model?.deepLink &&
+          /^https?:\/\//i.test(model.deepLink) &&
+          !model.deepLink.startsWith(window.location.origin);
         return model?.deepLink ? (
           <Anchor
             key={item.correlationId}
             href={model.deepLink}
-            target={model.deepLink.startsWith("http") ? "_blank" : undefined}
+            target={external ? "_blank" : undefined}
             underline="never"
             c="inherit"
             onClick={() => onNavigate?.()}
