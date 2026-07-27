@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 
-export function Error404() {
+export function Error404({ description }: { description?: string } = {}) {
   const { t } = useTranslation();
 
   return (
@@ -15,7 +15,7 @@ export function Error404() {
       <Container className={classes.root}>
         <Title className={classes.title}>{t("404 page not found")}</Title>
         <Text c="dimmed" size="lg" ta="center" className={classes.description}>
-          {t("Sorry, we can't find the page you are looking for.")}
+          {description ?? t("Sorry, we can't find the page you are looking for.")}
         </Text>
         <Group justify="center">
           <Button component={Link} to={"/home"} variant="subtle" size="md">
