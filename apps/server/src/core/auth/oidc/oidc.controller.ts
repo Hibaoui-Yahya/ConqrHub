@@ -82,7 +82,7 @@ export class OidcController {
       res.clearCookie(FLOW_COOKIE, { path: '/' });
       res.setCookie('authToken', authToken, {
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: this.env.getAuthCookieSameSite(),
         path: '/',
         expires: this.env.getCookieExpiresIn(),
         secure: this.env.isHttps(),

@@ -233,7 +233,7 @@ export class AuthController {
   setAuthCookie(res: FastifyReply, token: string) {
     res.setCookie('authToken', token, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: this.environmentService.getAuthCookieSameSite(),
       path: '/',
       expires: this.environmentService.getCookieExpiresIn(),
       secure: this.environmentService.isHttps(),

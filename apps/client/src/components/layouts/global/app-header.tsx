@@ -31,6 +31,13 @@ import {
   shareSearchSpotlight,
 } from "@/features/search/constants.ts";
 import { NotificationPopover } from "@/features/notification/components/notification-popover.tsx";
+import {
+  CONQR_SERVICE_TRIGGER_LABEL,
+  CONQR_SERVICE_TRIGGER_TITLE,
+  ConqrServiceIcon,
+  resolveConqrServiceUrl,
+  toggleConqrService,
+} from "@/components/conqr-service-launcher.tsx";
 
 export function AppHeader() {
   const { t } = useTranslation();
@@ -131,6 +138,21 @@ export function AppHeader() {
               <IconSparkles size={20} stroke={2} />
             </ActionIcon>
           </Tooltip>
+          {/* ConqrService — the suite's help & requests entry point. Same
+              button, same panel, same place in all four apps. */}
+          {resolveConqrServiceUrl() && (
+            <Tooltip label={CONQR_SERVICE_TRIGGER_TITLE} openDelay={250} withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="dark"
+                size="sm"
+                aria-label={CONQR_SERVICE_TRIGGER_LABEL}
+                onClick={() => toggleConqrService()}
+              >
+                <ConqrServiceIcon size={19} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           <NotificationPopover />
           {isCloud() && isTrial && trialDaysLeft !== 0 && (
             <Badge

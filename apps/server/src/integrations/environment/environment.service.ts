@@ -33,6 +33,18 @@ export class EnvironmentService {
     }
   }
 
+  /**
+   * SameSite policy for the auth cookie. The suite embeds ConqrHub-authenticated
+   * surfaces (e.g. the ConqrService launcher) as cross-site iframes; a Lax cookie
+   * is withheld on those cross-site requests, so the embedded app can't see the
+   * Hub session and forces a re-login. `None` (which browsers require to pair with
+   * `Secure`) lets the session travel into those frames. Only viable over HTTPS —
+   * on plain-HTTP dev, `None` is rejected, so fall back to `lax`.
+   */
+  getAuthCookieSameSite(): 'none' | 'lax' {
+    return this.isHttps() ? 'none' : 'lax';
+  }
+
   getSubdomainHost(): string {
     return this.configService.get<string>('SUBDOMAIN_HOST');
   }
