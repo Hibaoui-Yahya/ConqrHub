@@ -106,7 +106,12 @@ export default function AllSpacesList({
       <Space h="md" />
 
       <Table.ScrollContainer minWidth={500}>
-        <Table highlightOnHover verticalSpacing="sm">
+        <Table
+          highlightOnHover
+          verticalSpacing={8}
+          className={classes.table}
+          classNames={{ th: classes.th, td: classes.td }}
+        >
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("Space")}</Table.Th>
