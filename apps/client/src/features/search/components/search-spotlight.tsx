@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 import { searchSpotlightStore } from "../constants.ts";
+import classes from "./search-spotlight.module.css";
 import { federatedSearch } from "@/features/integration/services/integration-service";
 
 // Plane web app origin for palette actions (same resolution as the app switcher).
@@ -153,6 +154,11 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
         scrollable
         overlayProps={{
           backgroundOpacity: 0.55,
+        }}
+        classNames={{
+          content: classes.content,
+          action: classes.action,
+          actionsGroup: classes.actionsGroup,
         }}
       >
         <Group gap="xs" px="sm" pt="sm" pb="xs">

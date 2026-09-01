@@ -1,0 +1,36 @@
+.content {
+    background-color: var(--bg-surface-1);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-overlay-200);
+}
+
+.action {
+    border-radius: var(--mantine-radius-md);
+    padding: rem(8px) rem(12px);
+
+    &:hover,
+    &[data-selected] {
+        background-color: var(--bg-layer-transparent-hover);
+    }
+}
+
+.actionsGroup {
+    font-size: rem(11px);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--txt-tertiary);
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    height: rem(20px);
+    padding: 0 rem(10px);
+    border: 0.5px solid var(--border-strong);
+    border-radius: rem(4px);
+    font-size: rem(11px);
+    font-weight: 500;
+    color: var(--txt-secondary);
+    background-color: var(--bg-surface-1);
+    white-space: nowrap;
+}
