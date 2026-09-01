@@ -1,21 +1,11 @@
-import { Skeleton } from '@mantine/core';
+import { Skeleton } from "@mantine/core";
 
 export default function PageListSkeleton() {
   return (
     <>
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
-      <Skeleton height={25} my="xs" radius="xs" />
+      {Array.from({ length: 8 }, (_, i) => (
+        <Skeleton key={i} height={36} my={8} radius="md" />
+      ))}
     </>
   );
 }

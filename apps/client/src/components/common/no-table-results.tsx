@@ -11,7 +11,7 @@ export default function NoTableResults({ colSpan, text }: NoTableResultsProps) {
   return (
     <Table.Tr>
       <Table.Td colSpan={colSpan}>
-        <Text fw={500} c="dimmed" ta="center">
+        <Text fw={500} fz={13} c="var(--txt-tertiary)" ta="center" py="lg">
           {text || t("No results found...")}
         </Text>
       </Table.Td>

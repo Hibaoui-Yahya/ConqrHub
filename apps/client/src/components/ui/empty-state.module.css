@@ -6,3 +6,32 @@
   padding: 60px 20px;
   text-align: center;
 }
+
+/* Suite-native CenteredState anatomy (same as ConqrPlan's docs area):
+   48px tinted rounded tile + title + description + optional CTA. */
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: rem(48px);
+  height: rem(48px);
+  border-radius: var(--mantine-radius-lg);
+  background-color: var(--bg-accent-subtle);
+  color: var(--txt-accent-primary);
+}
+
+.tileDanger {
+  background-color: var(--bg-danger-subtle);
+  color: var(--txt-danger-primary);
+}
+
+.title {
+  font-size: rem(14px);
+  font-weight: 600;
+  color: var(--txt-primary);
+}
+
+.description {
+  font-size: rem(13px);
+  color: var(--txt-secondary);
+}
