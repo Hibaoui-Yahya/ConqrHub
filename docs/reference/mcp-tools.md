@@ -1,6 +1,6 @@
 # MCP Reference
 
-> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 57 tools (40 without the ConqrPlan integration configured) that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
+> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 58 tools (40 without the ConqrPlan integration configured) that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
 
 ConqrHub's MCP (Model Context Protocol) endpoint lets external agents read, search, and modify the workspace with the same permissions as the user behind the API key. The agent integration is gated by the workspace `mcp` AI feature toggle (default: off — admins enable it from **Settings → AI → MCP**).
 
@@ -172,7 +172,7 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 
 ## Tools
 
-57 tools across 11 categories (the 12 ConqrPlan work-item tools and the 5 suite-integration tools appear only when the Plane integration is configured). Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
+58 tools across 11 categories (the 13 ConqrPlan work-item tools and the 5 suite-integration tools appear only when the Plane integration is configured). Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
 
 ### Search & RAG (2)
 
@@ -265,7 +265,7 @@ Mermaid supports flowcharts, sequence diagrams, class diagrams, state diagrams, 
 | `get_current_user` | — | — | The user the API key represents. |
 | `list_workspace_members` | — | `limit` (1–50, default 20) | Members visible to the requester. |
 
-### ConqrPlan work-item tools (12)
+### ConqrPlan work-item tools (13)
 
 Cross-product tools that let the suite assistant (chat + MCP) read and manage work items in **ConqrPlan** (the Conqr suite's work-management app) through the integration layer's Plane REST adapter. **These tools appear only when the Plane integration is configured** — `PLANE_API_URL`, `PLANE_API_KEY`, and `PLANE_WORKSPACE_SLUG` are all set. On an unconfigured deployment they are absent from `tools/list` entirely, so an agent never sees or advertises dead tools.
 
@@ -275,8 +275,9 @@ Cross-product tools that let the suite assistant (chat + MCP) read and manage wo
 | `search_work_items` | `projectId` | `query`, `limit` (1–50, default 20) | Search work items in a project by name. Returns `{ id, name, sequenceId, state, priority, updatedAt }[]`. |
 | `get_work_item` | `projectId`, `workItemId` | — | Fetch one work item, including its description. Returns the same summary shape plus `description`. |
 | `create_work_item` | `projectId`, `name` | `description`, `priority` (`urgent` \| `high` \| `medium` \| `low` \| `none`) | Create a work item. Plain-text `description` is wrapped in `<p>` automatically; a value already starting with `<` is passed through as-is. An `X-Conqr-On-Behalf-Of` header is sent for future attribution, but ConqrPlan does not yet consume it — writes currently appear as the integration API-key user. Use only after explicit user confirmation. |
-| `update_work_item` | `projectId`, `workItemId` | `name`, `description`, `priority`, `stateId` | Partial update (PATCH) — only the fields passed are changed. Pass a `stateId` from `list_work_item_states` to move the item through the workflow. Refuses an empty patch. |
+| `update_work_item` | `projectId`, `workItemId` | `name`, `description`, `priority`, `stateId`, `estimatePointId` (null clears) | Partial update (PATCH) — only the fields passed are changed. Pass a `stateId` from `list_work_item_states` to move the item through the workflow, or an `estimatePointId` from `list_estimate_points` to set the estimate. Refuses an empty patch. |
 | `list_work_item_states` | `projectId` | — | A project's workflow states with `{ id, name, group, default }` (groups: backlog / unstarted / started / completed / cancelled). Use before `update_work_item` and to interpret status. |
+| `list_estimate_points` | `projectId` | — | A project's estimate systems and their points `{ id, value }` sorted by key. Empty when no estimation system is configured. Work-item summaries expose `estimatePointId`. |
 | `get_work_item_comments` | `projectId`, `workItemId` | `limit` (1–50, default 20) | Read an item's comment thread as plain text with `actorId` — resolve authors with `list_conqrplan_members`. |
 | `add_work_item_comment` | `projectId`, `workItemId`, `text` | — | Post a comment (plain text is wrapped in `<p>`). Team-visible — use only when the user asks. |
 | `get_project_cycles` | `projectId` | — | List a project's cycles (iterations) with `{ id, name, start_date, end_date }`. |

@@ -26,6 +26,8 @@ export const workItemSummary = (w: any) => ({
   sequenceId: w.sequence_id,
   state: w.state_detail?.name ?? w.state ?? null,
   priority: w.priority ?? null,
+  // Estimate point ID (resolve to a value via list_estimate_points).
+  estimatePointId: w.estimate_point ?? null,
   updatedAt: w.updated_at ?? null,
 });
 
