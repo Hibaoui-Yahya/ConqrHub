@@ -3,7 +3,14 @@ import loadImage from "blueimp-load-image";
 import {
   AvatarIconType,
   IAttachment,
+  IPageAttachmentsResponse,
 } from "@/features/attachments/types/attachment.types.ts";
+
+export async function getPageAttachments(
+  pageId: string,
+): Promise<IPageAttachmentsResponse> {
+  return await api.post("/attachments/list", { pageId });
+}
 
 async function compressAndResizeIcon(
   file: File,

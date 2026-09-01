@@ -1,0 +1,65 @@
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Plane attachment-row anatomy: kind icon, truncated name, dot separator,
+   size in tertiary, hover-revealed download. */
+.row {
+    display: flex;
+    align-items: center;
+    gap: rem(8px);
+    height: rem(44px);
+    padding: 0 rem(8px);
+    border-radius: var(--mantine-radius-md);
+    text-decoration: none;
+    cursor: pointer;
+
+    @mixin hover {
+        background-color: var(--bg-layer-transparent-hover);
+    }
+}
+
+.kindIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--txt-icon-secondary);
+}
+
+.name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: rem(13px);
+    font-weight: 500;
+    color: var(--txt-primary);
+}
+
+.size {
+    flex-shrink: 0;
+    font-size: rem(12px);
+    color: var(--txt-tertiary);
+    white-space: nowrap;
+
+    &::before {
+        content: "·";
+        margin-right: rem(8px);
+        color: var(--txt-tertiary);
+    }
+}
+
+.download {
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+
+.row:hover .download,
+.row:focus-within .download {
+    opacity: 1;
+}

@@ -53,7 +53,11 @@ import { EnvironmentService } from '../../integrations/environment/environment.s
 import { TokenService } from '../auth/services/token.service';
 import { JwtAttachmentPayload, JwtType } from '../auth/dto/jwt-payload';
 import * as path from 'path';
-import { AttachmentInfoDto, RemoveIconDto } from './dto/attachment.dto';
+import {
+  AttachmentInfoDto,
+  PageAttachmentsDto,
+  RemoveIconDto,
+} from './dto/attachment.dto';
 import { PageAccessService } from '../page/page-access/page-access.service';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
@@ -504,6 +508,67 @@ export class AttachmentController {
     await this.pageAccessService.validateCanView(page, user);
 
     return attachment;
+  }
+
+  /**
+   * List a page's file attachments for the page "Attachments" panel
+   * (Plane-parity media surface). Read access mirrors files/info:
+   * PageAccessService.validateCanView gates the listing. Only user-uploaded
+   * files (type=file) are returned — icons/avatars live on other types.
+   */
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('attachments/list')
+  async listPageAttachments(
+    @Body() dto: PageAttachmentsDto,
+    @AuthWorkspace() workspace: Workspace,
+    @AuthUser() user: User,
+  ) {
+    const page = await this.pageRepo.findById(dto.pageId);
+    if (!page || page.workspaceId !== workspace.id) {
+      throw new NotFoundException('Page not found');
+    }
+
+    await this.pageAccessService.validateCanView(page, user);
+
+    const rows = await this.attachmentRepo.findByPageId(page.id, workspace.id);
+
+    const kindOf = (
+      mime: string | null,
+      type: string | null,
+      ext: string | null,
+    ): 'image' | 'document' | 'drawing' | 'other' => {
+      const t = (type ?? '').toLowerCase();
+      const e = (ext ?? '').toLowerCase().replace(/^\./, '');
+      if (
+        t.includes('excalidraw') ||
+        t.includes('drawio') ||
+        ['excalidraw', 'drawio'].includes(e)
+      ) {
+        return 'drawing';
+      }
+      if (mime?.startsWith('image/')) return 'image';
+      if (
+        mime === 'application/pdf' ||
+        ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'csv'].includes(e)
+      ) {
+        return 'document';
+      }
+      return 'other';
+    };
+
+    const attachments = rows
+      .filter((a) => a.type === AttachmentType.File)
+      .map((a) => ({
+        id: a.id,
+        fileName: a.fileName ?? 'Untitled',
+        mimeType: a.mimeType ?? null,
+        kind: kindOf(a.mimeType, a.type, a.fileExt),
+        fileSize: a.fileSize ? Number(a.fileSize) : null,
+        createdAt: a.createdAt,
+      }));
+
+    return { pageId: page.id, count: attachments.length, attachments };
   }
 
   @UseGuards(JwtAuthGuard)

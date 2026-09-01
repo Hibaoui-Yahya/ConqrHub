@@ -1092,6 +1092,30 @@ git commit -m "fix(client): visual QA fixes for Plane parity pass"
 
 ---
 
+### Task 9: Media components (added 2026-09-01 mid-execution at Yahya's request: "add same components media")
+
+Bring ConqrPlan's media/attachment surfaces over: Plane's attachment list anatomy (file-type icon, name · dot · size, dense hover rows, hover-revealed download) as (a) a page "Attachments" aside panel and (b) the editor attachment node restyle. Requires one small read-only server endpoint — the only server change in this plan; it mirrors the already-shipped MCP `list_page_attachments` tool's auth + query logic exactly.
+
+**Files:**
+- Modify: `apps/server/src/core/attachment/attachment.controller.ts` (new `POST attachments/list` route)
+- Modify: `apps/server/src/core/attachment/dto/attachment.dto.ts` or sibling DTO file (add `PageAttachmentsDto { pageId }`)
+- Modify: `apps/client/src/features/attachments/services/attachment-service.ts` (add `getPageAttachments`)
+- Modify: `apps/client/src/features/attachments/types/attachment.types.ts` (add `IPageAttachment`)
+- Create: `apps/client/src/features/attachments/queries/attachment-query.ts` (`usePageAttachmentsQuery`)
+- Create: `apps/client/src/features/attachments/components/page-attachments-panel.tsx` + `.module.css`
+- Modify: `apps/client/src/components/layouts/global/aside.tsx` (new `attachments` tab)
+- Modify: the page header component that toggles aside tabs (locate the toc/comments buttons; add an attachments trigger with `IconPaperclip`)
+- Modify: `apps/client/src/features/editor/components/attachment/attachment-view.tsx` (Plane row anatomy)
+
+**Interfaces:**
+- Produces (server): `POST /api/attachments/list` body `{ pageId: string }` → `{ pageId, count, attachments: [{ id, fileName, mimeType, kind: 'image'|'document'|'drawing'|'other', fileSize }] }` — same shape as the MCP tool result.
+- Produces (client): `usePageAttachmentsQuery(pageId?: string)` returning that payload; `PageAttachmentsPanel({ pageId })`.
+- Download URL for a row: `/api/files/{id}/{fileName}` (existing route).
+
+Steps: implement server route by transplanting the MCP tool's `execute` body (PageService.findById → workspace check → SpaceAbility Read check → attachments query → kindOf classifier) into the attachment controller/service; wire DTO validation; add client service + TanStack Query hook; build the panel (rows: kind icon — `IconPhoto`/`IconFileTypePdf`/`IconPencil`/`IconPaperclip` — name truncated 13px/500, `formatBytes(size)` 12px `--txt-tertiary` after a dot separator, hover `--bg-layer-transparent-hover`, hover-revealed download `ActionIcon`; empty state via `EmptyState`); register the aside tab + header trigger; restyle the editor attachment node with the same row classes (borderless, 0.5px `--border-subtle` border, 44px). Typecheck client AND build server (`pnpm run server:build`); commit as `feat: Plane-style media components (page attachments panel + editor node)`. Server endpoint gets no new unit spec — it is a line-for-line transplant of the tested MCP tool pattern; it is exercised in Task 8's visual QA.
+
+---
+
 ## Self-review notes
 
 - Spec coverage: spec §1→Task 1, §2→Task 2, §3→Task 3, §4→Task 4, §5→Task 5 (narrowed: global/space sidebars were found already tokenized — only the tree remained), §6→Task 6, §7→Task 7, testing→Task 8. Out-of-scope items remain out.
