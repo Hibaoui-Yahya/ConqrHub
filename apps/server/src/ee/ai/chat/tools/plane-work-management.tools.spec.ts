@@ -7,7 +7,7 @@ import {
   AddWorkItemCommentTool,
   ListCycleWorkItemsTool,
   ListWorkItemLabelsTool,
-  ListConqrPlaneMembersTool,
+  ListConqrPlanMembersTool,
   PLANE_WORK_MANAGEMENT_TOOLS,
 } from './plane-work-management.tools';
 
@@ -34,7 +34,7 @@ function constructAll(plane: any, registry: ChatToolRegistry) {
     new AddWorkItemCommentTool(plane, registry),
     new ListCycleWorkItemsTool(plane, registry),
     new ListWorkItemLabelsTool(plane, registry),
-    new ListConqrPlaneMembersTool(plane, registry),
+    new ListConqrPlanMembersTool(plane, registry),
   ];
 }
 
@@ -57,7 +57,7 @@ describe('Plane work-management tools', () => {
       'add_work_item_comment',
       'list_cycle_work_items',
       'list_work_item_labels',
-      'list_conqrplane_members',
+      'list_conqrplan_members',
     ]);
     expect(PLANE_WORK_MANAGEMENT_TOOLS).toHaveLength(7);
   });
@@ -189,13 +189,13 @@ describe('Plane work-management tools', () => {
     ]);
   });
 
-  it('list_conqrplane_members composes a display name', async () => {
+  it('list_conqrplan_members composes a display name', async () => {
     const plane = makePlaneMock(true);
     plane.listWorkspaceMembers.mockResolvedValue([
       { id: 'm-1', display_name: 'Yahya', email: 'y@x.com' },
       { id: 'm-2', first_name: 'Ada', last_name: 'Lovelace' },
     ]);
-    const tool = new ListConqrPlaneMembersTool(plane as any, new ChatToolRegistry());
+    const tool = new ListConqrPlanMembersTool(plane as any, new ChatToolRegistry());
 
     const result = await tool.execute({}, ctx);
 
@@ -212,6 +212,6 @@ describe('Plane work-management tools', () => {
 
     const result = await tool.execute({ projectId: 'p' }, ctx);
 
-    expect(result).toEqual({ error: expect.stringContaining('ConqrPlane') });
+    expect(result).toEqual({ error: expect.stringContaining('ConqrPlan') });
   });
 });

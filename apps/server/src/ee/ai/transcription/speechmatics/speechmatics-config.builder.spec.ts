@@ -74,14 +74,14 @@ describe('buildSpeechmaticsJobConfig', () => {
         ...base,
         additionalVocab: [
           { content: 'Keycloak', soundsLike: ['key cloak'] },
-          { content: 'ConqrPlane' },
+          { content: 'ConqrPlan' },
         ],
       },
       { operatingPoint: 'enhanced' },
     );
     expect(config.transcription_config.additional_vocab).toEqual([
       { content: 'Keycloak', sounds_like: ['key cloak'] },
-      { content: 'ConqrPlane' },
+      { content: 'ConqrPlan' },
     ]);
   });
 

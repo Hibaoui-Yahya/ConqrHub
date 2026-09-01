@@ -17,7 +17,7 @@
  * tools are added or renamed.
  */
 
-export const SERVER_INSTRUCTIONS = `ConqrHub is the ConqrAI suite's collaborative wiki and knowledge base: a workspace of spaces → pages → rich content, with file attachments, comments, and Excalidraw/Drawio diagrams. It also cross-links to ConqrPlane (project management). These tools let you read and edit that knowledge — use them instead of guessing.
+export const SERVER_INSTRUCTIONS = `ConqrHub is the ConqrAI suite's collaborative wiki and knowledge base: a workspace of spaces → pages → rich content, with file attachments, comments, and Excalidraw/Drawio diagrams. It also cross-links to ConqrPlan (project management). These tools let you read and edit that knowledge — use them instead of guessing.
 
 CORE RULES
 - Ground every answer in real content. Before answering anything about the user's workspace, call rag_retrieve (semantic search over indexed knowledge) or search_pages (keyword/title search). Never invent page ids, space slugs, or facts.
@@ -26,7 +26,7 @@ CORE RULES
 - Use get_current_user when you need the caller's name, email, role, or the "me" context; list_workspace_members to resolve other people.
 - Writes mutate real data for everyone in the workspace. create_/update_/delete_/move_/duplicate_ tools are not reversible from here — confirm intent before deleting or overwriting. Prefer update_page_content (body) and update_page_title (title) over a blind update_page.
 - Diagrams: add_diagram authors a Mermaid diagram (flowchart, sequence, class, state, ERD, gantt, mindmap, gitGraph, pie) as a code block on a page — it is the only diagram type creatable here. Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas and cannot be created via MCP, but you CAN read existing ones as images via read_attachment or read_page_media.
-- Project management (tasks/issues/cycles) lives in ConqrPlane, not in pages: list_conqrplane_projects, get_project_cycles, list_cycle_work_items, search_work_items, get_work_item, create_work_item, update_work_item, list_work_item_states, work-item comments, list_conqrplane_members.
+- Project management (tasks/issues/cycles) lives in ConqrPlan, not in pages: list_conqrplan_projects, get_project_cycles, list_cycle_work_items, search_work_items, get_work_item, create_work_item, update_work_item, list_work_item_states, work-item comments, list_conqrplan_members.
 - Cross-product: when you don't know whether the answer is a page or a work item, use search_suite (one federated search over both). Connect knowledge to work with link_page_to_work_item / create_work_item_from_page, inspect with get_page_links, and answer "is the work for this spec done?" with get_page_work_coverage.
 
 TYPICAL FLOWS
@@ -34,12 +34,12 @@ TYPICAL FLOWS
 - "Summarize space Y" → list_spaces → list_space_pages → get_page on the key pages.
 - "Read this PDF / look at this diagram" → list_page_attachments → read_attachment.
 - "Write up Z" → search_pages first (avoid duplicates) → create_page → optionally add_diagram.
-- "What's the status of project P?" → list_conqrplane_projects → get_project_cycles → list_cycle_work_items.
+- "What's the status of project P?" → list_conqrplan_projects → get_project_cycles → list_cycle_work_items.
 - "Find anything about X" (wiki or work) → search_suite → follow up with get_page / get_work_item.
 - "Turn this spec into work" → get_page → create_work_item_from_page (creates AND links) → get_page_work_coverage later to track delivery.
 
 DEEPER GUIDANCE
-Call get_conqrhub_guide (topic = search | pages | attachments | diagrams | conqrplane | suite-integration | comments | spaces | verification), or read the conqrhub://guide/* resources, for detailed how-tos. Common jobs are also available as ready-made prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description, verify-space, project-status, page-to-work).`;
+Call get_conqrhub_guide (topic = search | pages | attachments | diagrams | conqrplan | suite-integration | comments | spaces | verification), or read the conqrhub://guide/* resources, for detailed how-tos. Common jobs are also available as ready-made prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description, verify-space, project-status, page-to-work).`;
 
 export interface GuideSection {
   slug: string;
@@ -63,7 +63,7 @@ Tool groups:
 - Spaces: list_spaces, get_space, get_space_info (read); create_space, update_space (write)
 - Comments: get_comments, get_page_comments (read); create_comment, update_comment, delete_comment (write)
 - People: get_current_user, list_workspace_members
-- ConqrPlane (project mgmt): list_conqrplane_projects, get_project_cycles, list_cycle_work_items, get_work_item, search_work_items, create_work_item, update_work_item, list_work_item_states, get_work_item_comments, add_work_item_comment, list_work_item_labels, list_conqrplane_members
+- ConqrPlan (project mgmt): list_conqrplan_projects, get_project_cycles, list_cycle_work_items, get_work_item, search_work_items, create_work_item, update_work_item, list_work_item_states, get_work_item_comments, add_work_item_comment, list_work_item_labels, list_conqrplan_members
 - Suite integration (Hub ↔ Plane in one call): search_suite, link_page_to_work_item, get_page_links, create_work_item_from_page, get_page_work_coverage
 - Verification (controls RAG eligibility): get_verification_status, list_unverified_pages, verify_page, create_verification, submit_for_approval, mark_obsolete
 
@@ -117,11 +117,11 @@ Discover ids first: list_page_attachments (everything on a page, with a kind hin
 Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — there is NO MCP endpoint to create or edit them. You CAN read existing ones: read_attachment (or read_page_media) rasterises SVG/Excalidraw/Drawio to PNG so you can see them like any other image. So the iterate-on-a-drawing flow is read-only from here; to change an Excalidraw/Drawio drawing, the user edits it on the canvas.`,
   },
   {
-    slug: 'conqrplane',
-    title: 'Project management (ConqrPlane)',
+    slug: 'conqrplan',
+    title: 'Project management (ConqrPlan)',
     description: 'Tasks, issues, and cycles — separate from wiki pages.',
-    body: `Project/task work is NOT stored as wiki pages. Use the ConqrPlane tools:
-- list_conqrplane_projects — available projects.
+    body: `Project/task work is NOT stored as wiki pages. Use the ConqrPlan tools:
+- list_conqrplan_projects — available projects.
 - get_project_cycles — sprints/cycles for a project; list_cycle_work_items — what is inside one cycle.
 - search_work_items / get_work_item — find and read tasks/issues.
 - create_work_item — create a task/issue (a write — confirm intent).
@@ -129,9 +129,9 @@ Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — 
 - get_work_item_comments / add_work_item_comment — read and join the discussion on an item (comments are team-visible).
 - list_work_item_states — a project's workflow states (Backlog/In Progress/Done…) with IDs and groups.
 - list_work_item_labels — label id → name/color.
-- list_conqrplane_members — resolve assignee and comment-author IDs to people.
+- list_conqrplan_members — resolve assignee and comment-author IDs to people.
 
-Typical status flow: list_conqrplane_projects → get_project_cycles → list_cycle_work_items → summarise by state (use list_work_item_states to group correctly).
+Typical status flow: list_conqrplan_projects → get_project_cycles → list_cycle_work_items → summarise by state (use list_work_item_states to group correctly).
 
 Use these when the user asks about status, tasks, sprints, or issues. Use pages/spaces for documentation and knowledge. To connect the two products, see the suite-integration guide.`,
   },
@@ -140,12 +140,12 @@ Use these when the user asks about status, tasks, sprints, or issues. Use pages/
     title: 'Connecting knowledge and work (Hub ↔ Plane)',
     description:
       'Federated search, typed page↔work-item links, create-and-link, and delivery coverage.',
-    body: `ConqrHub (knowledge) and ConqrPlane (work) are linked by a typed relationship graph. These tools work across both products in ONE call — prefer them over manual multi-step orchestration:
+    body: `ConqrHub (knowledge) and ConqrPlan (work) are linked by a typed relationship graph. These tools work across both products in ONE call — prefer them over manual multi-step orchestration:
 
 - search_suite — federated search over Hub pages AND Plane work items. Each hit says its source product and carries a deep link. Use it when you don't know where the answer lives; use search_pages / search_work_items when you do.
 - link_page_to_work_item — record a typed edge between a page and a work item (default relation specified_by; also implemented_by, documented_by, tested_by, evidenced_by, operationalized_by). Idempotent: re-linking the same pair returns the existing link.
 - get_page_links — everything a page is connected to, with human-readable relation labels.
-- create_work_item_from_page — create the work item in ConqrPlane AND link it back to the source page in one call. Prefer this over create_work_item whenever the work originates from a page, so traceability exists from day one. If the item is created but linking fails, the result says status "created_link_failed" — report that honestly and retry the link with link_page_to_work_item.
+- create_work_item_from_page — create the work item in ConqrPlan AND link it back to the source page in one call. Prefer this over create_work_item whenever the work originates from a page, so traceability exists from day one. If the item is created but linking fails, the result says status "created_link_failed" — report that honestly and retry the link with link_page_to_work_item.
 - get_page_work_coverage — for a spec/requirements page: every linked work item with completion state, plus a 0–1 coverage ratio. Answers "is the work for this page done?" and "does this decision have delivery work at all?".
 
 Pass plain page IDs (UUID or slugId) and work-item IDs — the server handles URNs internally.`,
@@ -295,35 +295,35 @@ export const MCP_PROMPTS: McpPromptDef[] = [
   },
   {
     name: 'project-status',
-    title: 'Report ConqrPlane project status',
+    title: 'Report ConqrPlan project status',
     description:
-      'Summarise where a ConqrPlane project stands: current cycle, work by state, notable items.',
+      'Summarise where a ConqrPlan project stands: current cycle, work by state, notable items.',
     arguments: [
-      { name: 'project', description: 'ConqrPlane project name or ID.', required: true },
+      { name: 'project', description: 'ConqrPlan project name or ID.', required: true },
     ],
     build: (v) =>
-      `Report the status of the ConqrPlane project "${arg(v, 'project', '<project>')}".\n\n` +
+      `Report the status of the ConqrPlan project "${arg(v, 'project', '<project>')}".\n\n` +
       `Steps:\n` +
-      `1. list_conqrplane_projects to resolve the project ID if given a name.\n` +
+      `1. list_conqrplan_projects to resolve the project ID if given a name.\n` +
       `2. get_project_cycles and pick the current cycle (today inside start/end dates).\n` +
       `3. list_cycle_work_items for that cycle; use list_work_item_states to group items by state group (backlog/unstarted/started/completed/cancelled).\n` +
-      `4. Resolve assignees with list_conqrplane_members where useful.\n` +
+      `4. Resolve assignees with list_conqrplan_members where useful.\n` +
       `5. Summarise: cycle dates, done vs in-progress vs not started, blockers/urgent items. Cite work items by name and sequenceId.`,
   },
   {
     name: 'page-to-work',
     title: 'Turn a page into tracked work',
     description:
-      'Create linked ConqrPlane work items from a ConqrHub page and confirm traceability.',
+      'Create linked ConqrPlan work items from a ConqrHub page and confirm traceability.',
     arguments: [
       { name: 'pageId', description: 'Source ConqrHub page (UUID or slugId).', required: true },
-      { name: 'project', description: 'Target ConqrPlane project name or ID.', required: true },
+      { name: 'project', description: 'Target ConqrPlan project name or ID.', required: true },
     ],
     build: (v) =>
-      `Turn the ConqrHub page ${arg(v, 'pageId', '<pageId>')} into tracked work in ConqrPlane project "${arg(v, 'project', '<project>')}".\n\n` +
+      `Turn the ConqrHub page ${arg(v, 'pageId', '<pageId>')} into tracked work in ConqrPlan project "${arg(v, 'project', '<project>')}".\n\n` +
       `Steps:\n` +
       `1. get_page to read the page; get_page_links to see what work already exists (avoid duplicates).\n` +
-      `2. list_conqrplane_projects to resolve the project ID if given a name.\n` +
+      `2. list_conqrplan_projects to resolve the project ID if given a name.\n` +
       `3. Propose the work items (title, description, priority) and confirm with me before creating.\n` +
       `4. Create each with create_work_item_from_page so the page↔work link is recorded; report any "created_link_failed" honestly.\n` +
       `5. Finish with get_page_work_coverage to show the page's delivery coverage.`,

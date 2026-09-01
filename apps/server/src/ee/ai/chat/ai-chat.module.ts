@@ -66,7 +66,7 @@ import { VerifyPageTool } from './tools/verify-page.tool';
 import { VERIFICATION_LIFECYCLE_TOOLS } from './tools/verification-lifecycle.tools';
 // Self-documenting guide tool (deep how-tos on using all the tools)
 import { GetGuideTool } from './tools/get-guide.tool';
-// Cross-product ConqrPlane tools
+// Cross-product ConqrPlan tools
 import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
 import { PLANE_WORK_MANAGEMENT_TOOLS } from './tools/plane-work-management.tools';
 // Suite integration tools (federated search, links, create-and-link, coverage)
@@ -142,7 +142,7 @@ import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
     ...VERIFICATION_LIFECYCLE_TOOLS,
     // Self-documenting guide tool
     GetGuideTool,
-    // Cross-product ConqrPlane tools
+    // Cross-product ConqrPlan tools
     ...PLANE_WORK_ITEM_TOOLS,
     ...PLANE_WORK_MANAGEMENT_TOOLS,
     // Suite integration tools (federated search, links, create-and-link, coverage)

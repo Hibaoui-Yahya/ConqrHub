@@ -270,7 +270,7 @@ function ProposalCard({
                 mt="xs"
                 size="xs"
                 w={280}
-                label={t("ConqrPlane project ID")}
+                label={t("ConqrPlan project ID")}
                 placeholder={t("Select or paste a project ID")}
                 data={projectOptions}
                 value={projectId}
@@ -390,7 +390,7 @@ export function MeetingProposalsTab({
     // the proposals_generating step completes.
   }, [meetingId, status]);
 
-  // Known ConqrPlane project ids (from project↔space mappings) offered
+  // Known ConqrPlan project ids (from project↔space mappings) offered
   // in the inline project picker for create_work_item proposals.
   useEffect(() => {
     getAllMappings()

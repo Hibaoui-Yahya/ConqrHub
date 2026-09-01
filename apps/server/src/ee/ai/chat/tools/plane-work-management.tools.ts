@@ -6,7 +6,7 @@ import { ChatToolRegistry } from './chat-tool.registry';
 import { toolError, workItemSummary } from './plane-work-items.tools';
 
 /**
- * Deeper ConqrPlane work-management coverage for the suite assistant
+ * Deeper ConqrPlan work-management coverage for the suite assistant
  * (chat + MCP): updating items, moving them through states, reading and
  * writing item comments, seeing what is inside a cycle, and resolving
  * assignees to people. Like the base work-item tools, these register only
@@ -24,7 +24,7 @@ const toHtml = (text?: string): string | undefined =>
 export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'update_work_item';
   readonly description =
-    'Update a ConqrPlane work item: rename it, edit its description, change priority, or move it to another state (pass a stateId from list_work_item_states). Only send the fields you want to change. Use only when the user explicitly asks.';
+    'Update a ConqrPlan work item: rename it, edit its description, change priority, or move it to another state (pass a stateId from list_work_item_states). Only send the fields you want to change. Use only when the user explicitly asks.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -85,7 +85,7 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
 export class ListWorkItemStatesTool implements ChatTool, OnModuleInit {
   readonly name = 'list_work_item_states';
   readonly description =
-    'List the workflow states of a ConqrPlane project (e.g. Backlog, In Progress, Done) with their IDs and state group. Use before update_work_item to move an item to a named state, or to interpret state values.';
+    'List the workflow states of a ConqrPlan project (e.g. Backlog, In Progress, Done) with their IDs and state group. Use before update_work_item to move an item to a named state, or to interpret state values.';
   readonly parameters = z.object({ projectId: z.string() });
   constructor(
     private readonly plane: PlaneClientService,
@@ -113,7 +113,7 @@ export class ListWorkItemStatesTool implements ChatTool, OnModuleInit {
 export class GetWorkItemCommentsTool implements ChatTool, OnModuleInit {
   readonly name = 'get_work_item_comments';
   readonly description =
-    'Read the comment thread of a ConqrPlane work item (discussion, decisions, status updates). Returns plain-text comments with author IDs — resolve authors with list_conqrplane_members.';
+    'Read the comment thread of a ConqrPlan work item (discussion, decisions, status updates). Returns plain-text comments with author IDs — resolve authors with list_conqrplan_members.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -151,7 +151,7 @@ export class GetWorkItemCommentsTool implements ChatTool, OnModuleInit {
 export class AddWorkItemCommentTool implements ChatTool, OnModuleInit {
   readonly name = 'add_work_item_comment';
   readonly description =
-    'Post a comment on a ConqrPlane work item. Comments are visible to the whole project — write them like a teammate would, and use only when the user asks.';
+    'Post a comment on a ConqrPlan work item. Comments are visible to the whole project — write them like a teammate would, and use only when the user asks.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -186,7 +186,7 @@ export class AddWorkItemCommentTool implements ChatTool, OnModuleInit {
 export class ListCycleWorkItemsTool implements ChatTool, OnModuleInit {
   readonly name = 'list_cycle_work_items';
   readonly description =
-    'List the work items inside one ConqrPlane cycle (sprint/iteration). Use with get_project_cycles to answer "what is in the current cycle" or to report sprint progress.';
+    'List the work items inside one ConqrPlan cycle (sprint/iteration). Use with get_project_cycles to answer "what is in the current cycle" or to report sprint progress.';
   readonly parameters = z.object({
     projectId: z.string(),
     cycleId: z.string().describe('Cycle ID (from get_project_cycles)'),
@@ -219,7 +219,7 @@ export class ListCycleWorkItemsTool implements ChatTool, OnModuleInit {
 export class ListWorkItemLabelsTool implements ChatTool, OnModuleInit {
   readonly name = 'list_work_item_labels';
   readonly description =
-    'List the labels of a ConqrPlane project (id, name, color). Use to interpret label IDs on work items.';
+    'List the labels of a ConqrPlan project (id, name, color). Use to interpret label IDs on work items.';
   readonly parameters = z.object({ projectId: z.string() });
   constructor(
     private readonly plane: PlaneClientService,
@@ -239,10 +239,10 @@ export class ListWorkItemLabelsTool implements ChatTool, OnModuleInit {
 }
 
 @Injectable()
-export class ListConqrPlaneMembersTool implements ChatTool, OnModuleInit {
-  readonly name = 'list_conqrplane_members';
+export class ListConqrPlanMembersTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_conqrplan_members';
   readonly description =
-    'List the members of the ConqrPlane workspace (id, display name, email). Use to resolve assignee and comment-author IDs to real people.';
+    'List the members of the ConqrPlan workspace (id, display name, email). Use to resolve assignee and comment-author IDs to real people.';
   readonly parameters = z.object({});
   constructor(
     private readonly plane: PlaneClientService,
@@ -283,5 +283,5 @@ export const PLANE_WORK_MANAGEMENT_TOOLS = [
   AddWorkItemCommentTool,
   ListCycleWorkItemsTool,
   ListWorkItemLabelsTool,
-  ListConqrPlaneMembersTool,
+  ListConqrPlanMembersTool,
 ];

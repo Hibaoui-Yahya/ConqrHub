@@ -6,7 +6,7 @@
  *
  * CANONICAL FILE — vendored byte-identical into all three host apps:
  *   ConqrHub    apps/client/src/components/conqr-service-launcher.tsx
- *   ConqrPlane  apps/web/core/components/navigation/conqr-service-launcher.tsx
+ *   ConqrPlan  apps/web/core/components/navigation/conqr-service-launcher.tsx
  *   ConqrMeet   apps/client/src/shell/conqr-service-launcher.tsx
  * Edit it in one repo, copy it to the other two. Do not fork it per app: the
  * point is that help looks and behaves the same everywhere in the suite.
@@ -91,7 +91,7 @@ export function resolveConqrServiceUrl(explicit?: string | null): string | null 
   const env = viteEnv();
   const candidates = [
     explicit,
-    env.VITE_CONQR_SERVICE_URL as string | undefined, // ConqrPlane
+    env.VITE_CONQR_SERVICE_URL as string | undefined, // ConqrPlan
     env.VITE_SERVICE_URL as string | undefined, // ConqrMeet
     defineInjectedServiceUrl(), // ConqrHub
   ];

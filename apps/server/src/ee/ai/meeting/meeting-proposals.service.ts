@@ -96,7 +96,7 @@ export class MeetingProposalsService {
     switch (seed.kind) {
       case 'create_work_item':
         if (!this.planeClient.isEnabled()) {
-          warnings.push('ConqrPlane integration is not configured');
+          warnings.push('ConqrPlan integration is not configured');
         }
         if (!seed.payload.projectId) missingFields.push('projectId');
         break;
@@ -331,7 +331,7 @@ export class MeetingProposalsService {
     switch (proposal.kind) {
       case 'create_work_item': {
         if (!this.planeClient.isEnabled()) {
-          throw new Error('ConqrPlane integration is not configured');
+          throw new Error('ConqrPlan integration is not configured');
         }
         const projectId = String(payload.projectId);
         const description = [

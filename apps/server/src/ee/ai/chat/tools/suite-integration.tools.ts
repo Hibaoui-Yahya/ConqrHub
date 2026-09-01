@@ -24,7 +24,7 @@ import { toolError, workItemSummary } from './plane-work-items.tools';
 
 /**
  * Suite integration tools: one-call cross-product workflows between ConqrHub
- * (knowledge) and ConqrPlane (work). These wrap the integration layer —
+ * (knowledge) and ConqrPlan (work). These wrap the integration layer —
  * federated search, typed relationships, create-and-link, traceability — so
  * an agent passes plain page/work-item IDs and never has to construct URNs
  * or orchestrate multi-step flows itself. Registered only when the Plane
@@ -70,14 +70,14 @@ async function loadAuthorizedPage(
 export class SearchSuiteTool implements ChatTool, OnModuleInit {
   readonly name = 'search_suite';
   readonly description =
-    'Search ConqrHub pages AND ConqrPlane work items in one call. Returns a mixed, interleaved result list where each hit says which product it came from, with a deep link when available. Use this first when you do not know whether the answer lives in the wiki or in project work.';
+    'Search ConqrHub pages AND ConqrPlan work items in one call. Returns a mixed, interleaved result list where each hit says which product it came from, with a deep link when available. Use this first when you do not know whether the answer lives in the wiki or in project work.';
   readonly parameters = z.object({
     query: z.string().min(1).describe('What to search for'),
     limit: z.number().int().min(1).max(30).optional().default(10),
     planeProjectId: z
       .string()
       .optional()
-      .describe('Restrict the work-item side to one ConqrPlane project'),
+      .describe('Restrict the work-item side to one ConqrPlan project'),
   });
   constructor(
     private readonly plane: PlaneClientService,
@@ -100,7 +100,7 @@ export class SearchSuiteTool implements ChatTool, OnModuleInit {
       return {
         sources,
         items: items.slice(0, args.limit ?? 10).map((i) => ({
-          source: i.source === 'hub' ? 'conqrhub' : 'conqrplane',
+          source: i.source === 'hub' ? 'conqrhub' : 'conqrplan',
           type: i.type,
           id: parseUrn(i.urn).id,
           title: i.title,
@@ -120,11 +120,11 @@ export class SearchSuiteTool implements ChatTool, OnModuleInit {
 export class LinkPageToWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'link_page_to_work_item';
   readonly description =
-    'Create a typed link between a ConqrHub page and a ConqrPlane work item (e.g. this spec is specified_by that work item). The link is idempotent, navigable from both products, and powers get_page_work_coverage. Use when the user connects documentation to work.';
+    'Create a typed link between a ConqrHub page and a ConqrPlan work item (e.g. this spec is specified_by that work item). The link is idempotent, navigable from both products, and powers get_page_work_coverage. Use when the user connects documentation to work.';
   readonly parameters = z.object({
     pageId: z.string().describe('ConqrHub page UUID or slugId'),
-    projectId: z.string().describe('ConqrPlane project ID of the work item'),
-    workItemId: z.string().describe('ConqrPlane work item ID'),
+    projectId: z.string().describe('ConqrPlan project ID of the work item'),
+    workItemId: z.string().describe('ConqrPlan work item ID'),
     relationType: z
       .enum(PAGE_TO_WORK_RELATIONS)
       .optional()
@@ -191,7 +191,7 @@ export class LinkPageToWorkItemTool implements ChatTool, OnModuleInit {
 export class GetPageLinksTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page_links';
   readonly description =
-    'List the typed cross-product links of a ConqrHub page: which ConqrPlane work items (and other objects) it is connected to and how. Use to answer "what work is attached to this page".';
+    'List the typed cross-product links of a ConqrHub page: which ConqrPlan work items (and other objects) it is connected to and how. Use to answer "what work is attached to this page".';
   readonly parameters = z.object({
     pageId: z.string().describe('ConqrHub page UUID or slugId'),
   });
@@ -226,7 +226,7 @@ export class GetPageLinksTool implements ChatTool, OnModuleInit {
           relation,
           relationLabel: labelOf(relation as RelationType),
           target: {
-            product: other.product === 'hub' ? 'conqrhub' : 'conqrplane',
+            product: other.product === 'hub' ? 'conqrhub' : 'conqrplan',
             type: other.type,
             id: other.id,
           },
@@ -242,10 +242,10 @@ export class GetPageLinksTool implements ChatTool, OnModuleInit {
 export class CreateWorkItemFromPageTool implements ChatTool, OnModuleInit {
   readonly name = 'create_work_item_from_page';
   readonly description =
-    'Create a ConqrPlane work item from a ConqrHub page AND link the two in one call (the page becomes the spec of the work item). Prefer this over create_work_item when the work originates from a page, so traceability is recorded. Use only when the user explicitly asks to create work.';
+    'Create a ConqrPlan work item from a ConqrHub page AND link the two in one call (the page becomes the spec of the work item). Prefer this over create_work_item when the work originates from a page, so traceability is recorded. Use only when the user explicitly asks to create work.';
   readonly parameters = z.object({
     pageId: z.string().describe('The source ConqrHub page UUID or slugId'),
-    projectId: z.string().describe('Target ConqrPlane project ID'),
+    projectId: z.string().describe('Target ConqrPlan project ID'),
     title: z.string().min(1).max(255),
     description: z.string().optional().describe('Plain-text or HTML description'),
     priority: z.enum(['urgent', 'high', 'medium', 'low', 'none']).optional(),
@@ -315,7 +315,7 @@ export class CreateWorkItemFromPageTool implements ChatTool, OnModuleInit {
 export class GetPageWorkCoverageTool implements ChatTool, OnModuleInit {
   readonly name = 'get_page_work_coverage';
   readonly description =
-    'Report how much of the ConqrPlane work linked to a ConqrHub page is complete: every linked work item with its state, plus a 0-1 coverage ratio. Use to answer "is the work for this spec done" or "does this page have delivery work at all".';
+    'Report how much of the ConqrPlan work linked to a ConqrHub page is complete: every linked work item with its state, plus a 0-1 coverage ratio. Use to answer "is the work for this spec done" or "does this page have delivery work at all".';
   readonly parameters = z.object({
     pageId: z.string().describe('ConqrHub page UUID or slugId'),
   });

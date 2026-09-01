@@ -9,15 +9,15 @@ import { ChatToolRegistry } from './chat-tool.registry';
 
 /**
  * Cross-product tools: let the suite assistant (chat + MCP) read and create
- * ConqrPlane work items through the integration layer's Plane REST adapter.
+ * ConqrPlan work items through the integration layer's Plane REST adapter.
  * Registered only when the Plane integration is configured, so an
  * unconfigured deployment never advertises dead tools.
  */
 export function toolError(err: unknown): { error: string } {
   if (err instanceof PlaneApiError) {
-    return { error: `ConqrPlane request failed (${err.status || 'network'}): ${err.message}` };
+    return { error: `ConqrPlan request failed (${err.status || 'network'}): ${err.message}` };
   }
-  return { error: `ConqrPlane request failed: ${err instanceof Error ? err.message : String(err)}` };
+  return { error: `ConqrPlan request failed: ${err instanceof Error ? err.message : String(err)}` };
 }
 
 export const workItemSummary = (w: any) => ({
@@ -30,10 +30,10 @@ export const workItemSummary = (w: any) => ({
 });
 
 @Injectable()
-export class ListConqrPlaneProjectsTool implements ChatTool, OnModuleInit {
-  readonly name = 'list_conqrplane_projects';
+export class ListConqrPlanProjectsTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_conqrplan_projects';
   readonly description =
-    'List projects in ConqrPlane (the Conqr suite work-management app). Use this to find a project ID before searching or creating work items.';
+    'List projects in ConqrPlan (the Conqr suite work-management app). Use this to find a project ID before searching or creating work items.';
   readonly parameters = z.object({});
   constructor(
     private readonly plane: PlaneClientService,
@@ -55,9 +55,9 @@ export class ListConqrPlaneProjectsTool implements ChatTool, OnModuleInit {
 export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
   readonly name = 'search_work_items';
   readonly description =
-    'Search work items in a ConqrPlane project by text. Returns id, name, state, and priority. Cite work items by name and sequenceId.';
+    'Search work items in a ConqrPlan project by text. Returns id, name, state, and priority. Cite work items by name and sequenceId.';
   readonly parameters = z.object({
-    projectId: z.string().describe('ConqrPlane project ID (from list_conqrplane_projects)'),
+    projectId: z.string().describe('ConqrPlan project ID (from list_conqrplan_projects)'),
     query: z.string().optional().describe('Text to search work item names for'),
     limit: z.number().int().min(1).max(50).optional().default(20),
   });
@@ -84,7 +84,7 @@ export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
 @Injectable()
 export class GetWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'get_work_item';
-  readonly description = 'Get one ConqrPlane work item with its description, state, and priority.';
+  readonly description = 'Get one ConqrPlan work item with its description, state, and priority.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -110,7 +110,7 @@ export class GetWorkItemTool implements ChatTool, OnModuleInit {
 export class CreateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'create_work_item';
   readonly description =
-    'Create a work item in a ConqrPlane project. Use only when the user explicitly asks to create work. Returns the created item.';
+    'Create a work item in a ConqrPlan project. Use only when the user explicitly asks to create work. Returns the created item.';
   readonly parameters = z.object({
     projectId: z.string(),
     name: z.string().min(1).max(255),
@@ -154,7 +154,7 @@ export class CreateWorkItemTool implements ChatTool, OnModuleInit {
 export class GetProjectCyclesTool implements ChatTool, OnModuleInit {
   readonly name = 'get_project_cycles';
   readonly description =
-    'List cycles (iterations) of a ConqrPlane project with their date ranges. Use for status questions like "what is in the current cycle".';
+    'List cycles (iterations) of a ConqrPlan project with their date ranges. Use for status questions like "what is in the current cycle".';
   readonly parameters = z.object({ projectId: z.string() });
   constructor(
     private readonly plane: PlaneClientService,
@@ -173,7 +173,7 @@ export class GetProjectCyclesTool implements ChatTool, OnModuleInit {
 }
 
 export const PLANE_WORK_ITEM_TOOLS = [
-  ListConqrPlaneProjectsTool,
+  ListConqrPlanProjectsTool,
   SearchWorkItemsTool,
   GetWorkItemTool,
   CreateWorkItemTool,
