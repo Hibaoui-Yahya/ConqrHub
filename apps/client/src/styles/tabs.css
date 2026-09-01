@@ -1,0 +1,15 @@
+/* Plane tab chrome: 13px labels, text-secondary idle, text-primary active,
+   translucent hover — state selectors Mantine's styles API can't express. */
+.mantine-Tabs-tab[data-active] {
+    color: var(--txt-primary);
+}
+
+.mantine-Tabs-tab:hover {
+    background-color: var(--bg-layer-transparent-hover);
+}
+
+/* Tab labels are wrapped in <Text size="sm"> (14px) in home/space tabs;
+   pin them to Plane's 13px without editing each call site. */
+.mantine-Tabs-tab .mantine-Text-root {
+    font-size: 13px;
+}

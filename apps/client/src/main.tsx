@@ -9,6 +9,8 @@ import '@mantine/dates/styles.css';
 // @conqr/tokens package (§7.1). Must load after Mantine base styles so the
 // token-driven overrides in theme.ts resolve against these variables.
 import "@conqr/tokens/tokens.css";
+// Plane tab chrome states (active/hover) — see theme.ts Tabs override.
+import "./styles/tabs.css";
 
 import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
