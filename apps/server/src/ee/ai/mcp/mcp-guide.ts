@@ -26,7 +26,7 @@ CORE RULES
 - Use get_current_user when you need the caller's name, email, role, or the "me" context; list_workspace_members to resolve other people.
 - Writes mutate real data for everyone in the workspace. create_/update_/delete_/move_/duplicate_ tools are not reversible from here — confirm intent before deleting or overwriting. Prefer update_page_content (body) and update_page_title (title) over a blind update_page.
 - Diagrams: add_diagram authors a Mermaid diagram (flowchart, sequence, class, state, ERD, gantt, mindmap, gitGraph, pie) as a code block on a page — it is the only diagram type creatable here. Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas and cannot be created via MCP, but you CAN read existing ones as images via read_attachment or read_page_media.
-- Project management (tasks/issues/cycles) lives in ConqrPlan, not in pages: list_conqrplan_projects, get_project_cycles, list_cycle_work_items, search_work_items, get_work_item, create_work_item, update_work_item, list_work_item_states, work-item comments, list_conqrplan_members.
+- Project management (tasks/issues/cycles) lives in ConqrPlan, not in pages: list_conqrplan_projects, get_project_cycles, list_cycle_work_items, search_work_items, get_work_item, create_work_item, update_work_item, list_work_item_states, list_estimate_points, work-item comments, list_conqrplan_members.
 - Cross-product: when you don't know whether the answer is a page or a work item, use search_suite (one federated search over both). Connect knowledge to work with link_page_to_work_item / create_work_item_from_page, inspect with get_page_links, and answer "is the work for this spec done?" with get_page_work_coverage.
 
 TYPICAL FLOWS
@@ -63,7 +63,7 @@ Tool groups:
 - Spaces: list_spaces, get_space, get_space_info (read); create_space, update_space (write)
 - Comments: get_comments, get_page_comments (read); create_comment, update_comment, delete_comment (write)
 - People: get_current_user, list_workspace_members
-- ConqrPlan (project mgmt): list_conqrplan_projects, get_project_cycles, list_cycle_work_items, get_work_item, search_work_items, create_work_item, update_work_item, list_work_item_states, get_work_item_comments, add_work_item_comment, list_work_item_labels, list_conqrplan_members
+- ConqrPlan (project mgmt): list_conqrplan_projects, get_project_cycles, list_cycle_work_items, get_work_item, search_work_items, create_work_item, update_work_item, list_work_item_states, list_estimate_points, get_work_item_comments, add_work_item_comment, list_work_item_labels, list_conqrplan_members
 - Suite integration (Hub ↔ Plane in one call): search_suite, link_page_to_work_item, get_page_links, create_work_item_from_page, get_page_work_coverage
 - Verification (controls RAG eligibility): get_verification_status, list_unverified_pages, verify_page, create_verification, submit_for_approval, mark_obsolete
 
@@ -125,7 +125,8 @@ Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — 
 - get_project_cycles — sprints/cycles for a project; list_cycle_work_items — what is inside one cycle.
 - search_work_items / get_work_item — find and read tasks/issues.
 - create_work_item — create a task/issue (a write — confirm intent).
-- update_work_item — rename, edit description, change priority, or move to another state. Get the target stateId from list_work_item_states first.
+- update_work_item — rename, edit description, change priority, move to another state, or set/clear the estimate. Get the target stateId from list_work_item_states and the estimatePointId from list_estimate_points first.
+- list_estimate_points — a project's estimate systems and point values (empty when no system is configured; work items then have no estimate field).
 - get_work_item_comments / add_work_item_comment — read and join the discussion on an item (comments are team-visible).
 - list_work_item_states — a project's workflow states (Backlog/In Progress/Done…) with IDs and groups.
 - list_work_item_labels — label id → name/color.

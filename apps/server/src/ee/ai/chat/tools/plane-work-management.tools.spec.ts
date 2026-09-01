@@ -6,6 +6,7 @@ import {
   GetWorkItemCommentsTool,
   AddWorkItemCommentTool,
   ListCycleWorkItemsTool,
+  ListEstimatePointsTool,
   ListWorkItemLabelsTool,
   ListConqrPlanMembersTool,
   PLANE_WORK_MANAGEMENT_TOOLS,
@@ -21,6 +22,7 @@ function makePlaneMock(enabled: boolean) {
     listWorkItemComments: jest.fn(),
     addWorkItemComment: jest.fn(),
     listCycleWorkItems: jest.fn(),
+    listEstimates: jest.fn(),
     listLabels: jest.fn(),
     listWorkspaceMembers: jest.fn(),
   };
@@ -33,6 +35,7 @@ function constructAll(plane: any, registry: ChatToolRegistry) {
     new GetWorkItemCommentsTool(plane, registry),
     new AddWorkItemCommentTool(plane, registry),
     new ListCycleWorkItemsTool(plane, registry),
+    new ListEstimatePointsTool(plane, registry),
     new ListWorkItemLabelsTool(plane, registry),
     new ListConqrPlanMembersTool(plane, registry),
   ];
@@ -46,7 +49,7 @@ describe('Plane work-management tools', () => {
     expect(registry.getAll()).toHaveLength(0);
   });
 
-  it('registers all seven tools when the integration is enabled', () => {
+  it('registers all eight tools when the integration is enabled', () => {
     const plane = makePlaneMock(true);
     const registry = new ChatToolRegistry();
     constructAll(plane, registry).forEach((t) => t.onModuleInit());
@@ -56,10 +59,63 @@ describe('Plane work-management tools', () => {
       'get_work_item_comments',
       'add_work_item_comment',
       'list_cycle_work_items',
+      'list_estimate_points',
       'list_work_item_labels',
       'list_conqrplan_members',
     ]);
-    expect(PLANE_WORK_MANAGEMENT_TOOLS).toHaveLength(7);
+    expect(PLANE_WORK_MANAGEMENT_TOOLS).toHaveLength(8);
+  });
+
+  it('list_estimate_points returns systems with points sorted by key', async () => {
+    const plane = makePlaneMock(true);
+    plane.listEstimates.mockResolvedValue([
+      {
+        id: 'est-1',
+        name: 'Points',
+        type: 'points',
+        points: [
+          { id: 'pt-2', key: 1, value: '2' },
+          { id: 'pt-1', key: 0, value: '1' },
+        ],
+      },
+    ]);
+    const tool = new ListEstimatePointsTool(plane as any, new ChatToolRegistry());
+
+    const result = await tool.execute({ projectId: 'proj-1' }, ctx);
+
+    expect(result).toEqual([
+      {
+        id: 'est-1',
+        name: 'Points',
+        type: 'points',
+        points: [
+          { id: 'pt-1', value: '1' },
+          { id: 'pt-2', value: '2' },
+        ],
+      },
+    ]);
+  });
+
+  it('update_work_item can set and clear the estimate point', async () => {
+    const plane = makePlaneMock(true);
+    plane.updateWorkItem.mockResolvedValue({ id: 'wi-1', name: 'X', sequence_id: 1 });
+    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry());
+
+    await tool.execute({ projectId: 'p', workItemId: 'wi-1', estimatePointId: 'pt-3' }, ctx);
+    expect(plane.updateWorkItem).toHaveBeenLastCalledWith(
+      'p',
+      'wi-1',
+      expect.objectContaining({ estimate_point: 'pt-3' }),
+      { onBehalfOf: 'user-1' },
+    );
+
+    await tool.execute({ projectId: 'p', workItemId: 'wi-1', estimatePointId: null }, ctx);
+    expect(plane.updateWorkItem).toHaveBeenLastCalledWith(
+      'p',
+      'wi-1',
+      expect.objectContaining({ estimate_point: null }),
+      { onBehalfOf: 'user-1' },
+    );
   });
 
   it('update_work_item sends only the provided fields as a PATCH', async () => {
@@ -168,6 +224,7 @@ describe('Plane work-management tools', () => {
         sequenceId: 9,
         state: 'Done',
         priority: 'low',
+        estimatePointId: null,
         updatedAt: '2026-08-20T00:00:00Z',
       },
     ]);

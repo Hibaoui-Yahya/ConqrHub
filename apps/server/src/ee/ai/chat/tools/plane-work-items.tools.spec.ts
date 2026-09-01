@@ -87,6 +87,7 @@ describe('Plane work-item tools', () => {
         sequenceId: 42,
         state: 'In Progress',
         priority: 'high',
+        estimatePointId: null,
         updatedAt: '2026-07-18T00:00:00Z',
       },
     ]);
@@ -130,6 +131,7 @@ describe('Plane work-item tools', () => {
       sequenceId: 7,
       state: 'Backlog',
       priority: 'medium',
+      estimatePointId: null,
       updatedAt: '2026-07-19T00:00:00Z',
     });
   });
