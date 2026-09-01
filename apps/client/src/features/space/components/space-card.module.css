@@ -1,0 +1,80 @@
+.card {
+    background-color: var(--bg-surface-1);
+    border-color: var(--border-subtle);
+    overflow: hidden;
+    transition: box-shadow 150ms ease;
+
+    @mixin hover {
+        box-shadow: var(--shadow-raised-200);
+    }
+}
+
+.banner {
+    position: relative;
+    height: rem(76px);
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, var(--alpha-black-500), transparent 65%);
+}
+
+.identity {
+    position: absolute;
+    left: rem(12px);
+    right: rem(12px);
+    bottom: rem(10px);
+    display: flex;
+    align-items: center;
+    gap: rem(8px);
+}
+
+.logoTile {
+    width: rem(36px);
+    height: rem(36px);
+    border-radius: rem(8px);
+    background-color: var(--alpha-white-300);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.name {
+    flex: 1;
+    min-width: 0;
+    color: #fff;
+    font-size: rem(14px);
+    font-weight: 600;
+}
+
+.topRight {
+    position: absolute;
+    top: rem(6px);
+    right: rem(6px);
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+
+.topRight:has([data-favorited="true"]),
+.card:hover .topRight {
+    opacity: 1;
+}
+
+.body {
+    padding: rem(10px) rem(12px) rem(12px);
+}
+
+.description {
+    font-size: rem(12px);
+    color: var(--txt-secondary);
+    min-height: rem(32px);
+}
+
+.members {
+    margin-top: rem(8px);
+    font-size: rem(11px);
+    font-weight: 500;
+    color: var(--txt-tertiary);
+}
