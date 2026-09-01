@@ -101,7 +101,7 @@ describe('Suite integration tools', () => {
         deepLink: null,
       },
       {
-        source: 'conqrplane',
+        source: 'conqrplan',
         type: 'work-item',
         id: 'wi-1',
         title: 'Build charge API',
@@ -213,11 +213,11 @@ describe('Suite integration tools', () => {
     expect(result.links).toHaveLength(2);
     expect(result.links[0]).toMatchObject({
       relation: 'specified_by',
-      target: { product: 'conqrplane', type: 'work-item', id: 'wi-1' },
+      target: { product: 'conqrplan', type: 'work-item', id: 'wi-1' },
     });
     expect(result.links[1]).toMatchObject({
       relation: 'documented_by',
-      target: { product: 'conqrplane', type: 'work-item', id: 'wi-2' },
+      target: { product: 'conqrplan', type: 'work-item', id: 'wi-2' },
     });
   });
 

@@ -234,18 +234,18 @@ describe('McpService.getToolsCatalog', () => {
     });
   });
 
-  it('categorizes ConqrPlane and suite-integration tools', () => {
+  it('categorizes ConqrPlan and suite-integration tools', () => {
     const names = [
-      ['list_conqrplane_projects', 'ConqrPlane'],
-      ['search_work_items', 'ConqrPlane'],
-      ['update_work_item', 'ConqrPlane'],
-      ['list_work_item_states', 'ConqrPlane'],
-      ['get_work_item_comments', 'ConqrPlane'],
-      ['add_work_item_comment', 'ConqrPlane'],
-      ['list_cycle_work_items', 'ConqrPlane'],
-      ['list_work_item_labels', 'ConqrPlane'],
-      ['list_conqrplane_members', 'ConqrPlane'],
-      ['get_project_cycles', 'ConqrPlane'],
+      ['list_conqrplan_projects', 'ConqrPlan'],
+      ['search_work_items', 'ConqrPlan'],
+      ['update_work_item', 'ConqrPlan'],
+      ['list_work_item_states', 'ConqrPlan'],
+      ['get_work_item_comments', 'ConqrPlan'],
+      ['add_work_item_comment', 'ConqrPlan'],
+      ['list_cycle_work_items', 'ConqrPlan'],
+      ['list_work_item_labels', 'ConqrPlan'],
+      ['list_conqrplan_members', 'ConqrPlan'],
+      ['get_project_cycles', 'ConqrPlan'],
       ['search_suite', 'Suite integration'],
       ['link_page_to_work_item', 'Suite integration'],
       ['get_page_links', 'Suite integration'],

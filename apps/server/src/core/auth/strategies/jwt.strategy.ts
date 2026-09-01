@@ -81,7 +81,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       return this.validateApiKey(req, payload as JwtApiKeyPayload);
     }
 
-    // Suite-IdP access tokens (trusted first-party clients: ConqrPlane,
+    // Suite-IdP access tokens (trusted first-party clients: ConqrPlan,
     // ConqrMeet). Strict audience match — the IdP's code and refresh tokens
     // share the signing key but carry different audiences and are rejected.
     // Short-lived (5 min) and only obtainable through a Hub-session-backed

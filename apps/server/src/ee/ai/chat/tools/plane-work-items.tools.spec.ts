@@ -1,7 +1,7 @@
 import { PlaneApiError } from '../../../../core/integration/services/plane-client.service';
 import { ChatToolRegistry } from './chat-tool.registry';
 import {
-  ListConqrPlaneProjectsTool,
+  ListConqrPlanProjectsTool,
   SearchWorkItemsTool,
   GetWorkItemTool,
   CreateWorkItemTool,
@@ -24,7 +24,7 @@ function makePlaneMock(enabled: boolean) {
 
 function constructAll(plane: any, registry: ChatToolRegistry) {
   return [
-    new ListConqrPlaneProjectsTool(plane, registry),
+    new ListConqrPlanProjectsTool(plane, registry),
     new SearchWorkItemsTool(plane, registry),
     new GetWorkItemTool(plane, registry),
     new CreateWorkItemTool(plane, registry),
@@ -48,7 +48,7 @@ describe('Plane work-item tools', () => {
     tools.forEach((t) => t.onModuleInit());
     const names = registry.getAll().map((t) => t.name);
     expect(names).toEqual([
-      'list_conqrplane_projects',
+      'list_conqrplan_projects',
       'search_work_items',
       'get_work_item',
       'create_work_item',
@@ -144,6 +144,6 @@ describe('Plane work-item tools', () => {
 
     const result = await tool.execute({ projectId: 'proj-1' }, ctx);
 
-    expect(result).toEqual({ error: expect.stringContaining('ConqrPlane') });
+    expect(result).toEqual({ error: expect.stringContaining('ConqrPlan') });
   });
 });

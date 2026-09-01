@@ -31,10 +31,10 @@ function categorizeTool(name: string): string {
   if (SUITE_INTEGRATION_TOOL_NAMES.has(name)) return 'Suite integration';
   if (
     name.includes('work_item') ||
-    name.includes('conqrplane') ||
+    name.includes('conqrplan') ||
     name === 'get_project_cycles'
   ) {
-    return 'ConqrPlane';
+    return 'ConqrPlan';
   }
   if (
     name.includes('verif') ||

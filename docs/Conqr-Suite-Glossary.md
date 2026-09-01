@@ -1,6 +1,6 @@
 # Conqr Suite Glossary
 
-One word per concept across ConqrHub and ConqrPlane (the Plane fork). UI copy,
+One word per concept across ConqrHub and ConqrPlan (the Plane fork). UI copy,
 docs, and i18n values in BOTH repos must use these terms. Internal identifiers
 (i18n key names, DB columns, API fields like `issue_id`) are exempt.
 
@@ -17,11 +17,11 @@ docs, and i18n values in BOTH repos must use these terms. Internal identifiers
 | Deleted-items area | **Trash** (Hub) / **Archive** (Plane) | Different semantics (recoverable deletion vs hide-completed); documented, not merged. |
 | Permission group | **Group** | Hub object. Plane's "group by" is a verb; Plane "Teams/Teamspace" is a distinct people object. Glossary flags the difference. |
 | AI assistant | **Conqr AI** | Replaces "Pi"/"Plane AI" labels in Plane and Hub's inconsistent AI titles (e.g. `"Conqrai AI": "ConqrHub"`). |
-| Suite / products | **Conqr suite**; **ConqrHub** (Knowledge & documentation); **ConqrPlane** (Projects & work management) | The Plane fork's user-visible product name is **ConqrPlane** — adopted from in-flight work already present in the plane repo (ConqrPlane wordmark logo, "New to ConqrPlane?" auth copy) instead of the earlier "ConqrTasks" idea. Applied on high-visibility surfaces (Hub app-switcher tile, Plane wordmark/title, power-k, auth screens, conqr_* i18n blocks). Deep copy (marketing/upgrade strings) is out of scope this pass. |
+| Suite / products | **Conqr suite**; **ConqrHub** (Knowledge & documentation); **ConqrPlan** (Projects & work management) | The Plane fork's user-visible product name is **ConqrPlan** — adopted from in-flight work already present in the plane repo (ConqrPlan wordmark logo, "New to ConqrPlan?" auth copy) instead of the earlier "ConqrTasks" idea. Applied on high-visibility surfaces (Hub app-switcher tile, Plane wordmark/title, power-k, auth screens, conqr_* i18n blocks). Deep copy (marketing/upgrade strings) is out of scope this pass. |
 
 ## Collision rules
-- "Page(s)" in ConqrPlane UI may only refer to canonical ConqrHub pages. Plane-native notes are always "Project Notes".
-- "Docs" in ConqrPlane = the mapped ConqrHub space, nothing else.
+- "Page(s)" in ConqrPlan UI may only refer to canonical ConqrHub pages. Plane-native notes are always "Project Notes".
+- "Docs" in ConqrPlan = the mapped ConqrHub space, nothing else.
 - "Issue" may appear only when naming external GitHub/GitLab objects.
-- Hub page approval lifecycle ("Approval status": Draft → In approval → Approved → Obsolete) is distinct from ConqrPlane work-item "State" — do not merge the words.
+- Hub page approval lifecycle ("Approval status": Draft → In approval → Approved → Obsolete) is distinct from ConqrPlan work-item "State" — do not merge the words.
 - The assistant is "Conqr AI" everywhere (never "Pi", "Plane AI", "Conqrai AI").

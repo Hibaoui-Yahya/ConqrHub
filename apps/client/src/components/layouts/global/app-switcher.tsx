@@ -91,7 +91,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
     },
     {
       key: "plane",
-      name: t("ConqrPlane"),
+      name: t("ConqrPlan"),
       desc: planeContextual
         ? t("Open this space's project")
         : t("Projects & work management"),

@@ -20,7 +20,7 @@ const DEFAULT_LIMIT = 5;
 /**
  * Semantic work-item intelligence (gap-analysis A2): duplicate detection and
  * label prediction over the plane_work_item embedding space. Consumed by
- * ConqrPlane's create-work-item and intake surfaces.
+ * ConqrPlan's create-work-item and intake surfaces.
  */
 @Injectable()
 export class WorkIntelService {

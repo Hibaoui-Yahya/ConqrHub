@@ -1,6 +1,6 @@
 # Work-item semantic intelligence (A1 + A2)
 
-ConqrPlane work items are indexed into the suite semantic store
+ConqrPlan work items are indexed into the suite semantic store
 (`ai_embeddings`, source kind `plane_work_item`) and power duplicate
 detection + label prediction.
 
@@ -30,7 +30,7 @@ disabled when the workspace's `ai.retrieval` toggle is off
   → `{ labels: [{ label, confidence }] }` — confidences are clamped to [0, 1]
   and sum ≤ 1; zero-weight labels are omitted.
 - Both return empty results when no AI provider is configured — callers
-  (e.g. ConqrPlane's create modal, fork ledger F9) must degrade silently.
+  (e.g. ConqrPlan's create modal, fork ledger F9) must degrade silently.
 - Both scope the search to spaces the calling user can read: `WorkIntelService`
   resolves the caller's readable space ids (`SpaceMemberRepo.getUserSpaceIds`)
   and restricts `similaritySearch` to that allow-list, so a member never sees
