@@ -9,7 +9,10 @@ import {
 export async function getPageAttachments(
   pageId: string,
 ): Promise<IPageAttachmentsResponse> {
-  return await api.post("/attachments/list", { pageId });
+  const req = await api.post<IPageAttachmentsResponse>("/attachments/list", {
+    pageId,
+  });
+  return req.data;
 }
 
 async function compressAndResizeIcon(
