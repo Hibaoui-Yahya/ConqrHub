@@ -1,10 +1,10 @@
-<div align="center">
+﻿<div align="center">
     <h1><b>ConqrAI Wiki</b></h1>
     <p>
         Collaborative wiki and documentation platform.
         <br />
         <a href="https://conqrai.com"><strong>Website</strong></a> |
-        <a href="https://conqrai-wiki.up.railway.app"><strong>App</strong></a>
+        <a href="https://app.conqrhub.com"><strong>App</strong></a>
     </p>
 </div>
 <br />

@@ -13,14 +13,14 @@ import { ChatToolRegistry } from './chat-tool.registry';
  * Registered only when the Plane integration is configured, so an
  * unconfigured deployment never advertises dead tools.
  */
-function toolError(err: unknown): { error: string } {
+export function toolError(err: unknown): { error: string } {
   if (err instanceof PlaneApiError) {
     return { error: `ConqrPlane request failed (${err.status || 'network'}): ${err.message}` };
   }
   return { error: `ConqrPlane request failed: ${err instanceof Error ? err.message : String(err)}` };
 }
 
-const workItemSummary = (w: any) => ({
+export const workItemSummary = (w: any) => ({
   id: w.id,
   name: w.name,
   sequenceId: w.sequence_id,

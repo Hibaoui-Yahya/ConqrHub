@@ -68,6 +68,9 @@ import { VERIFICATION_LIFECYCLE_TOOLS } from './tools/verification-lifecycle.too
 import { GetGuideTool } from './tools/get-guide.tool';
 // Cross-product ConqrPlane tools
 import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
+import { PLANE_WORK_MANAGEMENT_TOOLS } from './tools/plane-work-management.tools';
+// Suite integration tools (federated search, links, create-and-link, coverage)
+import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
 
 // AiChatRepo and AiChatMessageRepo are registered in the @Global() DatabaseModule
 // and are therefore available here without a local re-registration.
@@ -141,6 +144,9 @@ import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
     GetGuideTool,
     // Cross-product ConqrPlane tools
     ...PLANE_WORK_ITEM_TOOLS,
+    ...PLANE_WORK_MANAGEMENT_TOOLS,
+    // Suite integration tools (federated search, links, create-and-link, coverage)
+    ...SUITE_INTEGRATION_TOOLS,
   ],
   exports: [ChatToolRegistry],
 })
