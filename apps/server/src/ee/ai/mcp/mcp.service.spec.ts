@@ -234,6 +234,37 @@ describe('McpService.getToolsCatalog', () => {
     });
   });
 
+  it('categorizes ConqrPlane and suite-integration tools', () => {
+    const names = [
+      ['list_conqrplane_projects', 'ConqrPlane'],
+      ['search_work_items', 'ConqrPlane'],
+      ['update_work_item', 'ConqrPlane'],
+      ['list_work_item_states', 'ConqrPlane'],
+      ['get_work_item_comments', 'ConqrPlane'],
+      ['add_work_item_comment', 'ConqrPlane'],
+      ['list_cycle_work_items', 'ConqrPlane'],
+      ['list_work_item_labels', 'ConqrPlane'],
+      ['list_conqrplane_members', 'ConqrPlane'],
+      ['get_project_cycles', 'ConqrPlane'],
+      ['search_suite', 'Suite integration'],
+      ['link_page_to_work_item', 'Suite integration'],
+      ['get_page_links', 'Suite integration'],
+      ['create_work_item_from_page', 'Suite integration'],
+      ['get_page_work_coverage', 'Suite integration'],
+    ] as const;
+    const tools: ChatTool[] = names.map(([name]) => ({
+      name,
+      description: 'd',
+      parameters: z.object({}),
+      execute: async () => null,
+    }));
+    const catalog = makeService(tools).getToolsCatalog();
+    const byName = Object.fromEntries(catalog.map((t) => [t.name, t.category]));
+    for (const [name, category] of names) {
+      expect(byName[name]).toBe(category);
+    }
+  });
+
   it('categorizes verification tools as Verification', () => {
     const tools: ChatTool[] = [
       { name: 'get_verification_status', description: 'd', parameters: z.object({}), execute: async () => null },

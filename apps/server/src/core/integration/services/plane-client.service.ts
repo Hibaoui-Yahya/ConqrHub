@@ -23,6 +23,31 @@ export interface PlaneLabel {
   color?: string;
 }
 
+export interface PlaneState {
+  id: string;
+  name: string;
+  group?: string;
+  color?: string;
+  default?: boolean;
+}
+
+export interface PlaneComment {
+  id: string;
+  comment_html?: string;
+  comment_stripped?: string;
+  actor?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PlaneMember {
+  id: string;
+  display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+}
+
 export class PlaneApiError extends Error {
   constructor(
     message: string,
@@ -215,6 +240,91 @@ export class PlaneClientService {
     const res = await this.request<{ results?: any[] } | any[]>(`/workspaces/${slug}/projects/`);
     const results = Array.isArray(res) ? res : (res.results ?? []);
     return results.map((p: any) => ({ id: p.id, name: p.name, identifier: p.identifier }));
+  }
+
+  /** Partially update a work item (suite AI/MCP tools). */
+  async updateWorkItem(
+    projectId: string,
+    workItemId: string,
+    patch: {
+      name?: string;
+      description_html?: string;
+      priority?: string;
+      state?: string;
+      assignees?: string[];
+    },
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<PlaneWorkItem> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneWorkItem>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/`,
+      { method: 'PATCH', body: patch, onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /** List a project's workflow states so callers can set/read state by name. */
+  async listStates(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<PlaneState[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneState[] } | PlaneState[]>(
+      `/workspaces/${slug}/projects/${projectId}/states/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
+  }
+
+  /** List comments on a work item. */
+  async listWorkItemComments(
+    projectId: string,
+    workItemId: string,
+    workspaceSlug?: string,
+  ): Promise<PlaneComment[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneComment[] } | PlaneComment[]>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/comments/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
+  }
+
+  /** Add a comment to a work item. Plane expects sanitised `comment_html`. */
+  async addWorkItemComment(
+    projectId: string,
+    workItemId: string,
+    commentHtml: string,
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<PlaneComment> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneComment>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/comments/`,
+      {
+        method: 'POST',
+        body: { comment_html: commentHtml },
+        onBehalfOf: opts?.onBehalfOf,
+      },
+    );
+  }
+
+  /** List the work items inside one cycle (sprint). */
+  async listCycleWorkItems(
+    projectId: string,
+    cycleId: string,
+    workspaceSlug?: string,
+  ): Promise<PlaneWorkItem[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneWorkItem[] } | PlaneWorkItem[]>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
+  }
+
+  /** List the members of the configured Plane workspace (assignee resolution). */
+  async listWorkspaceMembers(workspaceSlug?: string): Promise<PlaneMember[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneMember[] } | PlaneMember[]>(
+      `/workspaces/${slug}/members/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
   }
 
   /** List cycles for a project (suite AI/MCP tools). */

@@ -1,6 +1,6 @@
 # MCP Reference
 
-> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 39 tools (34 without the ConqrPlane integration configured) that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
+> **Status: implemented (Enterprise).** The MCP server is live at `POST /mcp` using JSON-RPC 2.0. It exposes 57 tools (40 without the ConqrPlane integration configured) that external AI clients can invoke against the workspace. AI Chat uses the same tool set. Connect any MCP-compatible client (Claude Desktop, Claude Code, Cursor, VS Code, LangGraph) or build a custom agent against the JSON-RPC endpoint directly.
 
 ConqrHub's MCP (Model Context Protocol) endpoint lets external agents read, search, and modify the workspace with the same permissions as the user behind the API key. The agent integration is gated by the workspace `mcp` AI feature toggle (default: off — admins enable it from **Settings → AI → MCP**).
 
@@ -126,7 +126,8 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 | Method | Behavior |
 |---|---|
 | `notifications/initialized` | No-op, returns `{}` |
-| `resources/list` | Returns `{ resources: [] }` — this server does not expose MCP resources |
+| `resources/list` / `resources/read` | On-demand guide sections as `conqrhub://guide/<slug>` markdown resources (same content as `get_conqrhub_guide`) |
+| `prompts/list` / `prompts/get` | Ready-made multi-tool workflow prompts (research-topic, draft-page, summarize-space, review-attachment, diagram-from-description, verify-space, project-status, page-to-work) |
 | Anything else | JSON-RPC error `-32601 Unknown method` |
 
 ---
@@ -171,7 +172,7 @@ The result shape is always `{ content: [{ type: "text", text }] }`. Non-string t
 
 ## Tools
 
-39 tools across 9 categories (the 5 ConqrPlane work-item tools appear only when the Plane integration is configured). Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
+57 tools across 11 categories (the 12 ConqrPlane work-item tools and the 5 suite-integration tools appear only when the Plane integration is configured). Limits and required arguments are taken from the live schema — fetch `tools/list` for the authoritative version.
 
 ### Search & RAG (2)
 
@@ -264,9 +265,9 @@ Mermaid supports flowcharts, sequence diagrams, class diagrams, state diagrams, 
 | `get_current_user` | — | — | The user the API key represents. |
 | `list_workspace_members` | — | `limit` (1–50, default 20) | Members visible to the requester. |
 
-### ConqrPlane work-item tools (5)
+### ConqrPlane work-item tools (12)
 
-Cross-product tools that let the suite assistant (chat + MCP) read and create work items in **ConqrPlane** (the Conqr suite's work-management app) through the integration layer's Plane REST adapter. **These tools appear only when the Plane integration is configured** — `PLANE_API_URL`, `PLANE_API_KEY`, and `PLANE_WORKSPACE_SLUG` are all set. On an unconfigured deployment they are absent from `tools/list` entirely, so an agent never sees or advertises dead tools.
+Cross-product tools that let the suite assistant (chat + MCP) read and manage work items in **ConqrPlane** (the Conqr suite's work-management app) through the integration layer's Plane REST adapter. **These tools appear only when the Plane integration is configured** — `PLANE_API_URL`, `PLANE_API_KEY`, and `PLANE_WORKSPACE_SLUG` are all set. On an unconfigured deployment they are absent from `tools/list` entirely, so an agent never sees or advertises dead tools.
 
 | Tool | Required args | Optional | Purpose |
 |---|---|---|---|
@@ -274,9 +275,28 @@ Cross-product tools that let the suite assistant (chat + MCP) read and create wo
 | `search_work_items` | `projectId` | `query`, `limit` (1–50, default 20) | Search work items in a project by name. Returns `{ id, name, sequenceId, state, priority, updatedAt }[]`. |
 | `get_work_item` | `projectId`, `workItemId` | — | Fetch one work item, including its description. Returns the same summary shape plus `description`. |
 | `create_work_item` | `projectId`, `name` | `description`, `priority` (`urgent` \| `high` \| `medium` \| `low` \| `none`) | Create a work item. Plain-text `description` is wrapped in `<p>` automatically; a value already starting with `<` is passed through as-is. An `X-Conqr-On-Behalf-Of` header is sent for future attribution, but ConqrPlane does not yet consume it — writes currently appear as the integration API-key user. Use only after explicit user confirmation. |
-| `get_project_cycles` | `projectId` | — | List a project's cycles (iterations) with `{ id, name, start_date, end_date }`. Use for status questions like "what is in the current cycle". |
+| `update_work_item` | `projectId`, `workItemId` | `name`, `description`, `priority`, `stateId` | Partial update (PATCH) — only the fields passed are changed. Pass a `stateId` from `list_work_item_states` to move the item through the workflow. Refuses an empty patch. |
+| `list_work_item_states` | `projectId` | — | A project's workflow states with `{ id, name, group, default }` (groups: backlog / unstarted / started / completed / cancelled). Use before `update_work_item` and to interpret status. |
+| `get_work_item_comments` | `projectId`, `workItemId` | `limit` (1–50, default 20) | Read an item's comment thread as plain text with `actorId` — resolve authors with `list_conqrplane_members`. |
+| `add_work_item_comment` | `projectId`, `workItemId`, `text` | — | Post a comment (plain text is wrapped in `<p>`). Team-visible — use only when the user asks. |
+| `get_project_cycles` | `projectId` | — | List a project's cycles (iterations) with `{ id, name, start_date, end_date }`. |
+| `list_cycle_work_items` | `projectId`, `cycleId` | `limit` (1–100, default 50) | The work items inside one cycle — answers "what is in the current sprint" end to end. |
+| `list_work_item_labels` | `projectId` | — | Project labels `{ id, name, color }` for interpreting label IDs on items. |
+| `list_conqrplane_members` | — | — | ConqrPlane workspace members `{ id, displayName, email }` for resolving assignee/author IDs. |
 
 Errors from the Plane API (timeouts, 4xx/5xx, or an unconfigured integration) are never thrown through to the transport — each tool catches `PlaneApiError` (and any other failure) and resolves to a structured `{ error: "ConqrPlane request failed (...): ..." }` object instead, so the model can read the message and recover rather than seeing a raw exception.
+
+### Suite integration tools (5)
+
+One-call cross-product workflows between ConqrHub (knowledge) and ConqrPlane (work), backed by the integration layer's typed relationship graph. Agents pass plain page IDs (UUID or slugId) and work-item IDs — URNs are handled server-side. Like the work-item tools, these register only when the Plane integration is configured.
+
+| Tool | Required args | Optional | Purpose |
+|---|---|---|---|
+| `search_suite` | `query` | `limit` (1–30, default 10), `planeProjectId` | Federated search across Hub pages **and** Plane work items, interleaved so neither product dominates. Each hit carries `source` (`conqrhub` \| `conqrplane`) and a deep link when resolvable. |
+| `link_page_to_work_item` | `pageId`, `projectId`, `workItemId` | `relationType` (`specified_by` default \| `implemented_by` \| `documented_by` \| `tested_by` \| `evidenced_by` \| `operationalized_by`) | Create a typed, idempotent edge between a page and a work item. Verifies the work item exists and the caller can edit the page before recording anything. |
+| `get_page_links` | `pageId` | — | Every typed link on a page, with human-readable relation labels, direction-normalised to the page's point of view. |
+| `create_work_item_from_page` | `pageId`, `projectId`, `title` | `description`, `priority`, `relationType` | Create the work item in ConqrPlane **and** link it back to the source page in one call. Partial-failure honest: if the item is created but linking fails, `status` is `created_link_failed` with a warning — never a false success. |
+| `get_page_work_coverage` | `pageId` | — | Traceability: every work item linked to the page with completion state, plus a 0–1 `coverage` ratio. Answers "is the work for this spec done?". |
 
 ---
 
@@ -293,7 +313,10 @@ Every tool re-checks the API key user's permissions on the resource being touche
 | `create_comment`, `update_comment` | Comment permission on the page |
 | `delete_comment` | Comment creator, or space admin |
 | `list_workspace_members` | Returns only members the requester can see (visibility rules) |
-| `list_conqrplane_projects`, `search_work_items`, `get_work_item`, `create_work_item`, `get_project_cycles` | Not CASL-gated — visible only when the Plane integration is configured. `create_work_item` sends an on-behalf-of header for future attribution; until ConqrPlane consumes it, writes appear as the integration API-key user. |
+| ConqrPlane work-item tools | Not CASL-gated — visible only when the Plane integration is configured. Writes (`create_work_item`, `update_work_item`, `add_work_item_comment`) send an on-behalf-of header for future attribution; until ConqrPlane consumes it, writes appear as the integration API-key user. |
+| `search_suite` | Hub results are permission-filtered per user; Plane results are bounded to the workspace's mapped projects (workspace-level, not per-user). |
+| `link_page_to_work_item` | Requires page-level **edit** permission on the page; the work item is verified to exist before the edge is recorded. |
+| `get_page_links`, `get_page_work_coverage`, `create_work_item_from_page` | Require **read** permission on the page (creation also performs a Plane write attributed via a delegated on-behalf-of token). |
 
 A failure surfaces as a tool result with `isError: true` and a human-readable message — never a silent partial success.
 

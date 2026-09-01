@@ -19,7 +19,23 @@ export interface McpContext {
   workspace: Workspace;
 }
 
+const SUITE_INTEGRATION_TOOL_NAMES = new Set([
+  'search_suite',
+  'link_page_to_work_item',
+  'get_page_links',
+  'create_work_item_from_page',
+  'get_page_work_coverage',
+]);
+
 function categorizeTool(name: string): string {
+  if (SUITE_INTEGRATION_TOOL_NAMES.has(name)) return 'Suite integration';
+  if (
+    name.includes('work_item') ||
+    name.includes('conqrplane') ||
+    name === 'get_project_cycles'
+  ) {
+    return 'ConqrPlane';
+  }
   if (
     name.includes('verif') ||
     name === 'submit_for_approval' ||

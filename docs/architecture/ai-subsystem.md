@@ -147,7 +147,7 @@ The client uses `AbortController` to cancel in-flight streams.
 
 ### Tool calling
 
-The chat assistant has access to **20 tools** that can read and write the workspace:
+The chat assistant has access to **57 tools** (40 when the ConqrPlane integration is not configured) that can read and write the workspace — see [`../reference/mcp-tools.md`](../reference/mcp-tools.md) for the authoritative catalogue. Beyond the Hub page/space/comment/attachment/verification tools, this includes 12 ConqrPlane work-management tools (projects, cycles, work items, states, comments, members) and 5 suite-integration tools (federated `search_suite`, typed page↔work-item links, `create_work_item_from_page`, delivery coverage). A sample of the core page tools:
 
 | Tool | Purpose |
 |---|---|
@@ -184,7 +184,7 @@ Exposes the AI Chat tool catalogue to **external AI clients** (Claude Desktop, i
 
 - **Endpoint:** `GET/POST /mcp` (MCP protocol)
 - **Auth:** Bearer API key. Workspace API keys can be issued from Settings → API Management.
-- **Tools:** Identical set to AI Chat (20 tools).
+- **Tools:** Identical set to AI Chat (57 tools; 40 without the ConqrPlane integration).
 - **Workspace toggle:** `workspace.settings.ai.mcp = true`
 
 Use cases:
