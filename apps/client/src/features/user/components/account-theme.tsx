@@ -9,7 +9,6 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { useAtom } from "jotai";
 import { useTranslation } from "react-i18next";
 import { notifications } from "@mantine/notifications";
 import {
@@ -18,14 +17,14 @@ import {
   ConqrThemeKey,
   ConqrThemeOption,
   DEFAULT_CUSTOM_THEME,
-  conqrThemeAtom,
 } from "@/features/user/theme/conqr-theme.ts";
+import { useConqrTheme } from "@/features/user/theme/use-conqr-theme.ts";
 import { validateHexColor } from "@/lib/theme";
 import classes from "./theme-swatch.module.css";
 
 export default function AccountTheme() {
   const { t } = useTranslation();
-  const [pref, setPref] = useAtom(conqrThemeAtom);
+  const [pref, setPref] = useConqrTheme();
 
   return (
     <>

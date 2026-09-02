@@ -1,11 +1,10 @@
 import { ActionIcon, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { IconMoon, IconSun } from "@tabler/icons-react";
-import { useSetAtom } from "jotai";
-import { conqrThemeAtom } from "@/features/user/theme/conqr-theme.ts";
+import { useConqrTheme } from "@/features/user/theme/use-conqr-theme.ts";
 import classes from "./theme-toggle.module.css";
 
 export function ThemeToggle() {
-  const setPref = useSetAtom(conqrThemeAtom);
+  const [, setPref] = useConqrTheme();
   const computedColorScheme = useComputedColorScheme();
 
   return (

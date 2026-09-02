@@ -1,4 +1,9 @@
 import { IWorkspace } from "@/features/workspace/types/workspace.types";
+import type {
+  ConqrCustomTheme,
+  ConqrThemeKey,
+  ConqrThemePreference,
+} from "@/features/user/theme/conqr-theme";
 
 export interface IUser {
   id: string;
@@ -25,6 +30,8 @@ export interface IUser {
   notificationCommentUserMention: boolean; // used for update
   notificationCommentCreated: boolean; // used for update
   notificationCommentResolved: boolean; // used for update
+  theme?: ConqrThemeKey; // used for update
+  themeCustom?: ConqrCustomTheme; // used for update
   hasGeneratedPassword?: boolean;
 }
 
@@ -37,6 +44,8 @@ export interface IUserSettings {
   preferences: {
     fullPageWidth: boolean;
     pageEditMode: string;
+    /* ConqrPlan-style theme, mirrored from the local `conqr-theme-pref` */
+    theme?: ConqrThemePreference;
   };
   notifications?: {
     "page.updated"?: boolean;

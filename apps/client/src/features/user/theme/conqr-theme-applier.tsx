@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { useMantineColorScheme } from "@mantine/core";
 import { conqrThemeAtom, schemeForTheme } from "./conqr-theme.ts";
+import { useProfileThemePreference } from "./use-conqr-theme.ts";
 import { applyHubCustomTheme, clearHubCustomTheme } from "@/lib/theme";
 
 /**
@@ -16,8 +17,19 @@ import { applyHubCustomTheme, clearHubCustomTheme } from "@/lib/theme";
  * Renders nothing; mount once inside MantineProvider.
  */
 export default function ConqrThemeApplier() {
-  const pref = useAtomValue(conqrThemeAtom);
+  const [pref, setPref] = useAtom(conqrThemeAtom);
+  const profileTheme = useProfileThemePreference();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
+
+  // Profile wins over the device-local copy whenever the signed-in user
+  // (re)loads, so the theme follows the user across devices.
+  useEffect(() => {
+    if (!profileTheme?.theme) return;
+    if (JSON.stringify(profileTheme) !== JSON.stringify(pref)) {
+      setPref(profileTheme);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileTheme]);
 
   useEffect(() => {
     const scheme = schemeForTheme(pref);
