@@ -1166,6 +1166,19 @@ Bring ConqrPlan's six-theme model (`packages/constants/src/themes.ts`, `core/the
 - [x] Browser QA: all six options render with swatches; custom light (#3f76ff / #1a1a1a) and custom dark (#7c3aed) apply across header, buttons, toggles; Dark high contrast shows bright hairline borders; preference, cookie (`conqr-theme=dark`) and `<html>` attributes verified (`theme-*.png` in ConqrSuite root).
 - [ ] Commit `feat: ConqrPlan theme picker (contrast variants + custom palette)` and open PR against main.
 
+---
+
+### Task 13: Theme preference on the user profile (added 2026-09-02 at Yahya's request: "save the theme on the user profile too")
+
+Mirror ConqrPlan's `profile.theme`: the theme now lives in two places, the device-local atom (instant, pre-login) and `users.settings.preferences.theme` (follows the user across devices).
+
+- Server: `UpdateUserDto.theme` (six keys) + nested `themeCustom { primary, background, darkPalette }` (hex-validated); `UserService.update` routes it to `UserRepo.setThemePreference`, which writes `{ theme, custom? }` into `settings.preferences.theme` as a jsonb object. Note: binding the JSON as a query parameter stored a jsonb *string*; the value is inlined via `sql.lit(JSON.stringify(...))::jsonb` instead (inputs are validated).
+- Client: `useConqrTheme()` sets the atom and calls `updateUser({ theme, themeCustom })`; `ConqrThemeApplier` copies the profile value into the atom whenever the signed-in user (re)loads. `AccountTheme` and the header sun/moon toggle use the hook. `IUser`/`IUserSettings` typed accordingly.
+
+- [x] Client and server `tsc --noEmit` clean; `nest build` clean.
+- [x] Browser QA: picking Dark then Light high contrast wrote `{"theme": "light-contrast"}` (jsonb object) to `admin@conqr.test`; clearing localStorage and reloading restored the theme from the profile.
+- [ ] Commit `feat: persist theme preference on the user profile` and open PR against main.
+
 ## Self-review notes
 
 - Spec coverage: spec §1→Task 1, §2→Task 2, §3→Task 3, §4→Task 4, §5→Task 5 (narrowed: global/space sidebars were found already tokenized — only the tree remained), §6→Task 6, §7→Task 7, testing→Task 8. Out-of-scope items remain out.

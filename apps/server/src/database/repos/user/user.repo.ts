@@ -205,6 +205,26 @@ export class UserRepo {
     return this.updatePreferenceKey(userId, 'pageEditMode', value);
   }
 
+  /**
+   * Theme preference is an object ({ theme, custom? }). It is inlined as a
+   * JSON text literal and cast to jsonb: bound as a parameter, the driver
+   * ended up storing a jsonb *string* instead of an object. Inputs are
+   * validated (theme key, hex colors, boolean) and sql.lit escapes quotes.
+   */
+  setThemePreference(userId: string, value: Record<string, unknown>) {
+    return this.db
+      .updateTable('users')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object('theme', ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', userId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
   async updateNotificationSetting(
     userId: string,
     settingKey: NotificationSettingKey,
