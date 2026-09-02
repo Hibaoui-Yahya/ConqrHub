@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Button, FileButton, Group, Popover, Tabs, Text } from "@mantine/core";
-import { IconPhoto, IconTrash, IconUpload } from "@tabler/icons-react";
+import { Button } from "@mantine/core";
+import { IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { notifications } from "@mantine/notifications";
 import { ISpace } from "@/features/space/types/space.types.ts";
@@ -10,12 +10,11 @@ import {
   removeSpaceCover,
 } from "@/features/attachments/services/attachment-service.ts";
 import {
-  STATIC_COVER_KEYS,
   defaultCoverKey,
   getSpaceCoverUrl,
   isStaticCover,
-  staticCoverUrl,
 } from "@/features/space/lib/space-cover.ts";
+import CoverPickerPopover from "./cover-picker-popover.tsx";
 import classes from "./space-cover-picker.module.css";
 
 interface SpaceCoverPickerProps {
@@ -26,9 +25,9 @@ interface SpaceCoverPickerProps {
 }
 
 /**
- * Plane's ImagePickerPopover (Images | Upload tabs) over a wide cover
- * preview, as used in project settings. Stock covers apply immediately;
- * uploads go through the `space-cover` attachment type.
+ * Space-settings cover row: wide preview with Plane's picker popover over
+ * its corner. Stock covers apply immediately; uploads go through the
+ * `space-cover` attachment type; Remove falls back to the default cover.
  */
 export default function SpaceCoverPicker({
   space,
@@ -36,8 +35,6 @@ export default function SpaceCoverPicker({
   onChanged,
 }: SpaceCoverPickerProps) {
   const { t } = useTranslation();
-  const [opened, setOpened] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const updateSpaceMutation = useUpdateSpaceMutation();
 
@@ -47,13 +44,7 @@ export default function SpaceCoverPicker({
     return null; // uploaded cover
   }, [space.coverImage, space.id]);
 
-  const filePreview = useMemo(
-    () => (file ? URL.createObjectURL(file) : null),
-    [file],
-  );
-
   const pickStatic = async (key: string) => {
-    if (busy) return;
     setBusy(true);
     try {
       await updateSpaceMutation.mutateAsync({
@@ -61,7 +52,6 @@ export default function SpaceCoverPicker({
         coverImage: key,
       });
       await onChanged();
-      setOpened(false);
     } catch {
       // mutation already toasts
     } finally {
@@ -69,14 +59,11 @@ export default function SpaceCoverPicker({
     }
   };
 
-  const upload = async () => {
-    if (!file) return;
+  const upload = async (file: File) => {
     setBusy(true);
     try {
       await uploadSpaceCover(file, space.id);
       await onChanged();
-      setFile(null);
-      setOpened(false);
       notifications.show({ message: t("Cover updated") });
     } catch (err: any) {
       notifications.show({
@@ -126,105 +113,12 @@ export default function SpaceCoverPicker({
               {t("Remove")}
             </Button>
           )}
-
-          <Popover
-            opened={opened}
-            onChange={setOpened}
-            position="top-end"
-            width={380}
-            shadow="none"
-            withinPortal
-          >
-            <Popover.Target>
-              <Button
-                size="xs"
-                variant="white"
-                color="dark"
-                leftSection={<IconPhoto size={14} />}
-                onClick={() => setOpened((o) => !o)}
-              >
-                {t("Change cover")}
-              </Button>
-            </Popover.Target>
-            <Popover.Dropdown className={classes.dropdown}>
-              <Tabs defaultValue="images">
-                <Tabs.List>
-                  <Tabs.Tab value="images">{t("Images")}</Tabs.Tab>
-                  <Tabs.Tab value="upload">{t("Upload")}</Tabs.Tab>
-                </Tabs.List>
-
-                <Tabs.Panel value="images">
-                  <div className={classes.grid}>
-                    {STATIC_COVER_KEYS.map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-label={key}
-                        aria-pressed={selectedKey === key}
-                        className={
-                          selectedKey === key
-                            ? `${classes.tile} ${classes.tileSelected}`
-                            : classes.tile
-                        }
-                        onClick={() => pickStatic(key)}
-                        disabled={busy}
-                      >
-                        <img src={staticCoverUrl(key)} alt="" loading="lazy" />
-                      </button>
-                    ))}
-                  </div>
-                </Tabs.Panel>
-
-                <Tabs.Panel value="upload">
-                  <FileButton
-                    onChange={setFile}
-                    accept="image/png,image/jpeg"
-                    disabled={busy}
-                  >
-                    {(props) => (
-                      <button
-                        type="button"
-                        className={classes.dropzone}
-                        {...props}
-                      >
-                        {filePreview ? (
-                          <img src={filePreview} alt="" />
-                        ) : (
-                          <>
-                            <IconUpload size={18} />
-                            <Text size="sm">
-                              {t("Click to upload an image")}
-                            </Text>
-                            <span className={classes.hint}>
-                              {t("JPG or PNG, up to 10 MB")}
-                            </span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </FileButton>
-                  <Group justify="flex-end" mt="sm" gap="xs">
-                    <Button
-                      size="xs"
-                      variant="default"
-                      onClick={() => setFile(null)}
-                      disabled={!file || busy}
-                    >
-                      {t("Clear")}
-                    </Button>
-                    <Button
-                      size="xs"
-                      onClick={upload}
-                      disabled={!file}
-                      loading={busy}
-                    >
-                      {t("Upload and save")}
-                    </Button>
-                  </Group>
-                </Tabs.Panel>
-              </Tabs>
-            </Popover.Dropdown>
-          </Popover>
+          <CoverPickerPopover
+            selectedKey={selectedKey}
+            onPickStatic={pickStatic}
+            onUpload={upload}
+            busy={busy}
+          />
         </div>
       )}
     </div>

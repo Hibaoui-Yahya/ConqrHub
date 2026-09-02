@@ -112,6 +112,7 @@ export class SpaceService {
         creatorId: userId,
         workspaceId: workspaceId,
         slug: createSpaceDto.slug,
+        coverImage: createSpaceDto.coverImage ?? null,
       },
       trx,
     );

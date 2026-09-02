@@ -1136,6 +1136,20 @@ Replace the SpaceCard's gradient banner with Plane's real cover-photo banner (`p
 - [x] Visual QA (2026-09-02): card banners light + dark on home; settings picker pick-static / upload / remove all verified against DB + local storage (`cover-*.png` in ConqrSuite root).
 - [x] Commit as `feat: Plane-style space cover banners (stock covers + upload picker)`.
 
+---
+
+### Task 11: Second parity batch (added 2026-09-02 at Yahya's request: "make more adjustments")
+
+Three items the spec had deferred, now brought over from ConqrPlan:
+
+1. **Space overview header** (`project/overview/root.tsx` identity block) on space home: 40px logo tile, 18px name, "slug · Created N ago" meta, description or Plane's italic placeholder, and a MEMBERS (N) chip row. Files: `features/space/components/space-overview-header.tsx` + `.module.css`; wired in `pages/space/space-home.tsx`.
+2. **Create-space modal cover header** (`project/create/header.tsx`): random stock cover on open, "Change cover" picker (stock only, no upload before the space exists), `coverImage` sent on create. Server: `CreateSpaceDto.coverImage` (validator moved here; `UpdateSpaceDto` inherits it) and `SpaceService.create()` persists it. The picker popover was extracted to `cover-picker-popover.tsx` and is shared with the settings `SpaceCoverPicker`.
+3. **Spaces page Gallery | List toggle** (`project/card-list.tsx` 3-column gallery): `SegmentedControl` persisted in localStorage (`spaces-layout`, default gallery), new `spaces-page/all-spaces-grid.tsx` reusing `SpaceCard` + `StarButton` with the same search and pagination.
+
+- [x] Client `npx tsc --noEmit` clean; server watch compiles with 0 errors.
+- [x] Browser QA light + dark: gallery/list toggle, create modal with cover (created `Cover QA` -> `static:image_28` in DB), overview header with member chips (`parity2-*.png` in ConqrSuite root).
+- [ ] Commit `feat: Plane-style space overview header, create-space cover, gallery layout` and open PR against main.
+
 ## Self-review notes
 
 - Spec coverage: spec §1→Task 1, §2→Task 2, §3→Task 3, §4→Task 4, §5→Task 5 (narrowed: global/space sidebars were found already tokenized — only the tree remained), §6→Task 6, §7→Task 7, testing→Task 8. Out-of-scope items remain out.
