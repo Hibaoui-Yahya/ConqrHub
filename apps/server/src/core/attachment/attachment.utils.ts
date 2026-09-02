@@ -69,6 +69,8 @@ export function getAttachmentFolderPath(
       return `${workspaceId}/workspace-logos`;
     case AttachmentType.SpaceIcon:
       return `${workspaceId}/space-logos`;
+    case AttachmentType.SpaceCover:
+      return `${workspaceId}/space-covers`;
     case AttachmentType.File:
       return `${workspaceId}/files`;
     case AttachmentType.Chat:
@@ -79,3 +81,12 @@ export function getAttachmentFolderPath(
 }
 
 export const validAttachmentTypes = Object.values(AttachmentType);
+
+/**
+ * Image refs that are NOT files in our storage: absolute URLs and the
+ * `static:image_N` keys pointing at the client's bundled stock covers.
+ */
+export function isExternalImageRef(ref: string): boolean {
+  const v = ref.toLowerCase();
+  return v.startsWith('http') || v.startsWith('static:');
+}

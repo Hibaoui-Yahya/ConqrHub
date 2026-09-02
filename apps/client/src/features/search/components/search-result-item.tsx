@@ -3,11 +3,11 @@ import {
   Group,
   Center,
   Text,
-  Badge,
   ActionIcon,
   Tooltip,
   getDefaultZIndex,
 } from "@mantine/core";
+import classes from "./search-spotlight.module.css";
 import { Spotlight } from "@mantine/spotlight";
 import { Link } from "react-router-dom";
 import { IconFile, IconDownload } from "@tabler/icons-react";
@@ -63,7 +63,9 @@ export function SearchResultItem({
           </Center>
 
           <div style={{ flex: 1 }}>
-            <Text>{attachmentResult.fileName}</Text>
+            <Text fz={13} fw={500}>
+              {attachmentResult.fileName}
+            </Text>
             <Text size="xs" opacity={0.6}>
               {attachmentResult.space.name} • {attachmentResult.page.title}
             </Text>
@@ -117,12 +119,12 @@ export function SearchResultItem({
           <Center>{getPageIcon(pageResult?.icon)}</Center>
 
           <div style={{ flex: 1 }}>
-            <Text>{pageResult.title}</Text>
+            <Text fz={13} fw={500}>
+              {pageResult.title}
+            </Text>
 
             {showSpace && pageResult.space && (
-              <Badge variant="light" size="xs" color="gray">
-                {pageResult.space.name}
-              </Badge>
+              <span className={classes.pill}>{pageResult.space.name}</span>
             )}
 
             {pageResult?.highlight && (

@@ -7,11 +7,18 @@ export class AttachmentInfoDto {
   attachmentId: string;
 }
 
+export class PageAttachmentsDto {
+  @IsNotEmpty()
+  @IsUUID()
+  pageId: string;
+}
+
 export class RemoveIconDto {
   @IsEnum(AttachmentType)
   @IsIn([
     AttachmentType.Avatar,
     AttachmentType.SpaceIcon,
+    AttachmentType.SpaceCover,
     AttachmentType.WorkspaceIcon,
   ])
   @IsNotEmpty()

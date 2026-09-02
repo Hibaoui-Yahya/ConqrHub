@@ -48,6 +48,27 @@ export class AttachmentRepo {
       .executeTakeFirst();
   }
 
+  async findByPageId(
+    pageId: string,
+    workspaceId: string,
+    opts?: {
+      trx?: KyselyTransaction;
+      limit?: number;
+    },
+  ): Promise<Attachment[]> {
+    const db = dbOrTx(this.db, opts?.trx);
+
+    return db
+      .selectFrom('attachments')
+      .select(this.baseFields)
+      .where('pageId', '=', pageId)
+      .where('workspaceId', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .orderBy('createdAt', 'desc')
+      .limit(opts?.limit ?? 100)
+      .execute();
+  }
+
   async findByIdWithContent(
     attachmentId: string,
     workspaceId: string,

@@ -11,6 +11,7 @@ import {
   IconList,
   IconMarkdown,
   IconMessage,
+  IconPaperclip,
   IconPrinter,
   IconStar,
   IconStarFilled,
@@ -125,6 +126,17 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           onClick={() => toggleAside("toc")}
         >
           <IconList size={20} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Tooltip label={t("Attachments")} openDelay={250} withArrow>
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          onClick={() => toggleAside("attachments")}
+          aria-label={t("Attachments")}
+        >
+          <IconPaperclip size={20} stroke={2} />
         </ActionIcon>
       </Tooltip>
 

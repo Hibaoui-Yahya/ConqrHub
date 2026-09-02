@@ -23,6 +23,15 @@ export default defineConfig(({ mode }) => {
     SERVICE_APP_URL,
   } = loadEnv(mode, envPath, "");
 
+  // Dev proxy target. `localhost` resolves to ::1 first on Windows while the
+  // Nest server binds 0.0.0.0 (IPv4) — Node's happy-eyeballs fallback then
+  // intermittently fails under parallel request bursts (ENOBUFS / 502s).
+  // Pinning the proxy to 127.0.0.1 sidesteps DNS entirely.
+  const proxyTarget = (APP_URL || "http://localhost:3000").replace(
+    "://localhost",
+    "://127.0.0.1",
+  );
+
   return {
     define: {
       "process.env": {
@@ -67,16 +76,16 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": {
-          target: APP_URL,
+          target: proxyTarget,
           changeOrigin: false,
         },
         "/socket.io": {
-          target: APP_URL,
+          target: proxyTarget,
           ws: true,
           rewriteWsOrigin: true,
         },
         "/collab": {
-          target: APP_URL,
+          target: proxyTarget,
           ws: true,
           rewriteWsOrigin: true,
         },

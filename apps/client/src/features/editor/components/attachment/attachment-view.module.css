@@ -1,0 +1,51 @@
+/* Plane attachment-row anatomy for the editor node: hairline border,
+   kind icon, 13px name, dot-separated size in tertiary. */
+.row {
+    display: flex;
+    align-items: center;
+    gap: rem(8px);
+    height: rem(40px);
+    padding: 0 rem(10px);
+    border: 0.5px solid var(--border-subtle);
+    border-radius: var(--mantine-radius-md);
+    background-color: var(--bg-surface-1);
+    cursor: pointer;
+
+    @mixin hover {
+        background-color: var(--bg-layer-transparent-hover);
+    }
+}
+
+.kindIcon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--txt-icon-secondary);
+}
+
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: rem(13px);
+    font-weight: 500;
+    color: var(--txt-primary);
+}
+
+.size {
+    flex-shrink: 0;
+    font-size: rem(12px);
+    color: var(--txt-tertiary);
+    white-space: nowrap;
+
+    &::before {
+        content: "·";
+        margin-right: rem(8px);
+        color: var(--txt-tertiary);
+    }
+}
+
+.spacer {
+    flex: 1;
+}

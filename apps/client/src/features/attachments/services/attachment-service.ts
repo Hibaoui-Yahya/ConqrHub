@@ -3,7 +3,17 @@ import loadImage from "blueimp-load-image";
 import {
   AvatarIconType,
   IAttachment,
+  IPageAttachmentsResponse,
 } from "@/features/attachments/types/attachment.types.ts";
+
+export async function getPageAttachments(
+  pageId: string,
+): Promise<IPageAttachmentsResponse> {
+  const req = await api.post<IPageAttachmentsResponse>("/attachments/list", {
+    pageId,
+  });
+  return req.data;
+}
 
 async function compressAndResizeIcon(
   file: File,
@@ -80,6 +90,52 @@ export async function uploadWorkspaceIcon(file: File): Promise<IAttachment> {
   return uploadIcon(file, AvatarIconType.WORKSPACE_ICON);
 }
 
+/* Covers are wide banners, not 300px icons: cap at 1600px, JPEG 0.85. */
+async function compressCover(file: File): Promise<File> {
+  const { image: canvas } = await loadImage(file, {
+    maxWidth: 1600,
+    maxHeight: 1600,
+    canvas: true,
+    orientation: true,
+    imageSmoothingQuality: "high",
+  });
+  const ctx = (canvas as HTMLCanvasElement).getContext("2d")!;
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "source-over";
+
+  return new Promise<File>((resolve, reject) => {
+    (canvas as HTMLCanvasElement).toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Failed to compress image"));
+          return;
+        }
+        const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+        resolve(new File([blob], name, { type: "image/jpeg" }));
+      },
+      "image/jpeg",
+      0.85,
+    );
+  });
+}
+
+export async function uploadSpaceCover(
+  file: File,
+  spaceId: string,
+): Promise<IAttachment> {
+  const processed = await compressCover(file);
+  const formData = new FormData();
+  formData.append("type", AvatarIconType.SPACE_COVER);
+  formData.append("spaceId", spaceId);
+  formData.append("image", processed);
+
+  return await api.post("/attachments/upload-image", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+}
+
 async function removeIcon(
   type: AvatarIconType,
   spaceId?: string,
@@ -103,4 +159,8 @@ export async function removeSpaceIcon(spaceId: string): Promise<void> {
 
 export async function removeWorkspaceIcon(): Promise<void> {
   await removeIcon(AvatarIconType.WORKSPACE_ICON);
+}
+
+export async function removeSpaceCover(spaceId: string): Promise<void> {
+  await removeIcon(AvatarIconType.SPACE_COVER, spaceId);
 }

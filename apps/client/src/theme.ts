@@ -134,10 +134,20 @@ export const theme = createTheme({
       vars: (theme, props) => ({
         root: {
           ...(props.color === "dark" && {
-            "--tabs-color": "var(--mantine-color-dark-default)",
+            // Plane: active-tab underline in text-primary, not accent
+            "--tabs-color": "var(--txt-primary)",
           }),
         },
       }),
+      styles: {
+        tab: {
+          fontSize: "13px",
+          fontWeight: 500,
+          color: "var(--txt-secondary)",
+          paddingTop: "8px",
+          paddingBottom: "8px",
+        },
+      },
     }),
     // Surface radii matched to Plane: cards/panels = rounded-lg (8px), modals =
     // rounded-xl (12px), dropdown menus/popovers = rounded-md (6px), tooltips =

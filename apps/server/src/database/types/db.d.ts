@@ -752,6 +752,7 @@ export interface SpaceMembers {
 }
 
 export interface Spaces {
+  coverImage: string | null;
   createdAt: Generated<Timestamp>;
   creatorId: string | null;
   defaultRole: Generated<string>;

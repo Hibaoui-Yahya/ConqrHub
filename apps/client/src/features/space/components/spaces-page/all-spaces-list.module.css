@@ -3,8 +3,27 @@
   color: inherit;
   display: flex;
   width: 100%;
-  
+
   &:hover {
     text-decoration: none;
   }
+}
+
+/* Plane list idiom: 11px uppercase tertiary header, 13px rows, subtle
+   dividers, translucent hover. */
+.table {
+  --table-border-color: var(--border-subtle);
+  --table-hover-color: var(--bg-layer-transparent-hover);
+}
+
+.th {
+  font-size: rem(11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--txt-tertiary);
+}
+
+.td {
+  font-size: rem(13px);
 }

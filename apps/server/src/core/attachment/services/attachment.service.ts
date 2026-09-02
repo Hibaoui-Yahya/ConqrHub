@@ -12,6 +12,7 @@ import {
   PreparedFile,
   prepareFile,
   validateFileType,
+  isExternalImageRef,
 } from '../attachment.utils';
 import { v4 as uuid4, v7 as uuid7 } from 'uuid';
 import { AttachmentRepo } from '@docmost/db/repos/attachment/attachment.repo';
@@ -136,7 +137,8 @@ export class AttachmentService {
       // delete uploaded file on db write failure so storage doesn't leak
       this.logger.error(err);
       await this.deleteRedundantFile(filePath);
-      throw err instanceof BadRequestException || err instanceof NotFoundException
+      throw err instanceof BadRequestException ||
+        err instanceof NotFoundException
         ? err
         : new BadRequestException('Failed to upload file');
     }
@@ -149,7 +151,8 @@ export class AttachmentService {
     type:
       | AttachmentType.Avatar
       | AttachmentType.WorkspaceIcon
-      | AttachmentType.SpaceIcon,
+      | AttachmentType.SpaceIcon
+      | AttachmentType.SpaceCover,
     userId: string,
     workspaceId: string,
     spaceId?: string,
@@ -215,6 +218,19 @@ export class AttachmentService {
             workspaceId,
             trx,
           );
+        } else if (type === AttachmentType.SpaceCover && spaceId) {
+          const space = await this.spaceRepo.findById(spaceId, workspaceId, {
+            trx,
+          });
+
+          oldFileName = space.coverImage;
+
+          await this.spaceRepo.updateSpace(
+            { coverImage: preparedFile.fileName },
+            spaceId,
+            workspaceId,
+            trx,
+          );
         } else {
           throw new BadRequestException(`Image upload aborted.`);
         }
@@ -225,8 +241,8 @@ export class AttachmentService {
       throw new BadRequestException('Failed to upload image');
     }
 
-    if (oldFileName && !oldFileName.toLowerCase().startsWith('http')) {
-      // delete old avatar or logo
+    if (oldFileName && !isExternalImageRef(oldFileName)) {
+      // delete old avatar, logo or cover
       const oldFilePath =
         getAttachmentFolderPath(type, workspaceId) + '/' + oldFileName;
       await this.deleteRedundantFile(oldFilePath);
@@ -455,6 +471,25 @@ export class AttachmentService {
     }
 
     await this.spaceRepo.updateSpace({ logo: null }, spaceId, workspaceId);
+  }
+
+  async removeSpaceCover(spaceId: string, workspaceId: string) {
+    const space = await this.spaceRepo.findById(spaceId, workspaceId);
+
+    if (!space) {
+      throw new NotFoundException('Space not found');
+    }
+
+    if (space.coverImage && !isExternalImageRef(space.coverImage)) {
+      const filePath = `${getAttachmentFolderPath(AttachmentType.SpaceCover, workspaceId)}/${space.coverImage}`;
+      await this.deleteRedundantFile(filePath);
+    }
+
+    await this.spaceRepo.updateSpace(
+      { coverImage: null },
+      spaceId,
+      workspaceId,
+    );
   }
 
   async removeWorkspaceIcon(workspace: Workspace) {
