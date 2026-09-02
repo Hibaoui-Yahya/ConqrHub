@@ -32,13 +32,6 @@ import {
   Watchers,
   Audit as _Audit,
   Templates,
-  Meetings,
-  MeetingSegments,
-  MeetingTranscripts,
-  MeetingDocuments,
-  MeetingActionProposals,
-  MeetingProcessingEvents,
-  MeetingTemplates,
   McpOauthClients,
   McpOauthRefreshTokens,
   IntegrationRelationships,
@@ -59,10 +52,7 @@ export type UpdatableAiChat = Updateable<Omit<AiChats, 'id'>>;
 // full-text search. It is omitted from the public type so it never leaks
 // into HTTP responses or the chat history fed to the language model.
 export type AiChatMessage = Omit<Selectable<AiChatMessages>, 'tsv'>;
-export type InsertableAiChatMessage = Omit<
-  Insertable<AiChatMessages>,
-  'tsv'
->;
+export type InsertableAiChatMessage = Omit<Insertable<AiChatMessages>, 'tsv'>;
 
 // Workspace
 export type Workspace = Selectable<Workspaces>;
@@ -244,7 +234,9 @@ export type UpdatablePagePermission = Updateable<Omit<_PagePermissions, 'id'>>;
 // Page Verification
 export type PageVerification = Selectable<_PageVerifications>;
 export type InsertablePageVerification = Insertable<_PageVerifications>;
-export type UpdatablePageVerification = Updateable<Omit<_PageVerifications, 'id'>>;
+export type UpdatablePageVerification = Updateable<
+  Omit<_PageVerifications, 'id'>
+>;
 
 // Page Verifier
 export type PageVerifier = Selectable<_PageVerifiers>;
@@ -264,43 +256,3 @@ export type UpdatableAudit = Updateable<Omit<_Audit, 'id'>>;
 export type Template = Selectable<Templates>;
 export type InsertableTemplate = Insertable<Templates>;
 export type UpdatableTemplate = Updateable<Omit<Templates, 'id'>>;
-
-// Meeting
-export type Meeting = Selectable<Meetings>;
-export type InsertableMeeting = Insertable<Meetings>;
-export type UpdatableMeeting = Updateable<Omit<Meetings, 'id'>>;
-
-// Meeting Segment
-export type MeetingSegment = Selectable<MeetingSegments>;
-export type InsertableMeetingSegment = Insertable<MeetingSegments>;
-export type UpdatableMeetingSegment = Updateable<Omit<MeetingSegments, 'id'>>;
-
-// Meeting Transcript
-export type MeetingTranscript = Selectable<MeetingTranscripts>;
-export type InsertableMeetingTranscript = Insertable<MeetingTranscripts>;
-export type UpdatableMeetingTranscript = Updateable<
-  Omit<MeetingTranscripts, 'id'>
->;
-
-// Meeting Document
-export type MeetingDocument = Selectable<MeetingDocuments>;
-export type InsertableMeetingDocument = Insertable<MeetingDocuments>;
-export type UpdatableMeetingDocument = Updateable<Omit<MeetingDocuments, 'id'>>;
-
-// Meeting Action Proposal
-export type MeetingActionProposal = Selectable<MeetingActionProposals>;
-export type InsertableMeetingActionProposal =
-  Insertable<MeetingActionProposals>;
-export type UpdatableMeetingActionProposal = Updateable<
-  Omit<MeetingActionProposals, 'id'>
->;
-
-// Meeting Processing Event
-export type MeetingProcessingEvent = Selectable<MeetingProcessingEvents>;
-export type InsertableMeetingProcessingEvent =
-  Insertable<MeetingProcessingEvents>;
-
-// Meeting Template
-export type MeetingTemplate = Selectable<MeetingTemplates>;
-export type InsertableMeetingTemplate = Insertable<MeetingTemplates>;
-export type UpdatableMeetingTemplate = Updateable<Omit<MeetingTemplates, 'id'>>;

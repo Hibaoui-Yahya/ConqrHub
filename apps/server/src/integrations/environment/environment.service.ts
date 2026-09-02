@@ -310,58 +310,15 @@ export class EnvironmentService {
       // Default: enabled when a Mistral key is configured.
       return Boolean(this.configService.get<string>('MISTRAL_API_KEY'));
     }
-    return !['false', '0', 'no', 'off'].includes(String(raw).trim().toLowerCase());
+    return !['false', '0', 'no', 'off'].includes(
+      String(raw).trim().toLowerCase(),
+    );
   }
 
   getAiSttModel(): string {
     return (
-      this.configService.get<string>('AI_STT_MODEL') ||
-      'voxtral-mini-latest'
+      this.configService.get<string>('AI_STT_MODEL') || 'voxtral-mini-latest'
     );
-  }
-
-  getSpeechmaticsApiKey(): string | undefined {
-    return this.configService.get<string>('SPEECHMATICS_API_KEY');
-  }
-
-  getSpeechmaticsRegion(): string {
-    const region = (
-      this.configService.get<string>('SPEECHMATICS_REGION') || 'eu1'
-    ).toLowerCase();
-    return ['eu1', 'us1', 'au1'].includes(region) ? region : 'eu1';
-  }
-
-  getSpeechmaticsOperatingPoint(): 'standard' | 'enhanced' {
-    const op = (
-      this.configService.get<string>('SPEECHMATICS_OPERATING_POINT') ||
-      'enhanced'
-    ).toLowerCase();
-    return op === 'standard' ? 'standard' : 'enhanced';
-  }
-
-  getMeetingWebhookBaseUrl(): string | undefined {
-    return (
-      this.configService.get<string>('MEETING_WEBHOOK_BASE_URL') ||
-      this.configService.get<string>('APP_URL')
-    );
-  }
-
-  getMeetingUploadSizeLimit(): number {
-    const raw = this.configService.get<string>('MEETING_UPLOAD_SIZE_LIMIT');
-    const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 512 * 1024 * 1024;
-  }
-
-  getMeetingAudioRetentionDays(): number {
-    const raw = this.configService.get<string>('MEETING_AUDIO_RETENTION_DAYS');
-    const parsed = raw ? Number.parseInt(raw, 10) : 0;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  }
-
-  getMeetingBatchTimeoutMinutes(): number {
-    const raw = this.configService.get<string>('MEETING_BATCH_TIMEOUT_MINUTES');
-    const parsed = raw ? Number.parseInt(raw, 10) : 45;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 45;
   }
 
   getFfmpegPath(): string | undefined {
@@ -540,8 +497,8 @@ export class EnvironmentService {
   isOidcEnabled(): boolean {
     return Boolean(
       this.getOidcIssuerUrl() &&
-        this.getOidcClientId() &&
-        this.getOidcClientSecret(),
+      this.getOidcClientId() &&
+      this.getOidcClientSecret(),
     );
   }
 }

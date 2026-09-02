@@ -3,7 +3,6 @@ import { Text, Tooltip } from "@mantine/core";
 import {
   IconHome,
   IconLayoutGrid,
-  IconMicrophone,
   IconSettings,
   IconSparkles,
   IconStar,
@@ -48,7 +47,6 @@ const TOP_LEVEL: [string, Crumb][] = [
   ["/home", { label: "Home", icon: IconHome }],
   ["/spaces", { label: "Spaces", icon: IconLayoutGrid }],
   ["/favorites", { label: "Favorites", icon: IconStar }],
-  ["/meetings", { label: "Meetings", icon: IconMicrophone }],
   ["/ai", { label: "AI Chat", icon: IconSparkles }],
 ];
 

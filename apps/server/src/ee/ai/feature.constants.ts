@@ -10,8 +10,7 @@ export type AiFeature =
   | 'search'
   | 'chat'
   | 'mcp'
-  | 'stt'
-  | 'meeting';
+  | 'stt';
 
 export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   generative: true,
@@ -20,7 +19,6 @@ export const AI_FEATURE_DEFAULTS: Record<AiFeature, boolean> = {
   chat: true,
   mcp: false,
   stt: true,
-  meeting: true,
 };
 
 export const AI_FEATURE_KEY = 'aiFeature';

@@ -249,14 +249,6 @@ export class WorkspaceRepo {
     return this.updateSettingsSection(workspaceId, 'ai', 'stt', value, trx);
   }
 
-  setAiMeeting(
-    workspaceId: string,
-    value: boolean,
-    trx?: KyselyTransaction,
-  ) {
-    return this.updateSettingsSection(workspaceId, 'ai', 'meeting', value, trx);
-  }
-
   // sharing.*
   setSharingDisabled(
     workspaceId: string,
