@@ -24,7 +24,7 @@ const toHtml = (text?: string): string | undefined =>
 export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'update_work_item';
   readonly description =
-    'Update a ConqrPlan work item: rename it, edit its description, change priority, or move it to another state (pass a stateId from list_work_item_states). Only send the fields you want to change. Use only when the user explicitly asks.';
+    'Update a ConqrPlan work item: rename it, edit its description, change priority, move it to another state (stateId from list_work_item_states), or set its estimate (estimatePointId from list_estimate_points). Only send the fields you want to change. Use only when the user explicitly asks.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
@@ -35,6 +35,11 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
       .string()
       .optional()
       .describe('Target state ID (from list_work_item_states)'),
+    estimatePointId: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Estimate point ID (from list_estimate_points); null clears the estimate'),
   });
   constructor(
     private readonly plane: PlaneClientService,
@@ -51,6 +56,7 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
       description?: string;
       priority?: string;
       stateId?: string;
+      estimatePointId?: string | null;
     },
     ctx: ChatToolContext,
   ) {
@@ -58,9 +64,10 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
       args.name === undefined &&
       args.description === undefined &&
       args.priority === undefined &&
-      args.stateId === undefined
+      args.stateId === undefined &&
+      args.estimatePointId === undefined
     ) {
-      return { error: 'Nothing to update — pass at least one of name, description, priority, stateId.' };
+      return { error: 'Nothing to update — pass at least one of name, description, priority, stateId, estimatePointId.' };
     }
     try {
       const w = await this.plane.updateWorkItem(
@@ -71,6 +78,9 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
           description_html: toHtml(args.description),
           priority: args.priority,
           state: args.stateId,
+          ...(args.estimatePointId !== undefined
+            ? { estimate_point: args.estimatePointId }
+            : {}),
         },
         { onBehalfOf: ctx.user.id },
       );
@@ -216,6 +226,37 @@ export class ListCycleWorkItemsTool implements ChatTool, OnModuleInit {
 }
 
 @Injectable()
+export class ListEstimatePointsTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_estimate_points';
+  readonly description =
+    'List a ConqrPlan project\'s estimate systems and their points (e.g. Fibonacci 1/2/3/5/8) with IDs. Use to resolve a work item\'s estimatePointId to a value, or before setting an estimate via update_work_item. Empty when the project has no estimate system.';
+  readonly parameters = z.object({ projectId: z.string() });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly registry: ChatToolRegistry,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(args: { projectId: string }, _ctx: ChatToolContext) {
+    try {
+      const estimates = await this.plane.listEstimates(args.projectId);
+      return estimates.map((e) => ({
+        id: e.id,
+        name: e.name,
+        type: e.type ?? null,
+        points: (e.points ?? [])
+          .slice()
+          .sort((a, b) => (a.key ?? 0) - (b.key ?? 0))
+          .map((p) => ({ id: p.id, value: p.value })),
+      }));
+    } catch (err) {
+      return toolError(err);
+    }
+  }
+}
+
+@Injectable()
 export class ListWorkItemLabelsTool implements ChatTool, OnModuleInit {
   readonly name = 'list_work_item_labels';
   readonly description =
@@ -282,6 +323,7 @@ export const PLANE_WORK_MANAGEMENT_TOOLS = [
   GetWorkItemCommentsTool,
   AddWorkItemCommentTool,
   ListCycleWorkItemsTool,
+  ListEstimatePointsTool,
   ListWorkItemLabelsTool,
   ListConqrPlanMembersTool,
 ];

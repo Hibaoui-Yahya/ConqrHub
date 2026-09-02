@@ -12,9 +12,17 @@ export interface PlaneWorkItem {
   labels?: string[];
   project?: string;
   sequence_id?: number;
+  estimate_point?: string | null;
   updated_at?: string;
   completed_at?: string | null;
   archived_at?: string | null;
+}
+
+export interface PlaneEstimate {
+  id: string;
+  name: string;
+  type?: string;
+  points?: { id: string; key: number; value: string }[];
 }
 
 export interface PlaneLabel {
@@ -252,6 +260,7 @@ export class PlaneClientService {
       priority?: string;
       state?: string;
       assignees?: string[];
+      estimate_point?: string | null;
     },
     opts?: { workspaceSlug?: string; onBehalfOf?: string },
   ): Promise<PlaneWorkItem> {
@@ -314,6 +323,18 @@ export class PlaneClientService {
     const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneWorkItem[] } | PlaneWorkItem[]>(
       `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`,
+    );
+    return Array.isArray(res) ? res : (res.results ?? []);
+  }
+
+  /** List a project's estimate systems with their points (estimate values). */
+  async listEstimates(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<PlaneEstimate[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneEstimate[] } | PlaneEstimate[]>(
+      `/workspaces/${slug}/projects/${projectId}/estimates/`,
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
