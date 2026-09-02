@@ -90,7 +90,15 @@ export class WorkspaceService {
   async getWorkspacePublicData(workspaceId: string) {
     const workspace = await this.db
       .selectFrom('workspaces')
-      .select(['id', 'name', 'logo', 'hostname', 'enforceSso', 'licenseKey', 'plan'])
+      .select([
+        'id',
+        'name',
+        'logo',
+        'hostname',
+        'enforceSso',
+        'licenseKey',
+        'plan',
+      ])
       .select((eb) =>
         jsonArrayFrom(
           eb
@@ -344,10 +352,10 @@ export class WorkspaceService {
       }
 
       if (typeof updateWorkspaceDto.mcpEnabled !== 'undefined') {
-        if (!this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)) {
-          throw new ForbiddenException(
-            'This feature requires a valid license',
-          );
+        if (
+          !this.licenseCheckService.hasFeature(ws.licenseKey, 'mcp', ws.plan)
+        ) {
+          throw new ForbiddenException('This feature requires a valid license');
         }
       }
 
@@ -357,10 +365,14 @@ export class WorkspaceService {
         typeof updateWorkspaceDto.restrictApiToAdmins !== 'undefined' ||
         typeof updateWorkspaceDto.allowMemberTemplates !== 'undefined'
       ) {
-        if (!this.licenseCheckService.hasFeature(ws.licenseKey, Feature.SECURITY_SETTINGS, ws.plan)) {
-          throw new ForbiddenException(
-            'This feature requires a valid license',
-          );
+        if (
+          !this.licenseCheckService.hasFeature(
+            ws.licenseKey,
+            Feature.SECURITY_SETTINGS,
+            ws.plan,
+          )
+        ) {
+          throw new ForbiddenException('This feature requires a valid license');
         }
       }
 
@@ -496,19 +508,6 @@ export class WorkspaceService {
         );
       }
 
-      if (typeof updateWorkspaceDto.aiMeeting !== 'undefined') {
-        const prev = settingsBefore?.ai?.meeting ?? true;
-        if (prev !== updateWorkspaceDto.aiMeeting) {
-          before.aiMeeting = prev;
-          after.aiMeeting = updateWorkspaceDto.aiMeeting;
-        }
-        await this.workspaceRepo.setAiMeeting(
-          workspaceId,
-          updateWorkspaceDto.aiMeeting,
-          trx,
-        );
-      }
-
       delete updateWorkspaceDto.restrictApiToAdmins;
       delete updateWorkspaceDto.aiSearch;
       delete updateWorkspaceDto.generativeAi;
@@ -517,7 +516,6 @@ export class WorkspaceService {
       delete updateWorkspaceDto.allowMemberTemplates;
       delete updateWorkspaceDto.aiChat;
       delete updateWorkspaceDto.aiStt;
-      delete updateWorkspaceDto.aiMeeting;
 
       await this.workspaceRepo.updateWorkspace(
         updateWorkspaceDto,
@@ -550,13 +548,7 @@ export class WorkspaceService {
     });
 
     const columnChanges = diffAuditTrackedFields(
-      [
-        'name',
-        'logo',
-        'enforceSso',
-        'enforceMfa',
-        'emailDomains',
-      ],
+      ['name', 'logo', 'enforceSso', 'enforceMfa', 'emailDomains'],
       updateWorkspaceDto,
       workspaceBefore,
       workspace,

@@ -47,8 +47,6 @@ import TemplateList from "@/ee/template/pages/template-list";
 import TemplateEditor from "@/ee/template/pages/template-editor";
 import FavoritesPage from "@/pages/favorites/favorites-page";
 import AiChat from "@/ee/ai-chat/pages/ai-chat.tsx";
-import MeetingsPage from "@/ee/meetings/pages/meetings-page.tsx";
-import MeetingViewPage from "@/ee/meetings/pages/meeting-view-page.tsx";
 import VerifyEmail from "@/ee/pages/verify-email.tsx";
 
 export default function App() {
@@ -113,8 +111,6 @@ export default function App() {
             element={<Page />}
           />
 
-          <Route path={"/meetings"} element={<MeetingsPage />} />
-          <Route path={"/meetings/:meetingId"} element={<MeetingViewPage />} />
 
           <Route path={"/settings"}>
             <Route path={"account/profile"} element={<AccountSettings />} />

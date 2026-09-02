@@ -28,8 +28,6 @@ import { PageListener } from '@docmost/db/listeners/page.listener';
 import { ExpertInsightsListener } from '@docmost/db/listeners/expert-insights.listener';
 import { AiChatRepo } from '@docmost/db/repos/ai-chat/ai-chat.repo';
 import { AiChatMessageRepo } from '@docmost/db/repos/ai-chat/ai-chat-message.repo';
-import { MeetingRepo } from '@docmost/db/repos/meeting/meeting.repo';
-import { MeetingIntelligenceRepo } from '@docmost/db/repos/meeting/meeting-intelligence.repo';
 import { RelationshipRepo } from '@docmost/db/repos/integration/relationship.repo';
 import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
 import { WebhookDeliveryRepo } from '@docmost/db/repos/integration/webhook-delivery.repo';
@@ -100,8 +98,6 @@ import { normalizePostgresUrl } from '../common/helpers';
     ExpertInsightsListener,
     AiChatRepo,
     AiChatMessageRepo,
-    MeetingRepo,
-    MeetingIntelligenceRepo,
     RelationshipRepo,
     ProjectSpaceMappingRepo,
     WebhookDeliveryRepo,
@@ -130,8 +126,6 @@ import { normalizePostgresUrl } from '../common/helpers';
     TemplateRepo,
     AiChatRepo,
     AiChatMessageRepo,
-    MeetingRepo,
-    MeetingIntelligenceRepo,
     RelationshipRepo,
     ProjectSpaceMappingRepo,
     WebhookDeliveryRepo,
