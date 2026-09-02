@@ -23,6 +23,8 @@ export interface ISpace {
   name: string;
   description: string;
   logo?: string;
+  /* `static:image_N` | uploaded file name | null (default cover) */
+  coverImage?: string | null;
   slug: string;
   hostname: string;
   creatorId: string;

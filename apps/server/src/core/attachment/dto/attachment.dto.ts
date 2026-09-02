@@ -18,6 +18,7 @@ export class RemoveIconDto {
   @IsIn([
     AttachmentType.Avatar,
     AttachmentType.SpaceIcon,
+    AttachmentType.SpaceCover,
     AttachmentType.WorkspaceIcon,
   ])
   @IsNotEmpty()

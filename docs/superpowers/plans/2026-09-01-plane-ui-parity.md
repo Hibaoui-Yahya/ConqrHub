@@ -1116,6 +1116,26 @@ Steps: implement server route by transplanting the MCP tool's `execute` body (Pa
 
 ---
 
+---
+
+### Task 10: Space cover images — the "media banner" (added 2026-09-02 at Yahya's request: "use same media banner")
+
+Replace the SpaceCard's gradient banner with Plane's real cover-photo banner (`project/card.tsx` + `CoverImage`): a `coverImage` column on spaces holding either `static:image_N` (one of Plane's 29 bundled covers, copied to `apps/client/public/covers/`) or an uploaded `space-cover` attachment file name; NULL falls back to a stable per-space default. Space settings get Plane's `ImagePickerPopover` (Images | Upload tabs) over a wide cover preview.
+
+**Files:**
+- Create: `apps/server/src/database/migrations/20260902T100000-space-cover-image.ts`; modify `db.d.ts` (`Spaces.coverImage`)
+- Modify: `attachment.constants.ts` (`SpaceCover = 'space-cover'`), `attachment.utils.ts` (folder `space-covers`, `isExternalImageRef`), `attachment.service.ts` (upload branch + `removeSpaceCover`), `attachment.controller.ts` (ability check, remove branch, public img candidate), `dto/attachment.dto.ts` (`RemoveIconDto` IsIn), `space/dto/update-space.dto.ts` (`coverImage` static-key validator), `space.service.ts` (persist + audit)
+- Create: `apps/client/public/covers/image_1..29.jpg`, `features/space/lib/space-cover.ts`, `features/space/components/space-cover-picker.tsx` + `.module.css`
+- Modify: `attachment.types.ts` (`SPACE_COVER`), `space.types.ts` (`ISpace.coverImage`), `attachment-service.ts` (`uploadSpaceCover` 1600px JPEG, `removeSpaceCover`), `space-card.tsx` + `.module.css` (96px `<img>` banner, black/60 scrim), `space-details.tsx` (Cover row)
+
+**Interfaces:**
+- `POST /spaces/update { spaceId, coverImage: 'static:image_N' | null }`; `POST /attachments/upload-image` multipart `type=space-cover, spaceId, image`; `POST /attachments/remove-icon { type: 'space-cover', spaceId }`; image served at `/attachments/img/space-cover/<file>` (and via `/attachments/img/workspace/<file>`).
+- Client `getSpaceCoverUrl(space)` resolves the three states.
+
+- [x] Server + client implemented; `npx tsc --noEmit` clean in `apps/client`.
+- [x] Visual QA (2026-09-02): card banners light + dark on home; settings picker pick-static / upload / remove all verified against DB + local storage (`cover-*.png` in ConqrSuite root).
+- [x] Commit as `feat: Plane-style space cover banners (stock covers + upload picker)`.
+
 ## Self-review notes
 
 - Spec coverage: spec §1→Task 1, §2→Task 2, §3→Task 3, §4→Task 4, §5→Task 5 (narrowed: global/space sidebars were found already tokenized — only the tree remained), §6→Task 6, §7→Task 7, testing→Task 8. Out-of-scope items remain out.

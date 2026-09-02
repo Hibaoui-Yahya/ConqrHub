@@ -36,6 +36,7 @@ export interface IPageAttachmentsResponse {
 export enum AvatarIconType {
   AVATAR = "avatar",
   SPACE_ICON = "space-icon",
+  SPACE_COVER = "space-cover",
   WORKSPACE_ICON = "workspace-icon",
 }
 
@@ -43,5 +44,6 @@ export enum AttachmentType {
   AVATAR = "avatar",
   WORKSPACE_ICON = "workspace-icon",
   SPACE_ICON = "space-icon",
+  SPACE_COVER = "space-cover",
   FILE = "file",
 }

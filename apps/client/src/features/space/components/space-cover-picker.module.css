@@ -1,0 +1,113 @@
+/* Plane project-settings cover anatomy: wide banner preview with the
+   picker trigger over its bottom-right corner (project/form.tsx). */
+.preview {
+    position: relative;
+    height: rem(160px);
+    border-radius: var(--mantine-radius-md);
+    overflow: hidden;
+    background-color: var(--bg-layer-2);
+    border: rem(1px) solid var(--border-subtle);
+}
+
+.previewImg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.previewScrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, var(--alpha-black-800), transparent 60%);
+}
+
+.previewActions {
+    position: absolute;
+    right: rem(12px);
+    bottom: rem(12px);
+    display: flex;
+    gap: rem(8px);
+}
+
+.dropdown {
+    padding: rem(8px);
+    background-color: var(--bg-surface-1);
+    border: rem(1px) solid var(--border-subtle);
+    box-shadow: var(--shadow-overlay-200);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: rem(8px);
+    max-height: rem(260px);
+    overflow-y: auto;
+    padding: rem(8px) rem(2px) rem(2px);
+}
+
+.tile {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    border-radius: var(--mantine-radius-sm);
+    overflow: hidden;
+    padding: 0;
+    border: rem(2px) solid transparent;
+    background: var(--bg-layer-2);
+    cursor: pointer;
+    transition: border-color 120ms ease;
+
+    @mixin hover {
+        border-color: var(--border-strong);
+    }
+}
+
+.tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.tileSelected,
+.tileSelected:hover {
+    border-color: var(--txt-accent-primary);
+}
+
+.dropzone {
+    width: 100%;
+    height: rem(140px);
+    margin-top: rem(8px);
+    border-radius: var(--mantine-radius-md);
+    border: rem(1px) dashed var(--border-strong);
+    background-color: var(--bg-layer-1);
+    color: var(--txt-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: rem(4px);
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    font-size: rem(13px);
+
+    @mixin hover {
+        background-color: var(--bg-layer-transparent-hover);
+    }
+}
+
+.dropzone img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.hint {
+    font-size: rem(11px);
+    color: var(--txt-tertiary);
+}

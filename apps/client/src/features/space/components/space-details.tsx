@@ -6,6 +6,7 @@ import DeleteSpaceModal from "./delete-space-modal";
 import { useDisclosure } from "@mantine/hooks";
 import ExportModal from "@/components/common/export-modal.tsx";
 import AvatarUploader from "@/components/common/avatar-uploader.tsx";
+import SpaceCoverPicker from "@/features/space/components/space-cover-picker.tsx";
 import {
   uploadSpaceIcon,
   removeSpaceIcon,
@@ -19,7 +20,6 @@ import {
   ResponsiveSettingsRow,
 } from "@/components/ui/responsive-settings-row.tsx";
 
-
 interface SpaceDetailsProps {
   spaceId: string;
   readOnly?: boolean;
@@ -31,14 +31,18 @@ export default function SpaceDetails({ spaceId, readOnly }: SpaceDetailsProps) {
     useDisclosure(false);
   const [isIconUploading, setIsIconUploading] = useState(false);
 
+  const refreshSpace = async () => {
+    await refetch();
+    await queryClient.invalidateQueries({
+      predicate: (item) => ["spaces"].includes(item.queryKey[0] as string),
+    });
+  };
+
   const handleIconUpload = async (file: File) => {
     setIsIconUploading(true);
     try {
       await uploadSpaceIcon(file, spaceId);
-      await refetch();
-      await queryClient.invalidateQueries({
-        predicate: (item) => ["spaces"].includes(item.queryKey[0] as string),
-      });
+      await refreshSpace();
     } catch (err) {
       // skip
     } finally {
@@ -50,10 +54,7 @@ export default function SpaceDetails({ spaceId, readOnly }: SpaceDetailsProps) {
     setIsIconUploading(true);
     try {
       await removeSpaceIcon(spaceId);
-      await refetch();
-      await queryClient.invalidateQueries({
-        predicate: (item) => ["spaces"].includes(item.queryKey[0] as string),
-      });
+      await refreshSpace();
     } catch (err) {
       // skip
     } finally {
@@ -83,6 +84,17 @@ export default function SpaceDetails({ spaceId, readOnly }: SpaceDetailsProps) {
               onRemove={handleIconRemove}
               isLoading={isIconUploading}
               disabled={readOnly}
+            />
+          </div>
+
+          <div style={{ marginBottom: "20px" }}>
+            <Text size="sm" fw={500} mb="xs">
+              {t("Cover")}
+            </Text>
+            <SpaceCoverPicker
+              space={space}
+              readOnly={readOnly}
+              onChanged={refreshSpace}
             />
           </div>
 

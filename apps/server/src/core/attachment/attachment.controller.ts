@@ -323,7 +323,10 @@ export class AttachmentController {
       }
     }
 
-    if (attachmentType === AttachmentType.SpaceIcon) {
+    if (
+      attachmentType === AttachmentType.SpaceIcon ||
+      attachmentType === AttachmentType.SpaceCover
+    ) {
       if (!spaceId) {
         throw new BadRequestException('spaceId is required');
       }
@@ -405,6 +408,7 @@ export class AttachmentController {
     const candidates = [
       `${getAttachmentFolderPath(AttachmentType.WorkspaceIcon, workspace.id)}/${fileName}`,
       `${getAttachmentFolderPath(AttachmentType.SpaceIcon, workspace.id)}/${fileName}`,
+      `${getAttachmentFolderPath(AttachmentType.SpaceCover, workspace.id)}/${fileName}`,
     ];
     for (const filePath of candidates) {
       try {
@@ -550,7 +554,18 @@ export class AttachmentController {
       if (mime?.startsWith('image/')) return 'image';
       if (
         mime === 'application/pdf' ||
-        ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'csv'].includes(e)
+        [
+          'pdf',
+          'doc',
+          'docx',
+          'ppt',
+          'pptx',
+          'xls',
+          'xlsx',
+          'txt',
+          'md',
+          'csv',
+        ].includes(e)
       ) {
         return 'document';
       }
@@ -603,6 +618,25 @@ export class AttachmentController {
       }
 
       await this.attachmentService.removeSpaceIcon(spaceId, workspace.id);
+      return;
+    }
+
+    // remove space cover (falls back to the default stock cover)
+    if (type === AttachmentType.SpaceCover) {
+      if (!spaceId) {
+        throw new BadRequestException(
+          'spaceId is required to change space covers',
+        );
+      }
+
+      const spaceAbility = await this.spaceAbility.createForUser(user, spaceId);
+      if (
+        spaceAbility.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)
+      ) {
+        throw new ForbiddenException();
+      }
+
+      await this.attachmentService.removeSpaceCover(spaceId, workspace.id);
       return;
     }
 
