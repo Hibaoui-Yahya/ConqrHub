@@ -4,7 +4,7 @@ import "@fontsource-variable/inter";
 import "@mantine/core/styles.css";
 import "@mantine/spotlight/styles.css";
 import "@mantine/notifications/styles.css";
-import '@mantine/dates/styles.css';
+import "@mantine/dates/styles.css";
 // Conqr design tokens (ported from Plane), now sourced from the shared
 // @conqr/tokens package (§7.1). Must load after Mantine base styles so the
 // token-driven overrides in theme.ts resolve against these variables.
@@ -16,6 +16,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import { mantineCssResolver, theme } from "@/theme";
 import { MantineProvider } from "@mantine/core";
+import ConqrThemeApplier from "@/features/user/theme/conqr-theme-applier.tsx";
 import { cookieColorSchemeManager } from "@/lib/color-scheme-cookie";
 import { BrowserRouter } from "react-router-dom";
 import { ModalsProvider } from "@mantine/modals";
@@ -53,7 +54,8 @@ if (isCloud() && isPostHogEnabled) {
 }
 
 const container = document.getElementById("root") as HTMLElement;
-const root = (container as any).__reactRoot ??= ReactDOM.createRoot(container);
+const root = ((container as any).__reactRoot ??=
+  ReactDOM.createRoot(container));
 
 root.render(
   <BrowserRouter>
@@ -62,6 +64,7 @@ root.render(
       cssVariablesResolver={mantineCssResolver}
       colorSchemeManager={cookieColorSchemeManager()}
     >
+      <ConqrThemeApplier />
       <ModalsProvider>
         <QueryClientProvider client={queryClient}>
           <Notifications position="bottom-center" limit={3} zIndex={10000} />

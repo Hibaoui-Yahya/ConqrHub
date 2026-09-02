@@ -1150,6 +1150,22 @@ Three items the spec had deferred, now brought over from ConqrPlan:
 - [x] Browser QA light + dark: gallery/list toggle, create modal with cover (created `Cover QA` -> `static:image_28` in DB), overview header with member chips (`parity2-*.png` in ConqrSuite root).
 - [ ] Commit `feat: Plane-style space overview header, create-space cover, gallery layout` and open PR against main.
 
+---
+
+### Task 12: ConqrPlan theme picker (added 2026-09-02 at Yahya's request: "add theme also in conqrhub")
+
+Bring ConqrPlan's six-theme model (`packages/constants/src/themes.ts`, `core/theme/theme-switch.tsx`, `custom-theme-selector.tsx`) to ConqrHub Preferences.
+
+- **Preference model** `features/user/theme/conqr-theme.ts`: `system | light | dark | light-contrast | dark-contrast | custom` (+ custom `{ primary, background, darkPalette }`), stored in localStorage (`conqr-theme-pref`). Mantine's light/dark/auto scheme stays the source of truth for light vs dark and keeps syncing the shared `conqr-theme` cookie ConqrPlan reads.
+- **Applier** `conqr-theme-applier.tsx` (mounted in `main.tsx`): resolves the scheme, stamps `data-conqr-theme` on `<html>`, and for custom writes `--neutral-*` / `--brand-*` inline via `lib/theme/hub-theme.ts`.
+- **High-contrast tokens**: Plane's `dark-high-contrast` / `light-high-contrast` border overrides appended to `packages/tokens/tokens.css` under `[data-conqr-theme="..."]`.
+- **Custom palette**: `lib/theme/color-conversion.ts` + `color-validation.ts` ported verbatim from Plane (`chroma-js` added); `hub-theme.ts` keeps this token sheet's per-stop lightness and borrows hue/chroma from the two colors, with the primary landing exactly on `--brand-default`. Plane's own fixed-lightness generator was tried first and turned surfaces gray, so it was dropped.
+- **UI** `account-theme.tsx`: Mantine Select with Plane's rotated two-half swatches; custom card with Light/Dark palette, Primary + Background `ColorInput`s, live preview chips, Set theme. Quick sun/moon toggle in the header now writes the preference (Light/Dark).
+
+- [x] Client `npx tsc --noEmit` clean.
+- [x] Browser QA: all six options render with swatches; custom light (#3f76ff / #1a1a1a) and custom dark (#7c3aed) apply across header, buttons, toggles; Dark high contrast shows bright hairline borders; preference, cookie (`conqr-theme=dark`) and `<html>` attributes verified (`theme-*.png` in ConqrSuite root).
+- [ ] Commit `feat: ConqrPlan theme picker (contrast variants + custom palette)` and open PR against main.
+
 ## Self-review notes
 
 - Spec coverage: spec §1→Task 1, §2→Task 2, §3→Task 3, §4→Task 4, §5→Task 5 (narrowed: global/space sidebars were found already tokenized — only the tree remained), §6→Task 6, §7→Task 7, testing→Task 8. Out-of-scope items remain out.

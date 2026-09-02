@@ -316,6 +316,9 @@ importers:
       blueimp-load-image:
         specifier: ^5.16.0
         version: 5.16.0
+      chroma-js:
+        specifier: ^3.1.2
+        version: 3.2.0
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -413,6 +416,9 @@ importers:
       '@types/blueimp-load-image':
         specifier: ^5.16.6
         version: 5.16.6
+      '@types/chroma-js':
+        specifier: ^3.1.2
+        version: 3.1.2
       '@types/file-saver':
         specifier: ^2.0.7
         version: 2.0.7
@@ -5088,6 +5094,9 @@ packages:
   '@types/bytes@3.1.5':
     resolution: {integrity: sha512-VgZkrJckypj85YxEsEavcMmmSOIzkUHqWmM4CCyia5dc54YwsXzJ5uT4fYxBQNEXx+oF1krlhgCbvfubXqZYsQ==}
 
+  '@types/chroma-js@3.1.2':
+    resolution: {integrity: sha512-YBTQqArPN8A0niHXCwrO1z5x++a+6l0mLBykncUpr23oIPW7L4h39s6gokdK/bDrPmSh8+TjMmrhBPnyiaWPmQ==}
+
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
 
@@ -6154,6 +6163,9 @@ packages:
     resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
     engines: {node: '>= 14.16.0'}
 
+  chroma-js@3.2.0:
+    resolution: {integrity: sha512-os/OippSlX1RlWWr+QDPcGUZs0uoqr32urfxESG9U93lhUfbnlyckte84Q8P1UQY/qth983AS1JONKmLS4T0nw==}
+
   chrome-trace-event@1.0.3:
     resolution: {integrity: sha512-p3KULyQg4S7NIHixdwbGX+nFHkoBiA4YQmyWtjb8XngSKV124nJmRysgAeujbUVb15vh+RvFUfCPqU7rXk+hZg==}
     engines: {node: '>=6.0'}
@@ -6385,6 +6397,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cron@4.4.0:
     resolution: {integrity: sha512-fkdfq+b+AHI4cKdhZlppHveI/mgz2qpiYxcm+t5E5TsxX7QrLS1VE0+7GENEk9z0EeGPcpSciGv6ez24duWhwQ==}
@@ -10551,6 +10564,7 @@ packages:
 
   uuid@10.0.0:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@11.1.0:
@@ -15725,6 +15739,8 @@ snapshots:
 
   '@types/bytes@3.1.5': {}
 
+  '@types/chroma-js@3.1.2': {}
+
   '@types/connect@3.4.38':
     dependencies:
       '@types/node': 25.5.0
@@ -16994,6 +17010,8 @@ snapshots:
   chokidar@4.0.3:
     dependencies:
       readdirp: 4.0.2
+
+  chroma-js@3.2.0: {}
 
   chrome-trace-event@1.0.3: {}
 
