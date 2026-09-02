@@ -513,3 +513,42 @@
   --label-purple-bg: var(--extended-color-purple-900);
   --label-purple-text: var(--extended-color-purple-400);
 }
+
+/* ==================== High-contrast variants ====================
+   Ported from ConqrPlan (tailwind-config/variables.css @variant
+   dark-high-contrast / light-high-contrast). Selected via the
+   `data-conqr-theme` attribute on <html>, set by ConqrThemeApplier; these
+   ride on top of the matching light/dark scheme above. */
+[data-conqr-theme="dark-contrast"] {
+  --border-subtle: var(--neutral-1200);
+  --border-subtle-1: var(--neutral-1100);
+  --border-strong: var(--neutral-1000);
+  --border-strong-1: var(--neutral-900);
+  --border-inverse: var(--neutral-white);
+  --border-disabled: var(--neutral-700);
+  --border-accent-strong: var(--brand-default);
+  --border-accent-subtle: var(--brand-300);
+  --border-success-strong: var(--green-400);
+  --border-success-subtle: var(--green-200);
+  --border-warning-strong: var(--amber-400);
+  --border-warning-subtle: var(--amber-200);
+  --border-danger-strong: var(--red-400);
+  --border-danger-subtle: var(--red-200);
+}
+
+[data-conqr-theme="light-contrast"] {
+  --border-subtle: var(--neutral-1200);
+  --border-subtle-1: var(--neutral-1100);
+  --border-strong: var(--neutral-1000);
+  --border-strong-1: var(--neutral-900);
+  --border-inverse: var(--neutral-black);
+  --border-disabled: var(--neutral-700);
+  --border-accent-strong: var(--brand-default);
+  --border-accent-subtle: var(--brand-300);
+  --border-success-strong: var(--green-700);
+  --border-success-subtle: var(--green-600);
+  --border-warning-strong: var(--amber-700);
+  --border-warning-subtle: var(--amber-400);
+  --border-danger-strong: var(--red-700);
+  --border-danger-subtle: var(--red-400);
+}

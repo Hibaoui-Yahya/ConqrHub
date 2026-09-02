@@ -1,14 +1,11 @@
-import {
-  ActionIcon,
-  Tooltip,
-  useComputedColorScheme,
-  useMantineColorScheme,
-} from "@mantine/core";
+import { ActionIcon, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { IconMoon, IconSun } from "@tabler/icons-react";
+import { useSetAtom } from "jotai";
+import { conqrThemeAtom } from "@/features/user/theme/conqr-theme.ts";
 import classes from "./theme-toggle.module.css";
 
 export function ThemeToggle() {
-  const { setColorScheme } = useMantineColorScheme();
+  const setPref = useSetAtom(conqrThemeAtom);
   const computedColorScheme = useComputedColorScheme();
 
   return (
@@ -16,7 +13,13 @@ export function ThemeToggle() {
       <ActionIcon
         variant="default"
         onClick={() => {
-          setColorScheme(computedColorScheme === "light" ? "dark" : "light");
+          // Flipping the quick toggle picks the plain Light/Dark theme, like
+          // Plane's power-K theme switch; contrast/custom are chosen in
+          // Preferences.
+          setPref((p) => ({
+            ...p,
+            theme: computedColorScheme === "light" ? "dark" : "light",
+          }));
         }}
         aria-label="Toggle color scheme"
       >
