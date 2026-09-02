@@ -1,5 +1,5 @@
 import { Group, Box, Button, TextInput, Stack, Textarea } from "@mantine/core";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { z } from "zod/v4";
@@ -8,6 +8,16 @@ import { useCreateSpaceMutation } from "@/features/space/queries/space-query.ts"
 import { computeSpaceSlug } from "@/lib";
 import { getSpaceUrl } from "@/lib/config.ts";
 import { useTranslation } from "react-i18next";
+import CoverPickerPopover from "@/features/space/components/cover-picker-popover.tsx";
+import {
+  STATIC_COVER_KEYS,
+  staticCoverUrl,
+} from "@/features/space/lib/space-cover.ts";
+import coverClasses from "@/features/space/components/space-cover-picker.module.css";
+
+/* Plane's create-project modal opens with a random stock cover. */
+const randomCoverKey = () =>
+  STATIC_COVER_KEYS[Math.floor(Math.random() * STATIC_COVER_KEYS.length)];
 
 const formSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -28,6 +38,7 @@ export function CreateSpaceForm() {
   const { t } = useTranslation();
   const createSpaceMutation = useCreateSpaceMutation();
   const navigate = useNavigate();
+  const [coverKey, setCoverKey] = useState<string>(randomCoverKey);
 
   const form = useForm<FormValues>({
     validate: zod4Resolver(formSchema),
@@ -63,6 +74,7 @@ export function CreateSpaceForm() {
       name: data.name,
       slug: data.slug,
       description: data.description,
+      coverImage: coverKey,
     };
 
     const createdSpace = await createSpaceMutation.mutateAsync(spaceData);
@@ -73,6 +85,22 @@ export function CreateSpaceForm() {
     <>
       <Box maw="500" mx="auto">
         <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
+          {/* Plane ProjectCreateHeader: h-44 cover with the picker bottom-right */}
+          <div className={coverClasses.preview} style={{ marginBottom: 16 }}>
+            <img
+              className={coverClasses.previewImg}
+              src={staticCoverUrl(coverKey)}
+              alt=""
+            />
+            <div className={coverClasses.previewScrim} />
+            <div className={coverClasses.previewActions}>
+              <CoverPickerPopover
+                selectedKey={coverKey}
+                onPickStatic={setCoverKey}
+              />
+            </div>
+          </div>
+
           <Stack>
             <TextInput
               withAsterisk

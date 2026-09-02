@@ -1,0 +1,91 @@
+/* Plane project overview identity block (project/overview/root.tsx):
+   40px logo tile · 18px name · 12px tertiary meta · 14px description. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: rem(12px);
+    margin-bottom: rem(28px);
+}
+
+.identity {
+    display: flex;
+    align-items: center;
+    gap: rem(12px);
+}
+
+.logoTile {
+    width: rem(40px);
+    height: rem(40px);
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: var(--mantine-radius-md);
+    background-color: var(--bg-surface-2);
+}
+
+.titleBlock {
+    min-width: 0;
+}
+
+.name {
+    font-size: rem(18px);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--txt-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.meta {
+    font-size: rem(12px);
+    color: var(--txt-tertiary);
+}
+
+.description {
+    max-width: rem(768px);
+    font-size: rem(14px);
+    color: var(--txt-secondary);
+    white-space: pre-wrap;
+}
+
+.placeholder {
+    font-size: rem(14px);
+    color: var(--txt-tertiary);
+    font-style: italic;
+}
+
+.sectionLabel {
+    font-size: rem(11px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--txt-tertiary);
+}
+
+.members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: rem(8px);
+}
+
+/* Plane member chip: rounded-md border-[0.5px] border-strong px-2 py-1 */
+.memberChip {
+    display: inline-flex;
+    align-items: center;
+    gap: rem(6px);
+    height: rem(28px);
+    padding: 0 rem(8px);
+    border-radius: var(--mantine-radius-md);
+    border: rem(0.5px) solid var(--border-strong);
+    font-size: rem(12px);
+    font-weight: 500;
+    color: var(--txt-primary);
+    max-width: rem(200px);
+}
+
+.memberName {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

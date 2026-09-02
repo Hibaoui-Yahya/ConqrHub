@@ -6,8 +6,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Matches,
-  ValidateIf,
 } from 'class-validator';
 
 export class UpdateSpaceDto extends PartialType(CreateSpaceDto) {
@@ -27,15 +25,6 @@ export class UpdateSpaceDto extends PartialType(CreateSpaceDto) {
   @IsOptional()
   @IsBoolean()
   isCritical: boolean;
-
-  /**
-   * Stock cover selection: `static:image_1` … `static:image_29` (Plane's
-   * bundled covers, served by the client), or `null` to fall back to the
-   * default. Uploaded covers go through POST /attachments/upload-image.
-   */
-  @IsOptional()
-  @ValidateIf((o) => o.coverImage !== null)
-  @IsString()
-  @Matches(/^static:image_([1-9]|1[0-9]|2[0-9])$/)
-  coverImage?: string | null;
+  // coverImage (stock key) is inherited from CreateSpaceDto; clearing a
+  // cover goes through POST /attachments/remove-icon (type=space-cover).
 }
