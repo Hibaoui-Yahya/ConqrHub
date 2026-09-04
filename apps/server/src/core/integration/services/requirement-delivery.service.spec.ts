@@ -14,6 +14,7 @@ jest.mock('./project-space-mapping.service', () => ({
 import { RequirementDeliveryService } from './requirement-delivery.service';
 import { RelationType } from '../domain/relationship-types';
 import { ResolutionState } from '../domain/presentation.types';
+import { CoverageState } from '../domain/requirement-coverage';
 import { PlaneApiError } from './plane-client.service';
 import { WorkItemCreationService } from './work-item-creation.service';
 
@@ -168,15 +169,33 @@ function makeService(over: Record<string, any> = {}) {
     }),
   };
 
+  // The read path in front of the resolver: projection first, live fallback,
+  // read repair. Its own behaviour is covered by delivery-read.service.spec.ts
+  // and the database-backed projection tests; here it is a thin pass-through so
+  // these tests stay about coverage and linking.
+  const deliveryRead = over.deliveryRead ?? {
+    resolveMany: jest.fn(async (urns: string[], ctx: any) => {
+      const models = await resolver.resolveMany(urns, ctx);
+      return models.map((model: any) => ({
+        urn: model.urn,
+        model,
+        origin: 'live' as const,
+        stale: false,
+        lastSyncedAt: '2026-09-04T10:00:00.000Z',
+      }));
+    }),
+  };
+
   const service = new RequirementDeliveryService(
     requirements as any,
     relationships,
     resolver as any,
+    deliveryRead as any,
     creation,
     mappings as any,
     pages as any,
   );
-  return { service, plane, relationships, resolver, delegation, creation, requirements };
+  return { service, plane, relationships, resolver, deliveryRead, delegation, creation, requirements };
 }
 
 const createArgs = {
@@ -286,8 +305,10 @@ describe('coverage', () => {
       viewerId: ACTOR,
       pageId: PAGE,
     });
-    expect(before[0].covered).toBe(false);
-    expect(before[0].relatedWork).toEqual([]);
+    expect(before.items[0].coverage).toBe(CoverageState.Uncovered);
+    expect(before.items[0].covered).toBe(false);
+    expect(before.items[0].relatedWork).toEqual([]);
+    expect(before.summary).toMatchObject({ total: 1, covered: 0, uncovered: 1 });
 
     await service.createLinkedWork(createArgs);
 
@@ -296,19 +317,22 @@ describe('coverage', () => {
       viewerId: ACTOR,
       pageId: PAGE,
     });
-    expect(after[0].covered).toBe(true);
-    expect(after[0].relatedWork).toHaveLength(1);
+    expect(after.items[0].coverage).toBe(CoverageState.Covered);
+    expect(after.items[0].covered).toBe(true);
+    expect(after.items[0].relatedWork).toHaveLength(1);
+    expect(after.summary).toMatchObject({ total: 1, covered: 1, uncovered: 0 });
   });
 
   it('surfaces the live ConqrPlan status through the resolver', async () => {
     const { service } = makeService();
     await service.createLinkedWork(createArgs);
 
-    const [req] = await service.pageRequirements({
+    const { items: reqs } = await service.pageRequirements({
       workspaceId: WORKSPACE,
       viewerId: ACTOR,
       pageId: PAGE,
     });
+    const req = reqs[0];
 
     expect(req.relatedWork[0]).toMatchObject({
       state: ResolutionState.Live,
@@ -333,11 +357,12 @@ describe('permission-shaped related work', () => {
     const { service } = makeService({ resolver: restrictedResolver });
     await service.createLinkedWork(createArgs);
 
-    const [req] = await service.pageRequirements({
+    const { items: reqs } = await service.pageRequirements({
       workspaceId: WORKSPACE,
       viewerId: 'viewer-without-access',
       pageId: PAGE,
     });
+    const req = reqs[0];
 
     const card = req.relatedWork[0] as unknown as Record<string, unknown>;
     expect(card.state).toBe(ResolutionState.Restricted);
@@ -369,7 +394,7 @@ describe('permission-shaped related work', () => {
     );
   });
 
-  it('still reports coverage truthfully to a viewer who cannot see the work', async () => {
+  it('reports "uncovered for you" when every link is restricted', async () => {
     const resolver = {
       resolveMany: jest.fn(async (urns: string[]) =>
         urns.map((urn) => ({ urn, state: ResolutionState.Restricted })),
@@ -378,15 +403,43 @@ describe('permission-shaped related work', () => {
     const { service } = makeService({ resolver });
     await service.createLinkedWork(createArgs);
 
-    const [req] = await service.pageRequirements({
+    const { items: reqs } = await service.pageRequirements({
+      workspaceId: WORKSPACE,
+      viewerId: 'viewer-without-access',
+      pageId: PAGE,
+    });
+    const req = reqs[0];
+
+    // Neither "covered" nor plainly "uncovered". A viewer who cannot see the
+    // linked work cannot verify that it covers anything, so presenting it as
+    // covered would ask them to trust an invisible item; presenting it as
+    // uncovered could send them off to create duplicate work. `all_restricted`
+    // says exactly what is true and renders as "Uncovered for you".
+    expect(req.coverage).toBe(CoverageState.AllRestricted);
+    expect(req.covered).toBe(false);
+  });
+
+  it('leaks no identifying metadata in the all_restricted case', async () => {
+    const resolver = {
+      resolveMany: jest.fn(async (urns: string[]) =>
+        urns.map((urn) => ({ urn, state: ResolutionState.Restricted })),
+      ),
+    };
+    const { service } = makeService({ resolver });
+    await service.createLinkedWork(createArgs);
+
+    const result = await service.pageRequirements({
       workspaceId: WORKSPACE,
       viewerId: 'viewer-without-access',
       pageId: PAGE,
     });
 
-    // "There is work here, and you cannot see it" - not "there is no work",
-    // which would make the page lie about delivery.
-    expect(req.covered).toBe(true);
+    const serialised = JSON.stringify(result);
+    expect(serialised).not.toContain('Implement login');
+    expect(serialised).not.toContain(PROJECT);
+    // Restricted URNs are never listed as unresolved sources: naming them
+    // would confirm which items exist.
+    expect(result.summary.unresolvedSources).toEqual([]);
   });
 });
 
@@ -443,11 +496,12 @@ describe('relationship removal', () => {
     // Drop the edge, as removing a link from the Related Work panel would.
     relationships.edges.length = 0;
 
-    const [req] = await service.pageRequirements({
+    const { items: reqs } = await service.pageRequirements({
       workspaceId: WORKSPACE,
       viewerId: ACTOR,
       pageId: PAGE,
     });
+    const req = reqs[0];
 
     expect(req.covered).toBe(false);
     // The work still exists. ConqrHub owns the relationship, never the work.

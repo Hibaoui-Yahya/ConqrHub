@@ -30,6 +30,7 @@ import { NotificationDedupService } from './services/notification-dedup.service'
 import { FederatedSearchService } from './services/federated-search.service';
 import { RequirementService } from './services/requirement.service';
 import { RequirementDeliveryService } from './services/requirement-delivery.service';
+import { DeliveryReconciliationService } from './services/delivery-reconciliation.service';
 import { IntegrationEventBus } from './services/integration-event-bus';
 import { CrossProductInsightService } from './services/cross-product-insight.service';
 import {
@@ -68,6 +69,7 @@ export class IntegrationController {
     private readonly federatedSearch: FederatedSearchService,
     private readonly requirements: RequirementService,
     private readonly requirementDelivery: RequirementDeliveryService,
+    private readonly reconciliation: DeliveryReconciliationService,
     private readonly eventBus: IntegrationEventBus,
     private readonly insights: CrossProductInsightService,
     private readonly pagePromotion: PagePromotionService,
@@ -210,17 +212,15 @@ export class IntegrationController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    const items = await this.requirementDelivery.pageRequirements({
+    // Returns { items, summary } — the summary carries the coverage contract
+    // (total, approvedOrBeyond, covered, uncovered, provisional,
+    // unresolvedSources, gaps) the panel renders its header from.
+    return this.requirementDelivery.pageRequirements({
       workspaceId: workspace.id,
       viewerId: user.id,
       pageId: dto.pageId,
       planeProjectId: dto.planeProjectId,
     });
-    return {
-      items,
-      uncovered: items.filter((i) => !i.covered).length,
-      total: items.length,
-    };
   }
 
   /**
@@ -277,6 +277,26 @@ export class IntegrationController {
       actorId: user.id,
       ...dto,
     });
+  }
+
+  /**
+   * Run the delivery-projection reconciliation sweep now.
+   *
+   * The operational escape hatch for "ConqrPlan was down for an hour and I do
+   * not want to wait for the next scheduled run". Scoped to the caller's
+   * workspace, and it resolves through the same permission-shaped read path as
+   * everything else - running it grants nobody extra visibility.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('delivery/reconcile')
+  async reconcileDelivery(
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const metrics = await this.reconciliation.reconcile({
+      workspaceId: workspace.id,
+    });
+    return { requestedBy: user.id, ...metrics };
   }
 
   /** Create a Plane work item from a Hub selection and link it back (§5.1A). */

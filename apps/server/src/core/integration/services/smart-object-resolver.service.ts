@@ -117,6 +117,11 @@ export class SmartObjectResolverService {
           stateGroup: item.state_detail?.group ?? null,
           priority: item.priority ?? null,
           assignees: item.assignees ?? [],
+          // Panel fields. Every one of these is only ever populated on a
+          // `live` result, so a restricted viewer receives none of them.
+          estimatePointId: item.estimate_point ?? null,
+          targetDate: item.target_date ?? null,
+          startDate: item.start_date ?? null,
           completed: Boolean(item.completed_at),
         },
         deepLink: this.planeDeepLink('work-item', id, ctx.planeProjectId),

@@ -23,6 +23,15 @@ import { ProjectSpaceMappingService } from './project-space-mapping.service';
 import { buildUrn } from '../domain/urn.util';
 import { RelationType } from '../domain/relationship-types';
 import { PresentationModel, ResolutionState } from '../domain/presentation.types';
+import { DeliveryReadService, ResolvedDelivery } from './delivery-read.service';
+import {
+  CoverageState,
+  RequirementCoverageSummary,
+  coverageFor,
+  countsAsCovered,
+  unresolvedFrom,
+} from '../domain/requirement-coverage';
+import { APPROVED_OR_BEYOND } from '../domain/requirement-lifecycle';
 
 /**
  * Vertical Slice 01: requirement → linked ConqrPlan execution.
@@ -51,13 +60,33 @@ export interface RequirementCoverage {
   urn: string;
   title: string | null;
   state: string;
-  /** True when at least one live delivery relationship exists. */
+  /**
+   * Coverage from *this viewer's* perspective. `all_restricted` renders as
+   * "Uncovered for you": links exist and none of them can be verified by this
+   * person, which is neither covered nor genuinely uncovered.
+   */
+  coverage: CoverageState;
+  /** Kept for existing callers. True only for verified coverage. */
   covered: boolean;
+  /** How many links exist. Zero for a viewer who may verify none of them. */
+  linkedCount: number;
   /**
    * Work linked to this requirement, already shaped for the viewer. Items the
    * viewer may not see appear as a restricted placeholder, never as metadata.
    */
   relatedWork: PresentationModel[];
+  /** Freshness of each card, so the panel can label stale data honestly. */
+  delivery: Array<{
+    urn: string;
+    origin: ResolvedDelivery['origin'];
+    stale: boolean;
+    lastSyncedAt: string | null;
+  }>;
+}
+
+export interface PageRequirementsResult {
+  items: RequirementCoverage[];
+  summary: RequirementCoverageSummary;
 }
 
 export interface CreateLinkedWorkPreview {
@@ -114,6 +143,7 @@ export class RequirementDeliveryService {
     private readonly requirements: RequirementRepo,
     private readonly relationships: RelationshipService,
     private readonly resolver: SmartObjectResolverService,
+    private readonly deliveryRead: DeliveryReadService,
     private readonly creation: WorkItemCreationService,
     private readonly mappings: ProjectSpaceMappingService,
     @Inject(PAGE_LOCATOR) private readonly pages: PageLocator,
@@ -147,7 +177,7 @@ export class RequirementDeliveryService {
     viewerId: string;
     pageId: string;
     planeProjectId?: string;
-  }): Promise<RequirementCoverage[]> {
+  }): Promise<PageRequirementsResult> {
     const rows = await this.requirements.listForPage(
       params.workspaceId,
       params.pageId,
@@ -157,7 +187,11 @@ export class RequirementDeliveryService {
       params.planeProjectId ??
       (await this.resolveProjectForPage(params.workspaceId, params.pageId));
 
-    const out: RequirementCoverage[] = [];
+    // Collect every linked work URN across the whole page first, so delivery
+    // status is fetched in one batched pass rather than once per requirement.
+    // A page with twenty requirements would otherwise make twenty round trips
+    // to another product on every render.
+    const perRequirement: Array<{ row: any; urn: string; workUrns: string[] }> = [];
     for (const req of rows) {
       const urn = RequirementDeliveryService.requirementUrn(
         req.pageId,
@@ -172,32 +206,85 @@ export class RequirementDeliveryService {
             e.targetUrn.startsWith('conqr://plane/work-item/'),
         )
         .map((e) => e.targetUrn);
+      perRequirement.push({ row: req, urn, workUrns });
+    }
 
-      // Resolved as the viewer. A viewer without access gets a restricted
-      // placeholder, so the panel can say "there is work you cannot see"
-      // without saying anything about it.
-      const relatedWork = workUrns.length
-        ? await this.resolver.resolveMany(workUrns, {
-            workspaceId: params.workspaceId,
-            viewerId: params.viewerId,
-            planeProjectId: projectId ?? undefined,
-          })
-        : [];
+    const allWorkUrns = Array.from(
+      new Set(perRequirement.flatMap((p) => p.workUrns)),
+    );
+    const resolved = allWorkUrns.length
+      ? await this.deliveryRead.resolveMany(allWorkUrns, {
+          workspaceId: params.workspaceId,
+          viewerId: params.viewerId,
+          planeProjectId: projectId ?? undefined,
+        })
+      : [];
+    const byUrn = new Map(resolved.map((r) => [r.urn, r]));
 
-      out.push({
+    const items: RequirementCoverage[] = [];
+    const unresolvedSources = new Set<string>();
+
+    for (const { row: req, urn, workUrns } of perRequirement) {
+      const delivery = workUrns
+        .map((u) => byUrn.get(u))
+        .filter((d): d is ResolvedDelivery => Boolean(d));
+      const models = delivery.map((d) => d.model);
+
+      const coverage = coverageFor(models);
+      for (const u of unresolvedFrom(models)) unresolvedSources.add(u);
+
+      items.push({
         requirementId: req.id,
         blockId: req.blockId,
         urn,
         title: req.title,
         state: req.state,
-        // Coverage is a property of the graph, not of what this viewer can
-        // see. Hiding the fact that work exists because the viewer cannot open
-        // it would make the page lie about delivery.
-        covered: workUrns.length > 0,
-        relatedWork,
+        coverage,
+        covered: countsAsCovered(coverage),
+        // Deliberately the number of cards this viewer receives, which for a
+        // restricted viewer is still the number of links - the cards
+        // themselves carry nothing. What is never exposed is *which* items
+        // they are.
+        linkedCount: models.length,
+        relatedWork: models,
+        delivery: delivery.map((d) => ({
+          urn: d.urn,
+          origin: d.origin,
+          stale: d.stale,
+          lastSyncedAt: d.lastSyncedAt,
+        })),
       });
     }
-    return out;
+
+    const expected = items.filter((i) =>
+      APPROVED_OR_BEYOND.has(i.state as any),
+    );
+
+    return {
+      items,
+      summary: {
+        total: items.length,
+        approvedOrBeyond: expected.length,
+        covered: items.filter((i) => i.coverage === CoverageState.Covered).length,
+        uncovered: items.filter((i) => i.coverage === CoverageState.Uncovered)
+          .length,
+        provisional: items.filter(
+          (i) => i.coverage === CoverageState.Provisional,
+        ).length,
+        unresolvedSources: Array.from(unresolvedSources),
+        // Only requirements that are *expected* to have delivery count as
+        // gaps. A draft requirement with no work is not a gap, it is a draft.
+        gaps: expected
+          .filter((i) => i.coverage !== CoverageState.Covered)
+          .map((i) => ({
+            requirementId: i.requirementId,
+            urn: i.urn,
+            title: i.title,
+            state: i.state,
+            coverage: i.coverage,
+          })),
+      },
+    };
   }
 
   // -------------------------------------------------------------------------
