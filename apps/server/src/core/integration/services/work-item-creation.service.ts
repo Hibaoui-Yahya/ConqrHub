@@ -42,7 +42,12 @@ export interface CreateFromHubResult {
 export class WorkItemCreationService {
   private readonly logger = new Logger(WorkItemCreationService.name);
 
-  private static readonly MAX_BATCH = 100;
+  /**
+   * Batch ceiling for work-item creation. Exported so the MCP bulk tool
+   * enforces the same limit before making any call, rather than restating a
+   * number that could drift from the server's.
+   */
+  static readonly MAX_BATCH = 100;
 
   constructor(
     private readonly plane: PlaneClientService,
