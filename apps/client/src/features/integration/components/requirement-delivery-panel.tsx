@@ -233,28 +233,30 @@ function RequirementRow({
       style={{ borderColor: "var(--border-subtle)" }}
     >
       <Stack gap="xs">
-        <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
-          <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
-            <Text size="sm" fw={500} lineClamp={2} style={{ wordBreak: "break-word" }}>
-              {requirement.title ?? t("Untitled requirement")}
-            </Text>
-            <Group gap={6} wrap="wrap">
-              <Badge size="xs" variant="default" tt="capitalize">
-                {requirement.state}
-              </Badge>
-              <CoverageBadge
-                coverage={requirement.coverage}
-                linkedCount={requirement.linkedCount}
-              />
-            </Group>
-          </Stack>
+        {/* The requirement text is the row's subject, so it gets the full
+            width and wraps. An earlier layout put the action beside it and the
+            title clamped to "Get account…", which made the panel unreadable
+            for anything but very short requirements. */}
+        <Text size="sm" fw={500} style={{ wordBreak: "break-word" }}>
+          {requirement.title ?? t("Untitled requirement")}
+        </Text>
+
+        <Group gap={6} wrap="wrap" justify="space-between" align="center">
+          <Group gap={6} wrap="wrap">
+            <Badge size="xs" variant="default" tt="capitalize">
+              {requirement.state}
+            </Badge>
+            <CoverageBadge
+              coverage={requirement.coverage}
+              linkedCount={requirement.linkedCount}
+            />
+          </Group>
           {showCreate && (
             <Button
               size="compact-xs"
               variant="light"
               leftSection={<IconPlus size={12} />}
               onClick={onCreate}
-              style={{ flexShrink: 0 }}
             >
               {t("Create linked work")}
             </Button>

@@ -136,6 +136,18 @@ async function readBody(res: { text(): Promise<string> }): Promise<unknown> {
  * and batch; this client only enforces a per-request timeout and classifies
  * 429/5xx as retryable.
  */
+/**
+ * Forward the caller's delegation on a read.
+ *
+ * Reads are delegated too. Without this ConqrPlan answers as the API key's
+ * owner, so a viewer with no access to a project would still be shown its work
+ * items - and once ConqrPlan started requiring delegation, every card resolved
+ * as `restricted` instead, because the GET carried none.
+ */
+function readContext(ctx?: PlaneCallContext) {
+  return { delegation: ctx?.delegation, correlationId: ctx?.correlationId };
+}
+
 @Injectable()
 export class PlaneClientService {
   private readonly logger = new Logger(PlaneClientService.name);
@@ -247,6 +259,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     return this.request<PlaneWorkItem>(
       `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/`,
+      readContext(ctx),
     );
   }
 
@@ -280,6 +293,7 @@ export class PlaneClientService {
     const qs = params.toString() ? `?${params.toString()}` : '';
     const res = await this.request<{ results?: PlaneWorkItem[] } | PlaneWorkItem[]>(
       `/workspaces/${slug}/projects/${projectId}/issues/${qs}`,
+      readContext(ctx),
     );
     // Plane returns either a paginated {results} or a bare array depending on endpoint.
     const results = Array.isArray(res) ? res : (res.results ?? []);
@@ -294,6 +308,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneLabel[] } | PlaneLabel[]>(
       `/workspaces/${slug}/projects/${projectId}/labels/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
@@ -316,7 +331,7 @@ export class PlaneClientService {
       results?: PlaneWorkItem[];
       next_cursor?: string;
       next_page_results?: boolean;
-    }>(`/workspaces/${slug}/projects/${projectId}/issues/${qs}`);
+    }>(`/workspaces/${slug}/projects/${projectId}/issues/${qs}`, readContext(ctx));
     return {
       results: res.results ?? [],
       nextCursor: res.next_page_results ? (res.next_cursor ?? null) : null,
@@ -326,7 +341,7 @@ export class PlaneClientService {
   /** List projects in the configured workspace (suite AI/MCP tools). */
   async listProjects(ctx?: PlaneCallContext): Promise<{ id: string; name: string; identifier?: string }[]> {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
-    const res = await this.request<{ results?: any[] } | any[]>(`/workspaces/${slug}/projects/`);
+    const res = await this.request<{ results?: any[] } | any[]>(`/workspaces/${slug}/projects/`, readContext(ctx));
     const results = Array.isArray(res) ? res : (res.results ?? []);
     return results.map((p: any) => ({ id: p.id, name: p.name, identifier: p.identifier }));
   }
@@ -354,6 +369,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneState[] } | PlaneState[]>(
       `/workspaces/${slug}/projects/${projectId}/states/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
@@ -367,6 +383,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneComment[] } | PlaneComment[]>(
       `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/comments/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
@@ -399,6 +416,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneWorkItem[] } | PlaneWorkItem[]>(
       `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
@@ -431,6 +449,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: PlaneMember[] } | PlaneMember[]>(
       `/workspaces/${slug}/members/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
@@ -443,6 +462,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: any[] } | any[]>(
       `/workspaces/${slug}/projects/${projectId}/cycles/`,
+      readContext(ctx),
     );
     const results = Array.isArray(res) ? res : (res.results ?? []);
     return results.map((c: any) => ({
@@ -467,6 +487,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: any[] } | any[]>(
       `/workspaces/${slug}/projects/${projectId}/members/`,
+      readContext(ctx),
     );
     const results = Array.isArray(res) ? res : (res?.results ?? []);
     return results.map((m: any) => ({
@@ -484,6 +505,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: any[] } | any[]>(
       `/workspaces/${slug}/projects/${projectId}/modules/`,
+      readContext(ctx),
     );
     const results = Array.isArray(res) ? res : (res?.results ?? []);
     return results.map((m: any) => ({ id: m.id, name: m.name, status: m.status }));
@@ -518,7 +540,7 @@ export class PlaneClientService {
   async findWorkItemCycle(
     projectId: string,
     workItemId: string,
-    opts?: { workspaceSlug?: string; maxCycles?: number },
+    opts?: PlaneCallContext & { maxCycles?: number },
   ): Promise<string | null | undefined> {
     const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const maxCycles = opts?.maxCycles ?? 25;
@@ -527,6 +549,7 @@ export class PlaneClientService {
     for (const cycle of scanned) {
       const res = await this.request<{ results?: any[] } | any[]>(
         `/workspaces/${slug}/projects/${projectId}/cycles/${cycle.id}/cycle-issues/`,
+        readContext(opts),
       );
       const items = Array.isArray(res) ? res : (res?.results ?? []);
       if (items.some((i: any) => String(i.id) === String(workItemId))) return cycle.id;
@@ -593,6 +616,7 @@ export class PlaneClientService {
     try {
       return await this.request<PlaneEstimate & { is_active?: boolean }>(
         `/workspaces/${slug}/projects/${projectId}/estimates/`,
+      readContext(ctx),
       );
     } catch (err) {
       if (err instanceof PlaneApiError && err.status === 404) return null;
@@ -654,6 +678,7 @@ export class PlaneClientService {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: any[] } | any[]>(
       `/workspaces/${slug}/projects/${projectId}/estimates/${estimateId}/estimate-points/`,
+      readContext(ctx),
     );
     return Array.isArray(res) ? res : (res?.results ?? []);
   }
