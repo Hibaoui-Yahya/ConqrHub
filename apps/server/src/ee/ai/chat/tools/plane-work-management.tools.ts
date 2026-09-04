@@ -9,6 +9,9 @@ import {
   workItemWritableFields,
   writeWorkItem,
 } from './work-item-fields';
+import { DELEGATED_SCOPES } from '../../../../core/integration/domain/delegated-token.util';
+import { DelegatedTokenService } from '../../../../core/integration/services/delegated-token.service';
+import { delegateForPlane } from './plane-delegation.helper';
 
 /**
  * Deeper ConqrPlan work-management coverage for the suite assistant
@@ -39,6 +42,7 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
   onModuleInit(): void {
     if (this.plane.isEnabled()) this.registry.register(this);
@@ -48,13 +52,12 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
     ctx: ChatToolContext,
   ) {
     const { projectId, workItemId, ...fields } = args;
-    return writeWorkItem(
-      this.plane,
-      projectId,
-      { kind: 'update', workItemId },
-      fields,
-      { onBehalfOf: ctx.user.id },
-    );
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.workItemUpdate,
+      DELEGATED_SCOPES.cycleAssign,
+      DELEGATED_SCOPES.moduleAssign,
+    ]);
+    return writeWorkItem(this.plane, projectId, { kind: 'update', workItemId }, fields, call);
   }
 }
 
@@ -137,6 +140,7 @@ export class AddWorkItemCommentTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
   onModuleInit(): void {
     if (this.plane.isEnabled()) this.registry.register(this);
@@ -150,7 +154,7 @@ export class AddWorkItemCommentTool implements ChatTool, OnModuleInit {
         args.projectId,
         args.workItemId,
         toHtml(args.text)!,
-        { onBehalfOf: ctx.user.id },
+        delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemUpdate]),
       );
       return { id: c.id, createdAt: c.created_at ?? null, success: true };
     } catch (err) {

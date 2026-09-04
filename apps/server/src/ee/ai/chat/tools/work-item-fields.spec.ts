@@ -9,7 +9,9 @@ import {
   writeWorkItem,
 } from './work-item-fields';
 
-const ctx = { onBehalfOf: 'user-1' };
+// writeWorkItem takes a ConqrPlan call context: a signed delegation plus its
+// correlation id. There is deliberately no way to pass a bare user id.
+const ctx = { delegation: 'obo-token', correlationId: 'corr-1' };
 
 function makePlane(overrides: Record<string, any> = {}) {
   return {
@@ -256,7 +258,7 @@ describe('writeWorkItem', () => {
         start_date: '2026-09-01',
         target_date: '2026-09-10',
       }),
-      { onBehalfOf: 'user-1' },
+      { delegation: 'obo-token', correlationId: 'corr-1' },
     );
   });
 
@@ -407,7 +409,8 @@ describe('writeWorkItem', () => {
     // be resolved before it can be removed.
     expect(plane.findWorkItemCycle).toHaveBeenCalledWith('proj-1', 'wi-1');
     expect(plane.removeWorkItemFromCycle).toHaveBeenCalledWith('proj-1', 'cyc-7', 'wi-1', {
-      onBehalfOf: 'user-1',
+      delegation: 'obo-token',
+      correlationId: 'corr-1',
     });
     expect(result.membership.applied).toContain('cycleId:cleared');
     expect(result.code).toBeUndefined();

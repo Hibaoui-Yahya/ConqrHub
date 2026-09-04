@@ -12,6 +12,9 @@ import {
   workItemWritableFields,
   writeWorkItem,
 } from './work-item-fields';
+import { DELEGATED_SCOPES } from '../../../../core/integration/domain/delegated-token.util';
+import { DelegatedTokenService } from '../../../../core/integration/services/delegated-token.service';
+import { delegateForPlane } from './plane-delegation.helper';
 
 /**
  * Cross-product tools: let the suite assistant (chat + MCP) read and create
@@ -130,6 +133,7 @@ export class CreateWorkItemTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
   onModuleInit(): void {
     if (this.plane.isEnabled()) this.registry.register(this);
@@ -139,13 +143,14 @@ export class CreateWorkItemTool implements ChatTool, OnModuleInit {
     ctx: ChatToolContext,
   ) {
     const { projectId, name, ...fields } = args;
-    return writeWorkItem(
-      this.plane,
-      projectId,
-      { kind: 'create', name },
-      fields,
-      { onBehalfOf: ctx.user.id },
-    );
+    // Creating an item may also place it in a cycle or modules, so the
+    // delegation carries those scopes too - and nothing else.
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.workItemCreate,
+      DELEGATED_SCOPES.cycleAssign,
+      DELEGATED_SCOPES.moduleAssign,
+    ]);
+    return writeWorkItem(this.plane, projectId, { kind: 'create', name }, fields, call);
   }
 }
 

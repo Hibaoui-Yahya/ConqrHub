@@ -11,6 +11,9 @@ import {
   workItemWritableFields,
   writeWorkItem,
 } from './work-item-fields';
+import { DELEGATED_SCOPES } from '../../../../core/integration/domain/delegated-token.util';
+import { DelegatedTokenService } from '../../../../core/integration/services/delegated-token.service';
+import { delegateForPlane } from './plane-delegation.helper';
 
 /**
  * ConqrPlan Control Foundation v1: bulk work-item creation and estimate
@@ -66,6 +69,7 @@ export class BulkCreateWorkItemsTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
 
   onModuleInit(): void {
@@ -114,6 +118,17 @@ export class BulkCreateWorkItemsTool implements ChatTool, OnModuleInit {
     // rate limit and keeps per-row attribution. ConqrPlan exposes no bulk
     // create and no cross-item transaction, so there is nothing to roll back
     // to and partial completion is the real behaviour, reported as such.
+    // One delegation for the batch, carrying the bulk scope explicitly: a
+    // token minted for a single create cannot be replayed to create a hundred.
+    // ConqrPlan re-checks the acting user's permission on every row, so a
+    // membership revoked part-way through stops the rest of the batch.
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.workItemBulkCreate,
+      DELEGATED_SCOPES.workItemCreate,
+      DELEGATED_SCOPES.cycleAssign,
+      DELEGATED_SCOPES.moduleAssign,
+    ]);
+
     const results: BulkRowResult[] = [];
     for (let index = 0; index < items.length; index++) {
       const { name, ...fields } = items[index];
@@ -122,7 +137,7 @@ export class BulkCreateWorkItemsTool implements ChatTool, OnModuleInit {
         args.projectId,
         { kind: 'create', name },
         fields,
-        { onBehalfOf: ctx.user.id },
+        call,
       );
 
       const asError = outcome as { error?: string; code?: string; details?: unknown };
@@ -175,6 +190,7 @@ export class BulkCreateWorkItemsTool implements ChatTool, OnModuleInit {
 
     return {
       projectId: args.projectId,
+      correlationId: call.correlationId,
       total: items.length,
       created: count('created'),
       partial: count('partial'),
@@ -200,15 +216,20 @@ export class GetEstimateSystemTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
 
   onModuleInit(): void {
     if (this.plane.isEnabled()) this.registry.register(this);
   }
 
-  async execute(args: { projectId: string }, _ctx: ChatToolContext) {
+  async execute(args: { projectId: string }, ctx: ChatToolContext) {
+    // Reads are delegated too. ConqrPlan must be able to hide a project the
+    // caller cannot see; resolving it as the API key's owner would leak the
+    // existence and configuration of projects the user has no access to.
+    const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.estimateRead]);
     try {
-      const estimate = await this.plane.getProjectEstimate(args.projectId);
+      const estimate = await this.plane.getProjectEstimate(args.projectId, call);
       if (!estimate) {
         return {
           configured: false,
@@ -219,7 +240,7 @@ export class GetEstimateSystemTool implements ChatTool, OnModuleInit {
       }
       let points: { id: string; key: number; value: string }[] = [];
       try {
-        points = await this.plane.listEstimatePoints(args.projectId, estimate.id);
+        points = await this.plane.listEstimatePoints(args.projectId, estimate.id, call);
       } catch {
         points = estimate.points ?? [];
       }
@@ -259,6 +280,7 @@ export class CreateEstimateSystemTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
 
   onModuleInit(): void {
@@ -269,8 +291,14 @@ export class CreateEstimateSystemTool implements ChatTool, OnModuleInit {
     args: { projectId: string; name: string; type?: 'points' | 'categories'; values: string[] },
     ctx: ChatToolContext,
   ) {
+    // Configuring estimation is a project-administration action, so it takes
+    // its own scope; a work-item token can never reach it.
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.estimateConfigure,
+      DELEGATED_SCOPES.estimateRead,
+    ]);
     try {
-      const existing = await this.plane.getProjectEstimate(args.projectId);
+      const existing = await this.plane.getProjectEstimate(args.projectId, call);
       if (existing) {
         return fail(
           'CONFLICT',
@@ -282,18 +310,18 @@ export class CreateEstimateSystemTool implements ChatTool, OnModuleInit {
       const created = await this.plane.createEstimate(
         args.projectId,
         { name: args.name, type: args.type ?? 'points' },
-        { onBehalfOf: ctx.user.id },
+        call,
       );
 
       const points = await this.plane.createEstimatePoints(
         args.projectId,
         created.id,
         args.values.map((value, key) => ({ key, value })),
-        { onBehalfOf: ctx.user.id },
+        call,
       );
 
       // Confirm activation from the server rather than assuming it.
-      const confirmed = await this.plane.getProjectEstimate(args.projectId);
+      const confirmed = await this.plane.getProjectEstimate(args.projectId, call);
       const isActive = confirmed?.is_active !== false;
 
       const result = {
@@ -335,6 +363,7 @@ export class ActivateEstimateSystemTool implements ChatTool, OnModuleInit {
   constructor(
     private readonly plane: PlaneClientService,
     private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
   ) {}
 
   onModuleInit(): void {
@@ -343,8 +372,12 @@ export class ActivateEstimateSystemTool implements ChatTool, OnModuleInit {
 
   async execute(args: { projectId: string; active?: boolean }, ctx: ChatToolContext) {
     const active = args.active ?? true;
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.estimateConfigure,
+      DELEGATED_SCOPES.estimateRead,
+    ]);
     try {
-      const existing = await this.plane.getProjectEstimate(args.projectId);
+      const existing = await this.plane.getProjectEstimate(args.projectId, call);
       if (!existing) {
         return fail(
           'NO_ESTIMATE_SYSTEM',
@@ -355,7 +388,7 @@ export class ActivateEstimateSystemTool implements ChatTool, OnModuleInit {
       const updated = await this.plane.updateEstimate(
         args.projectId,
         { is_active: active },
-        { onBehalfOf: ctx.user.id },
+        call,
       );
       return {
         id: updated.id ?? existing.id,

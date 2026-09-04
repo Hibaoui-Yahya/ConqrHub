@@ -12,6 +12,29 @@ import {
   PLANE_WORK_MANAGEMENT_TOOLS,
 } from './plane-work-management.tools';
 
+/**
+ * A delegation service stub. Every ConqrPlan call from a tool must carry a
+ * signed on-behalf-of token; these tests assert the token is minted with the
+ * right scopes and travels with the call, not that HMAC works (covered by
+ * delegated-token.util.spec.ts).
+ */
+function makeDelegation() {
+  return {
+    mintForPlane: jest.fn().mockImplementation(({ scope }: { scope: string[] }) => ({
+      token: 'obo-token',
+      jti: 'corr-1',
+      personUid: 'conqr:person:user-1',
+      orgUid: 'conqr:org:ws-1',
+      scope,
+      expiresAt: 9_999_999,
+    })),
+  } as any;
+}
+
+/** The call context every delegated ConqrPlan request should carry. */
+const DELEGATED_CALL = { delegation: 'obo-token', correlationId: 'corr-1' };
+
+
 const ctx = { user: { id: 'user-1' } as any, workspaceId: 'ws-1' };
 
 function makePlaneMock(enabled: boolean) {
@@ -30,10 +53,10 @@ function makePlaneMock(enabled: boolean) {
 
 function constructAll(plane: any, registry: ChatToolRegistry) {
   return [
-    new UpdateWorkItemTool(plane, registry),
+    new UpdateWorkItemTool(plane, registry, makeDelegation()),
     new ListWorkItemStatesTool(plane, registry),
     new GetWorkItemCommentsTool(plane, registry),
-    new AddWorkItemCommentTool(plane, registry),
+    new AddWorkItemCommentTool(plane, registry, makeDelegation()),
     new ListCycleWorkItemsTool(plane, registry),
     new ListEstimatePointsTool(plane, registry),
     new ListWorkItemLabelsTool(plane, registry),
@@ -99,14 +122,14 @@ describe('Plane work-management tools', () => {
   it('update_work_item can set and clear the estimate point', async () => {
     const plane = makePlaneMock(true);
     plane.updateWorkItem.mockResolvedValue({ id: 'wi-1', name: 'X', sequence_id: 1 });
-    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry());
+    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry(), makeDelegation());
 
     await tool.execute({ projectId: 'p', workItemId: 'wi-1', estimatePointId: 'pt-3' }, ctx);
     expect(plane.updateWorkItem).toHaveBeenLastCalledWith(
       'p',
       'wi-1',
       expect.objectContaining({ estimate_point: 'pt-3' }),
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
 
     await tool.execute({ projectId: 'p', workItemId: 'wi-1', estimatePointId: null }, ctx);
@@ -114,7 +137,7 @@ describe('Plane work-management tools', () => {
       'p',
       'wi-1',
       expect.objectContaining({ estimate_point: null }),
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
   });
 
@@ -128,7 +151,7 @@ describe('Plane work-management tools', () => {
       priority: 'high',
       updated_at: '2026-09-01T00:00:00Z',
     });
-    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry());
+    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry(), makeDelegation());
 
     const result = await tool.execute(
       { projectId: 'proj-1', workItemId: 'wi-1', name: 'Renamed', stateId: 'state-9' },
@@ -144,14 +167,14 @@ describe('Plane work-management tools', () => {
         priority: undefined,
         state: 'state-9',
       },
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
     expect(result).toMatchObject({ id: 'wi-1', name: 'Renamed', state: 'In Progress' });
   });
 
   it('update_work_item refuses an empty patch', async () => {
     const plane = makePlaneMock(true);
-    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry());
+    const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry(), makeDelegation());
     const result = await tool.execute({ projectId: 'p', workItemId: 'w' }, ctx);
     // `error` keeps its original contract; Control Foundation v1 adds a stable
     // machine-readable `code` alongside it, so this is a superset match.
@@ -189,7 +212,7 @@ describe('Plane work-management tools', () => {
   it('add_work_item_comment wraps plain text in a paragraph and attributes the actor', async () => {
     const plane = makePlaneMock(true);
     plane.addWorkItemComment.mockResolvedValue({ id: 'c-2', created_at: '2026-09-01T00:00:00Z' });
-    const tool = new AddWorkItemCommentTool(plane as any, new ChatToolRegistry());
+    const tool = new AddWorkItemCommentTool(plane as any, new ChatToolRegistry(), makeDelegation());
 
     const result = await tool.execute(
       { projectId: 'p', workItemId: 'w', text: 'Shipping today' },
@@ -200,7 +223,7 @@ describe('Plane work-management tools', () => {
       'p',
       'w',
       '<p>Shipping today</p>',
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
     expect(result).toEqual({ id: 'c-2', createdAt: '2026-09-01T00:00:00Z', success: true });
   });

@@ -8,6 +8,29 @@ import {
   PLANE_CONTROL_TOOLS,
 } from './plane-control.tools';
 
+/**
+ * A delegation service stub. Every ConqrPlan call from a tool must carry a
+ * signed on-behalf-of token; these tests assert the token is minted with the
+ * right scopes and travels with the call, not that HMAC works (covered by
+ * delegated-token.util.spec.ts).
+ */
+function makeDelegation() {
+  return {
+    mintForPlane: jest.fn().mockImplementation(({ scope }: { scope: string[] }) => ({
+      token: 'obo-token',
+      jti: 'corr-1',
+      personUid: 'conqr:person:user-1',
+      orgUid: 'conqr:org:ws-1',
+      scope,
+      expiresAt: 9_999_999,
+    })),
+  } as any;
+}
+
+/** The call context every delegated ConqrPlan request should carry. */
+const DELEGATED_CALL = { delegation: 'obo-token', correlationId: 'corr-1' };
+
+
 const ctx = { user: { id: 'user-1' } as any, workspaceId: 'ws-1' };
 
 function makePlane(overrides: Record<string, any> = {}) {
@@ -76,7 +99,7 @@ describe('control tool registration', () => {
 describe('bulk_create_work_items', () => {
   it('creates a single item and reports it by index', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', items: rows(1) }, ctx);
 
@@ -88,7 +111,7 @@ describe('bulk_create_work_items', () => {
 
   it('creates the maximum batch of 100', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', items: rows(100) }, ctx);
 
@@ -100,7 +123,7 @@ describe('bulk_create_work_items', () => {
 
   it('rejects 101 items before creating anything', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', items: rows(101) }, ctx);
 
@@ -111,7 +134,7 @@ describe('bulk_create_work_items', () => {
 
   it('rejects an empty batch', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
     const result: any = await tool.execute({ projectId: 'proj-1', items: [] }, ctx);
     expect(result.code).toBe('VALIDATION_FAILED');
     expect(plane.createWorkItem).not.toHaveBeenCalled();
@@ -119,7 +142,7 @@ describe('bulk_create_work_items', () => {
 
   it('rejects a batch that repeats an idempotency key, before creating anything', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute(
       {
@@ -150,7 +173,7 @@ describe('bulk_create_work_items', () => {
         return { id: `wi-${call}`, name: body.name, sequence_id: call, project: 'proj-1' };
       }),
     });
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', items: rows(3) }, ctx);
 
@@ -169,7 +192,7 @@ describe('bulk_create_work_items', () => {
         new PlaneApiError('Plane API 409', 409, false, { error: 'already exists', id: 'wi-existing' }),
       ),
     });
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute(
       { projectId: 'proj-1', items: [{ name: 'A', externalId: 'row-1' }] },
@@ -187,7 +210,7 @@ describe('bulk_create_work_items', () => {
         .fn()
         .mockRejectedValue(new PlaneApiError('Plane API 400', 400, false, { error: 'CYCLE_COMPLETED' })),
     });
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute(
       { projectId: 'proj-1', items: [{ name: 'A', cycleId: 'ended' }] },
@@ -202,7 +225,7 @@ describe('bulk_create_work_items', () => {
 
   it('passes the full field set through for each row', async () => {
     const plane = makePlane();
-    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry());
+    const tool = new BulkCreateWorkItemsTool(plane, new ChatToolRegistry(), makeDelegation());
 
     await tool.execute(
       {
@@ -231,7 +254,7 @@ describe('bulk_create_work_items', () => {
         labels: ['label-1'],
         target_date: '2026-12-01',
       }),
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
   });
 });
@@ -243,7 +266,7 @@ describe('bulk_create_work_items', () => {
 describe('get_estimate_system', () => {
   it('reports plainly when no system is configured', async () => {
     const plane = makePlane({ getProjectEstimate: jest.fn().mockResolvedValue(null) });
-    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1' }, ctx);
 
@@ -261,7 +284,7 @@ describe('get_estimate_system', () => {
         { id: 'pt-2', key: 1, value: '2' },
       ]),
     });
-    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1' }, ctx);
 
@@ -274,7 +297,7 @@ describe('get_estimate_system', () => {
       getProjectEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'X', is_active: false }),
       listEstimatePoints: jest.fn().mockResolvedValue([]),
     });
-    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new GetEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1' }, ctx);
     expect(result).toMatchObject({ configured: true, isActive: false });
@@ -295,7 +318,7 @@ describe('create_estimate_system', () => {
         { id: 'pt-3', key: 2, value: '3' },
       ]),
     });
-    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute(
       { projectId: 'proj-1', name: 'Fibonacci', type: 'points', values: ['1', '2', '3'] },
@@ -312,7 +335,7 @@ describe('create_estimate_system', () => {
         { key: 1, value: '2' },
         { key: 2, value: '3' },
       ],
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
   });
 
@@ -320,7 +343,7 @@ describe('create_estimate_system', () => {
     const plane = makePlane({
       getProjectEstimate: jest.fn().mockResolvedValue({ id: 'est-existing', name: 'Old' }),
     });
-    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', name: 'New', values: ['1'] }, ctx);
 
@@ -337,7 +360,7 @@ describe('create_estimate_system', () => {
       createEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F' }),
       createEstimatePoints: jest.fn().mockResolvedValue([{ id: 'pt-1', key: 0, value: '1' }]),
     });
-    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new CreateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', name: 'F', values: ['1'] }, ctx);
 
@@ -352,14 +375,14 @@ describe('activate_estimate_system', () => {
       getProjectEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F', is_active: false }),
       updateEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F', is_active: true }),
     });
-    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const first: any = await tool.execute({ projectId: 'proj-1' }, ctx);
     const second: any = await tool.execute({ projectId: 'proj-1' }, ctx);
 
     expect(first).toMatchObject({ id: 'est-1', isActive: true });
     expect(second).toMatchObject({ id: 'est-1', isActive: true });
-    expect(plane.updateEstimate).toHaveBeenCalledWith('proj-1', { is_active: true }, { onBehalfOf: 'user-1' });
+    expect(plane.updateEstimate).toHaveBeenCalledWith('proj-1', { is_active: true }, DELEGATED_CALL);
   });
 
   it('switches estimation off when asked', async () => {
@@ -367,17 +390,17 @@ describe('activate_estimate_system', () => {
       getProjectEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F', is_active: true }),
       updateEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F', is_active: false }),
     });
-    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1', active: false }, ctx);
 
     expect(result.isActive).toBe(false);
-    expect(plane.updateEstimate).toHaveBeenCalledWith('proj-1', { is_active: false }, { onBehalfOf: 'user-1' });
+    expect(plane.updateEstimate).toHaveBeenCalledWith('proj-1', { is_active: false }, DELEGATED_CALL);
   });
 
   it('explains when there is no system to activate', async () => {
     const plane = makePlane({ getProjectEstimate: jest.fn().mockResolvedValue(null) });
-    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1' }, ctx);
 
@@ -390,7 +413,7 @@ describe('activate_estimate_system', () => {
       getProjectEstimate: jest.fn().mockResolvedValue({ id: 'est-1', name: 'F' }),
       updateEstimate: jest.fn().mockRejectedValue(new PlaneApiError('Plane API 403', 403, false)),
     });
-    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry());
+    const tool = new ActivateEstimateSystemTool(plane, new ChatToolRegistry(), makeDelegation());
 
     const result: any = await tool.execute({ projectId: 'proj-1' }, ctx);
     expect(result.code).toBe('PERMISSION_DENIED');

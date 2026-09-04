@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PlaneClientService } from './plane-client.service';
 import { RelationshipService } from './relationship.service';
 import { DelegatedTokenService } from './delegated-token.service';
+import { DELEGATED_SCOPES } from '../domain/delegated-token.util';
 import { parseUrn, buildUrn } from '../domain/urn.util';
 import { RelationType } from '../domain/relationship-types';
 import { IntegrationRelationship } from '@docmost/db/types/entity.types';
@@ -78,16 +79,16 @@ export class WorkItemCreationService {
       throw new BadRequestException('planeProjectId is required');
     }
 
-    const correlationId = randomUUID();
-
-    // Mint a short-lived, least-privilege on-behalf-of token so the write
-    // carries the acting user's identity, not an anonymous bot (§9.1).
-    const oboToken = this.delegatedTokens.mint({
-      actorId: input.actorId,
-      workspaceId: input.workspaceId,
-      audience: 'plane-adapter',
-      scope: ['work-item:create'],
+    // Mint a short-lived, least-privilege on-behalf-of token so the write is
+    // authorised as the acting human, not as the API key's owner (§9.1). The
+    // token's jti is the correlation id for the whole exchange, so ConqrHub's
+    // audit row, ConqrPlan's audit row and the resulting event all agree.
+    const delegation = this.delegatedTokens.mintForPlane({
+      hubUserId: input.actorId,
+      hubWorkspaceId: input.workspaceId,
+      scope: [DELEGATED_SCOPES.workItemCreate],
     });
+    const correlationId = delegation.jti;
 
     // 1) Create the work item in Plane (owner of work).
     const workItem = await this.plane.createWorkItem(
@@ -97,7 +98,7 @@ export class WorkItemCreationService {
         description_html: input.descriptionHtml,
         priority: input.priority,
       },
-      { onBehalfOf: oboToken },
+      { delegation: delegation.token, correlationId },
     );
 
     const workItemUrn = buildUrn('plane', 'work-item', workItem.id);

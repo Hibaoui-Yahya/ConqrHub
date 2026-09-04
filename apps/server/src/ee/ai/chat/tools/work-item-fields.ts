@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   PlaneApiError,
+  PlaneCallContext,
   PlaneClientService,
   PlaneWorkItem,
   PlaneWorkItemWrite,
@@ -27,6 +28,21 @@ import { buildUrn } from '../../../../core/integration/domain/urn.util';
  *    it returns 201 having quietly discarded the rest. We compare what was
  *    asked for against what came back and surface the difference.
  */
+
+/**
+ * Narrow an options object back to just the call context.
+ *
+ * Keeps the delegation and correlation id travelling with every ConqrPlan
+ * request without letting local-only fields (like `currentCycleId`) leak into
+ * the transport layer.
+ */
+function ctxOf(opts: PlaneCallContext): PlaneCallContext {
+  return {
+    workspaceSlug: opts.workspaceSlug,
+    delegation: opts.delegation,
+    correlationId: opts.correlationId,
+  };
+}
 
 // --------------------------------------------------------------------------
 // Errors
@@ -492,8 +508,7 @@ export async function applyMembership(
   projectId: string,
   workItemId: string,
   built: BuiltWrite,
-  opts: {
-    onBehalfOf?: string;
+  opts: PlaneCallContext & {
     /**
      * The cycle the item is in, when the caller already knows it. Omitted
      * entirely (not `null`) means "look it up" — `null` is a real answer
@@ -528,15 +543,11 @@ export async function applyMembership(
           // Already in no cycle: the requested state, so this is applied.
           outcome.applied.push('cycleId:cleared');
         } else {
-          await plane.removeWorkItemFromCycle(projectId, current, workItemId, {
-            onBehalfOf: opts.onBehalfOf,
-          });
+          await plane.removeWorkItemFromCycle(projectId, current, workItemId, ctxOf(opts));
           outcome.applied.push('cycleId:cleared');
         }
       } else {
-        await plane.addWorkItemsToCycle(projectId, target, [workItemId], {
-          onBehalfOf: opts.onBehalfOf,
-        });
+        await plane.addWorkItemsToCycle(projectId, target, [workItemId], ctxOf(opts));
         outcome.applied.push(`cycleId:${target}`);
       }
     } catch (err) {
@@ -550,9 +561,7 @@ export async function applyMembership(
   if (built.modules !== undefined) {
     for (const moduleId of built.modules.ids) {
       try {
-        await plane.addWorkItemsToModule(projectId, moduleId, [workItemId], {
-          onBehalfOf: opts.onBehalfOf,
-        });
+        await plane.addWorkItemsToModule(projectId, moduleId, [workItemId], ctxOf(opts));
         outcome.applied.push(`moduleId:${moduleId}`);
       } catch (err) {
         outcome.failures.push({
@@ -599,7 +608,7 @@ export async function writeWorkItem(
   projectId: string,
   mode: WriteMode,
   args: WorkItemFieldArgs,
-  opts: { onBehalfOf?: string } = {},
+  opts: PlaneCallContext = {},
 ): Promise<WriteResult> {
   // ---- local validation, for precise messages ----
   const dateProblem = validateDateRange(args);
@@ -644,11 +653,9 @@ export async function writeWorkItem(
         ? await plane.createWorkItem(
             projectId,
             { ...built.payload, name: mode.name },
-            { onBehalfOf: opts.onBehalfOf },
+            ctxOf(opts),
           )
-        : await plane.updateWorkItem(projectId, mode.workItemId, built.payload, {
-            onBehalfOf: opts.onBehalfOf,
-          });
+        : await plane.updateWorkItem(projectId, mode.workItemId, built.payload, ctxOf(opts));
   } catch (err) {
     // ConqrPlan's own idempotency: a repeated externalId in the same project is
     // refused with 409 and the id of the item that already exists. Surface that
@@ -673,9 +680,7 @@ export async function writeWorkItem(
   // ---- cycle / module membership (separate endpoints) ----
   let membership: MembershipOutcome | undefined;
   if (built.cycle !== undefined || built.modules !== undefined) {
-    membership = await applyMembership(plane, projectId, written.id, built, {
-      onBehalfOf: opts.onBehalfOf,
-    });
+    membership = await applyMembership(plane, projectId, written.id, built, { ...opts });
   }
 
   // ---- verify what landed ----
