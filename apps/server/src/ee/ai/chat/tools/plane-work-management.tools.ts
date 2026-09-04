@@ -4,6 +4,11 @@ import { PlaneClientService } from '../../../../core/integration/services/plane-
 import { ChatTool, ChatToolContext } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
 import { toolError, workItemSummary } from './plane-work-items.tools';
+import {
+  WorkItemFieldArgs,
+  workItemWritableFields,
+  writeWorkItem,
+} from './work-item-fields';
 
 /**
  * Deeper ConqrPlan work-management coverage for the suite assistant
@@ -24,22 +29,12 @@ const toHtml = (text?: string): string | undefined =>
 export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'update_work_item';
   readonly description =
-    'Update a ConqrPlan work item: rename it, edit its description, change priority, move it to another state (stateId from list_work_item_states), or set its estimate (estimatePointId from list_estimate_points). Only send the fields you want to change. Use only when the user explicitly asks.';
+    'Update a ConqrPlan work item. Covers the same fields as create_work_item: name, description, priority, state, assignees, labels, start and target dates, parent, type, estimate, cycle and modules. Send only the fields you want to change; pass null to clear a field. Returns the complete stored item. Use only when the user explicitly asks.';
   readonly parameters = z.object({
     projectId: z.string(),
     workItemId: z.string(),
     name: z.string().min(1).max(255).optional(),
-    description: z.string().optional().describe('Plain-text or HTML description'),
-    priority: z.enum(['urgent', 'high', 'medium', 'low', 'none']).optional(),
-    stateId: z
-      .string()
-      .optional()
-      .describe('Target state ID (from list_work_item_states)'),
-    estimatePointId: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Estimate point ID (from list_estimate_points); null clears the estimate'),
+    ...workItemWritableFields,
   });
   constructor(
     private readonly plane: PlaneClientService,
@@ -49,45 +44,17 @@ export class UpdateWorkItemTool implements ChatTool, OnModuleInit {
     if (this.plane.isEnabled()) this.registry.register(this);
   }
   async execute(
-    args: {
-      projectId: string;
-      workItemId: string;
-      name?: string;
-      description?: string;
-      priority?: string;
-      stateId?: string;
-      estimatePointId?: string | null;
-    },
+    args: { projectId: string; workItemId: string; name?: string } & WorkItemFieldArgs,
     ctx: ChatToolContext,
   ) {
-    if (
-      args.name === undefined &&
-      args.description === undefined &&
-      args.priority === undefined &&
-      args.stateId === undefined &&
-      args.estimatePointId === undefined
-    ) {
-      return { error: 'Nothing to update — pass at least one of name, description, priority, stateId, estimatePointId.' };
-    }
-    try {
-      const w = await this.plane.updateWorkItem(
-        args.projectId,
-        args.workItemId,
-        {
-          name: args.name,
-          description_html: toHtml(args.description),
-          priority: args.priority,
-          state: args.stateId,
-          ...(args.estimatePointId !== undefined
-            ? { estimate_point: args.estimatePointId }
-            : {}),
-        },
-        { onBehalfOf: ctx.user.id },
-      );
-      return workItemSummary(w);
-    } catch (err) {
-      return toolError(err);
-    }
+    const { projectId, workItemId, ...fields } = args;
+    return writeWorkItem(
+      this.plane,
+      projectId,
+      { kind: 'update', workItemId },
+      fields,
+      { onBehalfOf: ctx.user.id },
+    );
   }
 }
 

@@ -125,7 +125,10 @@ describe('Plane work-item tools', () => {
       },
       { onBehalfOf: 'user-1' },
     );
-    expect(result).toEqual({
+    // Backward compatibility: every key the previous summary returned is still
+    // present with the same meaning. Control Foundation v1 only widens the
+    // shape, so this is asserted as a superset rather than an exact match.
+    expect(result).toMatchObject({
       id: 'wi-2',
       name: 'New work item',
       sequenceId: 7,
@@ -134,6 +137,19 @@ describe('Plane work-item tools', () => {
       estimatePointId: null,
       updatedAt: '2026-07-19T00:00:00Z',
     });
+    // ...and the fields that were previously unreachable are now reported.
+    expect(result).toMatchObject({
+      urn: 'conqr://plane/work-item/wi-2',
+      projectId: 'proj-1',
+      assigneeIds: [],
+      labelIds: [],
+      startDate: null,
+      targetDate: null,
+      parentId: null,
+      typeId: null,
+    });
+    // A clean write must not carry an error marker.
+    expect(result).not.toHaveProperty('error');
   });
 
   it('tools surface PlaneApiError as a structured error object, not a throw-through of internals', async () => {

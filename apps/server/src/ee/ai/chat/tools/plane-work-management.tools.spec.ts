@@ -153,7 +153,12 @@ describe('Plane work-management tools', () => {
     const plane = makePlaneMock(true);
     const tool = new UpdateWorkItemTool(plane as any, new ChatToolRegistry());
     const result = await tool.execute({ projectId: 'p', workItemId: 'w' }, ctx);
-    expect(result).toEqual({ error: expect.stringContaining('Nothing to update') });
+    // `error` keeps its original contract; Control Foundation v1 adds a stable
+    // machine-readable `code` alongside it, so this is a superset match.
+    expect(result).toMatchObject({
+      error: expect.stringContaining('Nothing to update'),
+      code: 'VALIDATION_FAILED',
+    });
     expect(plane.updateWorkItem).not.toHaveBeenCalled();
   });
 

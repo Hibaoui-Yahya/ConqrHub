@@ -6,6 +6,12 @@ import {
 } from '../../../../core/integration/services/plane-client.service';
 import { ChatTool, ChatToolContext } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
+import {
+  WorkItemFieldArgs,
+  normalizeWorkItem,
+  workItemWritableFields,
+  writeWorkItem,
+} from './work-item-fields';
 
 /**
  * Cross-product tools: let the suite assistant (chat + MCP) read and create
@@ -101,7 +107,10 @@ export class GetWorkItemTool implements ChatTool, OnModuleInit {
   async execute(args: { projectId: string; workItemId: string }, _ctx: ChatToolContext) {
     try {
       const w = await this.plane.getWorkItem(args.projectId, args.workItemId);
-      return { ...workItemSummary(w), description: w.description_stripped ?? null };
+      // Full normalised representation: the previous shape dropped assignees
+      // and labels even though the payload carried them, so a caller could not
+      // confirm what a write had actually stored.
+      return normalizeWorkItem(w, args.projectId);
     } catch (err) {
       return toolError(err);
     }
@@ -112,12 +121,11 @@ export class GetWorkItemTool implements ChatTool, OnModuleInit {
 export class CreateWorkItemTool implements ChatTool, OnModuleInit {
   readonly name = 'create_work_item';
   readonly description =
-    'Create a work item in a ConqrPlan project. Use only when the user explicitly asks to create work. Returns the created item.';
+    'Create a work item in a ConqrPlan project with its full field set: state, assignees, labels, dates, parent, type, estimate, cycle and modules. Use only when the user explicitly asks to create work. Returns the complete stored item. Ids that would be silently dropped are rejected instead.';
   readonly parameters = z.object({
     projectId: z.string(),
     name: z.string().min(1).max(255),
-    description: z.string().optional().describe('Plain-text or HTML description'),
-    priority: z.enum(['urgent', 'high', 'medium', 'low', 'none']).optional(),
+    ...workItemWritableFields,
   });
   constructor(
     private readonly plane: PlaneClientService,
@@ -127,28 +135,17 @@ export class CreateWorkItemTool implements ChatTool, OnModuleInit {
     if (this.plane.isEnabled()) this.registry.register(this);
   }
   async execute(
-    args: { projectId: string; name: string; description?: string; priority?: string },
+    args: { projectId: string; name: string } & WorkItemFieldArgs,
     ctx: ChatToolContext,
   ) {
-    try {
-      const html = args.description?.trim().startsWith('<')
-        ? args.description
-        : args.description
-          ? `<p>${args.description}</p>`
-          : undefined;
-      const w = await this.plane.createWorkItem(
-        args.projectId,
-        {
-          name: args.name,
-          description_html: html,
-          priority: args.priority,
-        },
-        { onBehalfOf: ctx.user.id },
-      );
-      return workItemSummary(w);
-    } catch (err) {
-      return toolError(err);
-    }
+    const { projectId, name, ...fields } = args;
+    return writeWorkItem(
+      this.plane,
+      projectId,
+      { kind: 'create', name },
+      fields,
+      { onBehalfOf: ctx.user.id },
+    );
   }
 }
 
