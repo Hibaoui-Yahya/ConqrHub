@@ -29,6 +29,7 @@ import { TraceabilityService } from './services/traceability.service';
 import { NotificationDedupService } from './services/notification-dedup.service';
 import { FederatedSearchService } from './services/federated-search.service';
 import { RequirementService } from './services/requirement.service';
+import { RequirementDeliveryService } from './services/requirement-delivery.service';
 import { IntegrationEventBus } from './services/integration-event-bus';
 import { CrossProductInsightService } from './services/cross-product-insight.service';
 import {
@@ -66,6 +67,7 @@ export class IntegrationController {
     private readonly notificationDedup: NotificationDedupService,
     private readonly federatedSearch: FederatedSearchService,
     private readonly requirements: RequirementService,
+    private readonly requirementDelivery: RequirementDeliveryService,
     private readonly eventBus: IntegrationEventBus,
     private readonly insights: CrossProductInsightService,
     private readonly pagePromotion: PagePromotionService,
@@ -189,6 +191,92 @@ export class IntegrationController {
       displayMode: dto.displayMode as any,
     });
     return { items: models };
+  }
+
+  // -------------------------------------------------------------------------
+  // Vertical Slice 01: requirement -> linked ConqrPlan execution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Requirements on a page with their coverage and related work.
+   *
+   * Work is resolved as the *viewer*, so an item they cannot open comes back
+   * as a restricted placeholder carrying no title, project, assignee or state.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('requirements/page')
+  async pageRequirements(
+    @Body() dto: { pageId: string; planeProjectId?: string },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const items = await this.requirementDelivery.pageRequirements({
+      workspaceId: workspace.id,
+      viewerId: user.id,
+      pageId: dto.pageId,
+      planeProjectId: dto.planeProjectId,
+    });
+    return {
+      items,
+      uncovered: items.filter((i) => !i.covered).length,
+      total: items.length,
+    };
+  }
+
+  /**
+   * What creating linked work would do. Changes nothing.
+   *
+   * The confirm step is separate because ConqrHub cannot undo the ConqrPlan
+   * half: dropping the relationship later never deletes the work item.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('requirements/preview-linked-work')
+  async previewLinkedWork(
+    @Body()
+    dto: {
+      requirementId: string;
+      planeProjectId?: string;
+      title?: string;
+      descriptionHtml?: string;
+      priority?: string;
+    },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.requirementDelivery.previewLinkedWork({
+      workspaceId: workspace.id,
+      viewerId: user.id,
+      ...dto,
+    });
+  }
+
+  /**
+   * Create the work item and record the canonical relationship.
+   *
+   * Runs under the acting user's delegation, so ConqrPlan authorises them and
+   * not the bridge. Returns a receipt naming the created URN, the relationship
+   * and its derived inverse, the actor and the correlation id. Safe to retry:
+   * the idempotency key is derived from the requirement and project.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('requirements/create-linked-work')
+  async createLinkedWork(
+    @Body()
+    dto: {
+      requirementId: string;
+      planeProjectId?: string;
+      title?: string;
+      descriptionHtml?: string;
+      priority?: string;
+    },
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.requirementDelivery.createLinkedWork({
+      workspaceId: workspace.id,
+      actorId: user.id,
+      ...dto,
+    });
   }
 
   /** Create a Plane work item from a Hub selection and link it back (§5.1A). */

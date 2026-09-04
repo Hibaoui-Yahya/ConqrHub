@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { PlaneClientService, PlaneApiError } from './plane-client.service';
+import { DelegatedTokenService } from './delegated-token.service';
+import { DELEGATED_SCOPES } from '../domain/delegated-token.util';
 import { parseUrn } from '../domain/urn.util';
 import {
   DisplayMode,
@@ -32,6 +34,7 @@ export class SmartObjectResolverService {
     private readonly pageRepo: PageRepo,
     private readonly planeClient: PlaneClientService,
     private readonly environment: EnvironmentService,
+    private readonly delegation: DelegatedTokenService,
   ) {}
 
   async resolve(
@@ -94,7 +97,16 @@ export class SmartObjectResolverService {
     }
 
     try {
-      const item = await this.planeClient.getWorkItem(ctx.planeProjectId, id);
+      // Resolve as the viewer, never as the integration's own credential.
+      // Without a delegation ConqrPlan would answer for whoever owns the API
+      // key, so a viewer with no access to this project would still be shown
+      // its title, state and assignees. Delegating makes the 403 below a real
+      // permission decision about *this* person.
+      const item = await this.planeClient.getWorkItem(
+        ctx.planeProjectId,
+        id,
+        this.viewerContext(ctx),
+      );
       return {
         urn,
         state: ResolutionState.Live,
@@ -125,6 +137,21 @@ export class SmartObjectResolverService {
       this.logger.warn(`Unexpected resolve error for ${urn}`);
       return { urn, state: ResolutionState.SourceUnavailable };
     }
+  }
+
+  /**
+   * A short-lived read-only delegation for the viewer.
+   *
+   * Read scope only: resolving a card for display must never be able to change
+   * anything, even if a downstream call were changed to a write by mistake.
+   */
+  private viewerContext(ctx: ResolveContext) {
+    const minted = this.delegation.mintForPlane({
+      hubUserId: ctx.viewerId,
+      hubWorkspaceId: ctx.workspaceId,
+      scope: [DELEGATED_SCOPES.workItemRead],
+    });
+    return { delegation: minted.token, correlationId: minted.jti };
   }
 
   private async resolveHub(
