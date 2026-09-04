@@ -13,9 +13,33 @@ export interface PlaneWorkItem {
   project?: string;
   sequence_id?: number;
   estimate_point?: string | null;
+  start_date?: string | null;
+  target_date?: string | null;
+  parent?: string | null;
+  type_id?: string | null;
+  type?: string | null;
+  created_at?: string;
   updated_at?: string;
   completed_at?: string | null;
   archived_at?: string | null;
+}
+
+/** Field payload accepted by ConqrPlan's work-item create and patch endpoints. */
+export interface PlaneWorkItemWrite {
+  name?: string;
+  description_html?: string | null;
+  priority?: string;
+  state?: string;
+  assignees?: string[];
+  labels?: string[];
+  estimate_point?: string | null;
+  start_date?: string | null;
+  target_date?: string | null;
+  parent?: string | null;
+  type_id?: string | null;
+  /** ConqrPlan's native idempotency key, paired with external_source. */
+  external_id?: string;
+  external_source?: string;
 }
 
 export interface PlaneEstimate {
@@ -61,9 +85,30 @@ export class PlaneApiError extends Error {
     message: string,
     readonly status: number,
     readonly retryable: boolean,
+    /**
+     * The parsed body ConqrPlan returned with the failure, when there was one.
+     * Validation failures carry per-field messages that callers surface
+     * verbatim instead of a bare status code.
+     */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = 'PlaneApiError';
+  }
+}
+
+/** Read a response body without throwing when it is empty or not JSON. */
+async function readBody(res: { text(): Promise<string> }): Promise<unknown> {
+  try {
+    const text = await res.text();
+    if (!text) return undefined;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text.slice(0, 500);
+    }
+  } catch {
+    return undefined;
   }
 }
 
@@ -128,16 +173,25 @@ export class PlaneClientService {
         );
       }
       if (res.status === 404) {
-        throw new PlaneApiError(`Not found: ${path}`, 404, false);
+        throw new PlaneApiError(`Not found: ${path}`, 404, false, await readBody(res));
       }
       if (!res.ok) {
+        // Keep ConqrPlan's own validation payload: it names the offending
+        // field ("State is not valid please pass a valid state_id"), which is
+        // what an agent needs in order to correct the call.
+        const details = await readBody(res);
         throw new PlaneApiError(
           `Plane API ${res.status} for ${path}`,
           res.status,
           false,
+          details,
         );
       }
-      return (await res.json()) as T;
+      // 204 and other empty bodies are valid successes (membership removal).
+      if (res.status === 204) return undefined as T;
+      const text = await res.text();
+      if (!text) return undefined as T;
+      return JSON.parse(text) as T;
     } catch (err) {
       if (err instanceof PlaneApiError) throw err;
       // Network error / timeout — retryable (caller may serve a stale snapshot).
@@ -167,13 +221,7 @@ export class PlaneClientService {
   /** Create a work item in a Plane project (blueprint §5.1A). */
   async createWorkItem(
     projectId: string,
-    input: {
-      name: string;
-      description_html?: string;
-      priority?: string;
-      state?: string;
-      assignees?: string[];
-    },
+    input: PlaneWorkItemWrite & { name: string },
     opts?: { workspaceSlug?: string; onBehalfOf?: string },
   ): Promise<PlaneWorkItem> {
     const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
@@ -254,14 +302,7 @@ export class PlaneClientService {
   async updateWorkItem(
     projectId: string,
     workItemId: string,
-    patch: {
-      name?: string;
-      description_html?: string;
-      priority?: string;
-      state?: string;
-      assignees?: string[];
-      estimate_point?: string | null;
-    },
+    patch: PlaneWorkItemWrite,
     opts?: { workspaceSlug?: string; onBehalfOf?: string },
   ): Promise<PlaneWorkItem> {
     const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
@@ -332,11 +373,22 @@ export class PlaneClientService {
     projectId: string,
     workspaceSlug?: string,
   ): Promise<PlaneEstimate[]> {
-    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
-    const res = await this.request<{ results?: PlaneEstimate[] } | PlaneEstimate[]>(
-      `/workspaces/${slug}/projects/${projectId}/estimates/`,
-    );
-    return Array.isArray(res) ? res : (res.results ?? []);
+    // ConqrPlan allows one estimate system per project and returns it as a
+    // single object, not a collection, and without its point values. Reading
+    // it as a list yielded an empty array for every configured project, so the
+    // shape is normalised here and the points are fetched alongside. The
+    // array return is kept for callers that already expect one.
+    const estimate = await this.getProjectEstimate(projectId, workspaceSlug);
+    if (!estimate) return [];
+    let points = estimate.points ?? [];
+    if (!points.length) {
+      try {
+        points = await this.listEstimatePoints(projectId, estimate.id, workspaceSlug);
+      } catch {
+        points = [];
+      }
+    }
+    return [{ id: estimate.id, name: estimate.name, type: estimate.type, points }];
   }
 
   /** List the members of the configured Plane workspace (assignee resolution). */
@@ -364,5 +416,203 @@ export class PlaneClientService {
       start_date: c.start_date ?? null,
       end_date: c.end_date ?? null,
     }));
+  }
+
+  // ----------------------------------------------------------------------
+  // Control Foundation v1: reference lookups, cycle/module membership and
+  // estimate configuration. ConqrPlan stays the authority for validation and
+  // permissions; these are thin transport wrappers.
+  // ----------------------------------------------------------------------
+
+  /** Members of a single project, used to pre-validate assignees. */
+  async listProjectMembers(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<{ id: string; member_id?: string; role?: number }[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: any[] } | any[]>(
+      `/workspaces/${slug}/projects/${projectId}/members/`,
+    );
+    const results = Array.isArray(res) ? res : (res?.results ?? []);
+    return results.map((m: any) => ({
+      id: m.member ?? m.member_id ?? m.id,
+      member_id: m.member ?? m.member_id,
+      role: m.role,
+    }));
+  }
+
+  /** List modules (feature groupings) for a project. */
+  async listModules(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<{ id: string; name: string; status?: string }[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: any[] } | any[]>(
+      `/workspaces/${slug}/projects/${projectId}/modules/`,
+    );
+    const results = Array.isArray(res) ? res : (res?.results ?? []);
+    return results.map((m: any) => ({ id: m.id, name: m.name, status: m.status }));
+  }
+
+  /** Add work items to a cycle. ConqrPlan refuses cycles that already ended. */
+  async addWorkItemsToCycle(
+    projectId: string,
+    cycleId: string,
+    workItemIds: string[],
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<unknown> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`,
+      { method: 'POST', body: { issues: workItemIds }, onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /**
+   * The cycle a work item currently belongs to, or null.
+   *
+   * ConqrPlan's work-item payload does not carry its cycle, and there is no
+   * reverse lookup endpoint, so this scans the project's cycles. An item can be
+   * in at most one cycle, so the scan stops at the first hit. Bounded by
+   * `maxCycles` to keep a project with a long sprint history from turning one
+   * call into hundreds; returns `undefined` (not null) when the bound was hit
+   * without an answer, so a caller can tell "not in a cycle" from "did not
+   * finish looking".
+   */
+  async findWorkItemCycle(
+    projectId: string,
+    workItemId: string,
+    opts?: { workspaceSlug?: string; maxCycles?: number },
+  ): Promise<string | null | undefined> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const maxCycles = opts?.maxCycles ?? 25;
+    const cycles = await this.listCycles(projectId, slug);
+    const scanned = cycles.slice(0, maxCycles);
+    for (const cycle of scanned) {
+      const res = await this.request<{ results?: any[] } | any[]>(
+        `/workspaces/${slug}/projects/${projectId}/cycles/${cycle.id}/cycle-issues/`,
+      );
+      const items = Array.isArray(res) ? res : (res?.results ?? []);
+      if (items.some((i: any) => String(i.id) === String(workItemId))) return cycle.id;
+    }
+    return cycles.length > scanned.length ? undefined : null;
+  }
+
+  /** Remove a single work item from a cycle. */
+  async removeWorkItemFromCycle(
+    projectId: string,
+    cycleId: string,
+    workItemId: string,
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/${workItemId}/`,
+      { method: 'DELETE', onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /** Add work items to a module. */
+  async addWorkItemsToModule(
+    projectId: string,
+    moduleId: string,
+    workItemIds: string[],
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<unknown> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/module-issues/`,
+      { method: 'POST', body: { issues: workItemIds }, onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /** Remove a single work item from a module. */
+  async removeWorkItemFromModule(
+    projectId: string,
+    moduleId: string,
+    workItemId: string,
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/module-issues/${workItemId}/`,
+      { method: 'DELETE', onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /**
+   * The project's estimate system, or null when none is configured.
+   * `is_active` reports whether ConqrPlan has the system switched on for the
+   * project — a system that exists but is inactive is invisible in the UI and
+   * cannot hold point values.
+   */
+  async getProjectEstimate(
+    projectId: string,
+    workspaceSlug?: string,
+  ): Promise<(PlaneEstimate & { is_active?: boolean }) | null> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    try {
+      return await this.request<PlaneEstimate & { is_active?: boolean }>(
+        `/workspaces/${slug}/projects/${projectId}/estimates/`,
+      );
+    } catch (err) {
+      if (err instanceof PlaneApiError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Create the project's estimate system. ConqrPlan activates it on create. */
+  async createEstimate(
+    projectId: string,
+    input: { name: string; type?: string; description?: string },
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<PlaneEstimate & { is_active?: boolean }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(`/workspaces/${slug}/projects/${projectId}/estimates/`, {
+      method: 'POST',
+      body: input,
+      onBehalfOf: opts?.onBehalfOf,
+    });
+  }
+
+  /** Patch the estimate system; `is_active` toggles activation idempotently. */
+  async updateEstimate(
+    projectId: string,
+    patch: { name?: string; description?: string; is_active?: boolean },
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<PlaneEstimate & { is_active?: boolean }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(`/workspaces/${slug}/projects/${projectId}/estimates/`, {
+      method: 'PATCH',
+      body: patch,
+      onBehalfOf: opts?.onBehalfOf,
+    });
+  }
+
+  /** Bulk create the point values of an estimate system. */
+  async createEstimatePoints(
+    projectId: string,
+    estimateId: string,
+    points: { key: number; value: string; description?: string }[],
+    opts?: { workspaceSlug?: string; onBehalfOf?: string },
+  ): Promise<{ id: string; key: number; value: string }[]> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(
+      `/workspaces/${slug}/projects/${projectId}/estimates/${estimateId}/estimate-points/`,
+      { method: 'POST', body: { estimate_points: points }, onBehalfOf: opts?.onBehalfOf },
+    );
+  }
+
+  /** List the point values of an estimate system. */
+  async listEstimatePoints(
+    projectId: string,
+    estimateId: string,
+    workspaceSlug?: string,
+  ): Promise<{ id: string; key: number; value: string }[]> {
+    const slug = workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: any[] } | any[]>(
+      `/workspaces/${slug}/projects/${projectId}/estimates/${estimateId}/estimate-points/`,
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
   }
 }
