@@ -237,6 +237,14 @@ reconciliation.
 
 ## 9. What is not built
 
+> **Superseded.** Everything below was completed in the follow-on phase. See
+> `vertical-slice-01-ui.md` (experience and operations),
+> `vertical-slice-01-architecture.md` (before/after) and
+> `vertical-slice-01-evidence.md` (test results and screenshots). The remaining
+> gaps are listed there, not here.
+
+### Original list, kept for history
+
 Stated plainly because the slice is not finished without it.
 
 - **No UI.** The Related Work panel, the uncovered-requirement affordance, the
