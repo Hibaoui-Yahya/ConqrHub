@@ -26,6 +26,20 @@ The 5 failing suites are the recorded baseline (§4). Passing tests went
 | `delivery-reconciliation.service.spec.ts` | 11 |
 | `delivery-projection.service.int-spec.ts` (real Postgres) | 10 |
 
+```
+DATABASE_URL=… npx jest --config jest-int.json
+Test Suites: 1 passed, 1 total
+Tests:       10 passed, 10 total
+```
+
+The run logs the ordering guard firing, which is the point of the suite:
+
+```
+DEBUG [DeliveryProjectionService] Discarded stale update for
+  conqr://plane/work-item/wi-projection-test:
+  2026-09-04T10:00:00.000Z < 2026-09-04T12:00:00.000Z
+```
+
 ### ConqrHub frontend (vitest — added this phase)
 
 ```
