@@ -6,7 +6,9 @@ no work behind them, creates that work in ConqrPlan **under their own
 identity**, and watches its delivery status without leaving the requirement's
 context.
 
-- **Status:** backend complete and tested; **no UI shipped** — see §9.
+- **Status:** complete. UI, authoring, fallback and reconciliation shipped in
+  the follow-on phase — see `vertical-slice-01-ui.md` and
+  `vertical-slice-01-evidence.md`.
 - **Depends on:** `conqrsuite-delegation.md` (gate 1). Every ConqrPlan call in
   this slice is delegated.
 
@@ -150,10 +152,13 @@ real statement about that person.
 | Item deleted | `deleted` |
 | ConqrPlan unreachable | `source_unavailable` |
 
-Coverage is still reported truthfully to a viewer who cannot see the work: the
-requirement shows as covered with a restricted card. "There is work here and
-you cannot see it" is the honest answer; suppressing it would make the page lie
-about delivery, which is a worse failure than an unhelpful card.
+> **Revised.** This section originally said a requirement with only restricted
+> links still reads *covered*. That was wrong, and the follow-on phase changed
+> it: a viewer who cannot see the linked work cannot verify that it covers
+> anything, so calling it covered asks them to trust an invisible item. The
+> answer is now a third state, `all_restricted`, rendered as **"Uncovered for
+> you"** — it leaks nothing and it does not claim delivery the viewer cannot
+> confirm. See `requirement-coverage.ts`.
 
 Permission is checked again when the user follows the link into ConqrPlan.
 
