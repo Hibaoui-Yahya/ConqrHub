@@ -1,0 +1,135 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Two suites in this repository fail on a clean checkout of main. Rather than
+  # a permanently red build (which everyone learns to ignore) or a blanket
+  # --passWithNoTests (which stops catching regressions), the runs are compared
+  # against .github/known-test-failures.txt: registered failures are tolerated,
+  # anything else fails the build.
+  NODE_VERSION: '22'
+
+jobs:
+  server:
+    name: Server (jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: docmost
+          POSTGRES_PASSWORD: docmostdev
+          POSTGRES_DB: docmost
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U docmost -d docmost"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://docmost:docmostdev@localhost:5432/docmost
+      REDIS_URL: redis://localhost:6379
+      APP_SECRET: ci-app-secret-at-least-32-characters-long
+      APP_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The server imports @docmost/editor-ext from its build output, so the
+      # package has to be compiled before jest can resolve it.
+      - name: Build editor-ext
+        run: pnpm --filter @docmost/editor-ext build
+
+      - name: Unit tests
+        working-directory: apps/server
+        # `|| true` so a red run still reaches the comparison step below, which
+        # is what decides pass or fail.
+        run: |
+          npx jest src --json --outputFile=../../jest-results.json --ci || true
+
+      - name: Compare against known failures
+        run: node .github/scripts/check-test-failures.mjs jest-results.json --full
+
+      - name: Migrate
+        working-directory: apps/server
+        run: pnpm run migration:latest
+
+      # Kept separate from the unit suite: these need a real database, and the
+      # properties they cover (duplicate suppression, event ordering,
+      # reconciliation) are about what Postgres ends up holding, which a mock
+      # cannot demonstrate.
+      - name: Database-backed integration tests
+        working-directory: apps/server
+        run: npx jest --config jest-int.json --ci --forceExit
+
+      - name: Typecheck
+        working-directory: apps/server
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: jest-results.json
+          if-no-files-found: ignore
+
+  client:
+    name: Client (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build editor-ext
+        run: pnpm --filter @docmost/editor-ext build
+
+      - name: Component tests
+        working-directory: apps/client
+        run: npx vitest run
+
+      - name: Typecheck
+        working-directory: apps/client
+        run: npx tsc --noEmit
