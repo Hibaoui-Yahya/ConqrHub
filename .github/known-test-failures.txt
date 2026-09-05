@@ -1,13 +1,15 @@
 # Known-failing tests, and why they are tolerated.
 #
 # These fail on a clean checkout of `main` and are unrelated to any current
-# work. They are listed here so CI can tell "still broken" apart from "newly
-# broken" — the build fails on anything NOT in this list, and prints a reminder
-# about anything that is.
+# work. They are listed here so a test run can be judged: anything failing that
+# is NOT in this list is new and yours; anything in it was already broken.
+#
+# Read by .github/scripts/check-test-failures.mjs. Run it locally — there is no
+# CI in this repository.
 #
 # This file is a debt register, not a permission slip. Fixing an entry means
-# deleting the line; if a line stops matching, CI says so and the line should
-# go.
+# deleting the line; if a line stops matching, the checker says so and the line
+# should go.
 #
 # Verified 2026-09-05 by stashing the entire working tree (`git stash push -u`)
 # and running the suites on the clean checkout: identical suites, identical

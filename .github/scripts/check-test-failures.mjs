@@ -2,19 +2,21 @@
 /**
  * Compare a test run's failures against the known-failure register.
  *
- * The problem this solves: two suites in this repository fail on a clean
- * checkout of `main`. If CI simply fails on any red, it is red forever and
- * everyone learns to ignore it. If CI is told to ignore failures, it stops
- * being able to catch a regression. Neither is a working signal.
+ * Run locally before pushing; there is no CI in this repository.
+ *
+ * The problem this solves: five suites fail on a clean checkout of `main`. If
+ * you judge a run by "was it green", it is never green and you stop looking.
+ * If you ignore failures, you stop noticing regressions. Neither works, and
+ * neither does trying to remember which eleven were already broken.
  *
  * So the build fails on failures that are NOT in the register, passes when
  * only registered ones fail, and — importantly — also complains when a
  * registered failure stops happening, because a stale register quietly grows
  * into a blanket exemption.
  *
- * Usage:
- *   npx jest ... --json --outputFile=results.json || true
- *   node .github/scripts/check-test-failures.mjs results.json [--full]
+ * Usage, from the repository root:
+ *   (cd apps/server && npx jest src --json --outputFile=../../jest-results.json) || true
+ *   node .github/scripts/check-test-failures.mjs jest-results.json --full
  *
  * `--full` says the run covered every suite the register mentions, which is
  * what makes "this entry never failed, delete it" a safe thing to say. Without
