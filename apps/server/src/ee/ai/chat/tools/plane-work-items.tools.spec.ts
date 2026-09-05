@@ -9,6 +9,29 @@ import {
   PLANE_WORK_ITEM_TOOLS,
 } from './plane-work-items.tools';
 
+/**
+ * A delegation service stub. Every ConqrPlan call from a tool must carry a
+ * signed on-behalf-of token; these tests assert the token is minted with the
+ * right scopes and travels with the call, not that HMAC works (covered by
+ * delegated-token.util.spec.ts).
+ */
+function makeDelegation() {
+  return {
+    mintForPlane: jest.fn().mockImplementation(({ scope }: { scope: string[] }) => ({
+      token: 'obo-token',
+      jti: 'corr-1',
+      personUid: 'conqr:person:user-1',
+      orgUid: 'conqr:org:ws-1',
+      scope,
+      expiresAt: 9_999_999,
+    })),
+  } as any;
+}
+
+/** The call context every delegated ConqrPlan request should carry. */
+const DELEGATED_CALL = { delegation: 'obo-token', correlationId: 'corr-1' };
+
+
 const ctx = { user: { id: 'user-1' } as any, workspaceId: 'ws-1' };
 
 function makePlaneMock(enabled: boolean) {
@@ -27,7 +50,7 @@ function constructAll(plane: any, registry: ChatToolRegistry) {
     new ListConqrPlanProjectsTool(plane, registry),
     new SearchWorkItemsTool(plane, registry),
     new GetWorkItemTool(plane, registry),
-    new CreateWorkItemTool(plane, registry),
+    new CreateWorkItemTool(plane, registry, makeDelegation()),
     new GetProjectCyclesTool(plane, registry),
   ];
 }
@@ -104,7 +127,7 @@ describe('Plane work-item tools', () => {
       updated_at: '2026-07-19T00:00:00Z',
     });
     const registry = new ChatToolRegistry();
-    const tool = new CreateWorkItemTool(plane as any, registry);
+    const tool = new CreateWorkItemTool(plane as any, registry, makeDelegation());
 
     const result = await tool.execute(
       {
@@ -123,9 +146,12 @@ describe('Plane work-item tools', () => {
         description_html: '<p>Some plain text</p>',
         priority: 'medium',
       },
-      { onBehalfOf: 'user-1' },
+      DELEGATED_CALL,
     );
-    expect(result).toEqual({
+    // Backward compatibility: every key the previous summary returned is still
+    // present with the same meaning. Control Foundation v1 only widens the
+    // shape, so this is asserted as a superset rather than an exact match.
+    expect(result).toMatchObject({
       id: 'wi-2',
       name: 'New work item',
       sequenceId: 7,
@@ -134,6 +160,19 @@ describe('Plane work-item tools', () => {
       estimatePointId: null,
       updatedAt: '2026-07-19T00:00:00Z',
     });
+    // ...and the fields that were previously unreachable are now reported.
+    expect(result).toMatchObject({
+      urn: 'conqr://plane/work-item/wi-2',
+      projectId: 'proj-1',
+      assigneeIds: [],
+      labelIds: [],
+      startDate: null,
+      targetDate: null,
+      parentId: null,
+      typeId: null,
+    });
+    // A clean write must not carry an error marker.
+    expect(result).not.toHaveProperty('error');
   });
 
   it('tools surface PlaneApiError as a structured error object, not a throw-through of internals', async () => {
