@@ -13,6 +13,7 @@ const mockPage = {
   title: 'Getting Started',
   slugId: 'abc123',
   spaceId: 'space-1',
+  workspaceId: 'ws-1',
   content: { type: 'doc', content: [] },
   updatedAt: new Date('2026-01-01'),
 };

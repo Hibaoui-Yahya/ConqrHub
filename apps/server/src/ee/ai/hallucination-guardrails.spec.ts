@@ -368,10 +368,12 @@ describe('hallucination guardrails | SttService correction prompt', () => {
 
   beforeEach(() => {
     // Mock the Mistral transcription endpoint so the correction step runs.
+    // The service reads the body with text() and parses it itself.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ text: 'raw transcript text' }),
-      text: jest.fn().mockResolvedValue(''),
+      text: jest
+        .fn()
+        .mockResolvedValue(JSON.stringify({ text: 'raw transcript text' })),
     }) as any;
   });
 

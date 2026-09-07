@@ -8,7 +8,7 @@ jest.mock('../../../../core/page/services/page-history.service', () => ({
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GetPageHistoryTool } from './get-page-history.tool';
 
-const mockPage = { id: 'p1', spaceId: 'sp-1' };
+const mockPage = { id: 'p1', spaceId: 'sp-1', workspaceId: 'ws-1' };
 const mockHistory = [
   { id: 'h1', title: 'v1', creatorId: 'user-2', createdAt: new Date('2026-01-01') },
   { id: 'h2', title: 'v2', creatorId: 'user-3', createdAt: new Date('2026-01-02') },

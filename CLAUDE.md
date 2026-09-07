@@ -30,7 +30,9 @@ pnpm run build           # All apps (Nx)
 pnpm run client:build    # Frontend only
 pnpm run server:build    # Backend only (nest build)
 
-# Server tests
+# Server tests (build the workspace packages the server imports first, or
+# ~60 suites fail on unresolved @docmost/editor-ext / @conqr/conqrplan-core)
+pnpm run editor-ext:build && pnpm --filter @conqr/conqrplan-core run build
 cd apps/server
 pnpm run test            # Jest unit tests (*.spec.ts)
 pnpm run test:watch      # Watch mode

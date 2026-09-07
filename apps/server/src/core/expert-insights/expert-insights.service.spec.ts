@@ -320,7 +320,7 @@ describe('ExpertInsightsService', () => {
       await svc.findByPage(dto, mockUser);
 
       const secondCall = repo.findByPage.mock.calls[1];
-      expect(secondCall?.[1]).toBe('published');
+      expect(secondCall?.[2]).toBe('published');
     });
 
     it('does not filter status for managers (Manage Insight permission)', async () => {
@@ -334,7 +334,7 @@ describe('ExpertInsightsService', () => {
       await svc.findByPage(dto, mockUser);
 
       const secondCall = repo.findByPage.mock.calls[1];
-      expect(secondCall?.[1]).toBeUndefined();
+      expect(secondCall?.[2]).toBeUndefined();
     });
   });
 

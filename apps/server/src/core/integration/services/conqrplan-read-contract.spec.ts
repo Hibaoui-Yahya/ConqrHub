@@ -30,7 +30,11 @@ const enabled = process.env.CONTRACT_SUITE === '1';
 const d = enabled ? describe : describe.skip;
 
 // --- fixtures, from seed_mcp_integration.py --------------------------------
-const F = JSON.parse(readFileSync(process.env.FIXTURES as string, 'utf8'));
+// Only read when opted in: the unit runner collects this file too, and must
+// not fail on a machine with no fixtures, no MCP and no ConqrPlan.
+const F: any = enabled
+  ? JSON.parse(readFileSync(process.env.FIXTURES as string, 'utf8'))
+  : {};
 const MCP_BASE = process.env.MCP_BASE ?? 'http://localhost:8797';
 const CLIENT_TOKEN = process.env.CLIENT_TOKEN as string;
 const HUB_KID = process.env.HUB_KID ?? 'hub-container-test';

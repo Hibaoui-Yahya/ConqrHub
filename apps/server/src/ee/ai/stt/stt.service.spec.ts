@@ -25,7 +25,16 @@ const pageRepoMock = {
 };
 
 function makeService() {
-  return new SttService(envMock as any, providerMock as any, pageRepoMock as any);
+  return new SttService(
+    envMock as any,
+    providerMock as any,
+    pageRepoMock as any,
+  );
+}
+
+/** A successful Mistral transcription response. The service reads the body with text() and parses it itself. */
+function transcription(text: string) {
+  return { ok: true, text: async () => JSON.stringify({ text }) };
 }
 
 beforeEach(() => {
@@ -36,10 +45,7 @@ describe('SttService.transcribeAndCorrect', () => {
   const audio = Buffer.from('fake-audio-bytes');
 
   it('happy path: returns raw + corrected', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: 'raw transcript' }),
-    });
+    mockFetch.mockResolvedValueOnce(transcription('raw transcript'));
 
     const result = await makeService().transcribeAndCorrect(
       audio,
@@ -61,10 +67,7 @@ describe('SttService.transcribeAndCorrect', () => {
   });
 
   it('falls back to raw when correction throws', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: 'raw text' }),
-    });
+    mockFetch.mockResolvedValueOnce(transcription('raw text'));
     providerMock.generate.mockRejectedValueOnce(new Error('boom'));
 
     const result = await makeService().transcribeAndCorrect(
@@ -80,10 +83,7 @@ describe('SttService.transcribeAndCorrect', () => {
   });
 
   it('returns empty corrected when raw is empty (no LLM call)', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: '' }),
-    });
+    mockFetch.mockResolvedValueOnce(transcription(''));
 
     const result = await makeService().transcribeAndCorrect(
       audio,
@@ -118,10 +118,9 @@ describe('SttService.transcribeAndCorrect', () => {
   });
 
   it('resolves page title for kind=page and includes it in correction prompt', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: 'lets discuss voxtral migration' }),
-    });
+    mockFetch.mockResolvedValueOnce(
+      transcription('lets discuss voxtral migration'),
+    );
     pageRepoMock.findById.mockResolvedValueOnce({
       id: 'page-id',
       title: 'Voxtral Migration Plan',
@@ -143,34 +142,34 @@ describe('SttService.transcribeAndCorrect', () => {
     expect(call?.temperature ?? 1).toBeLessThanOrEqual(0.2);
   });
 
-  it('rejects when page belongs to a different workspace', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: 'raw' }),
-    });
+  it('drops page context when the page belongs to a different workspace', async () => {
+    // A cross-workspace page must not leak into the prompt, but the
+    // transcript is still useful, so correction proceeds without hints.
+    mockFetch.mockResolvedValueOnce(transcription('raw'));
     pageRepoMock.findById.mockResolvedValueOnce({
       id: 'page-id',
       title: 'Other workspace page',
-      textContent: '',
+      textContent: 'secret text',
       workspaceId: 'someone-else',
     });
 
-    await expect(
-      makeService().transcribeAndCorrect(
-        audio,
-        'audio/webm',
-        { kind: 'page', pageId: 'page-id' },
-        'workspace-id',
-        'Acme Wiki',
-      ),
-    ).rejects.toThrow(/forbidden|workspace/i);
+    const result = await makeService().transcribeAndCorrect(
+      audio,
+      'audio/webm',
+      { kind: 'page', pageId: 'page-id' },
+      'workspace-id',
+      'Acme Wiki',
+    );
+
+    expect(result.raw).toBe('raw');
+    expect(result.corrected).toBe('Corrected transcript.');
+    const call = providerMock.generate.mock.calls[0]?.[0];
+    expect(call?.prompt).not.toContain('Other workspace page');
+    expect(call?.prompt).not.toContain('secret text');
   });
 
   it('skips page lookup for kind=search', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ text: 'raw' }),
-    });
+    mockFetch.mockResolvedValueOnce(transcription('raw'));
 
     await makeService().transcribeAndCorrect(
       audio,
