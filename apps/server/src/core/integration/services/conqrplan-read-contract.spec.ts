@@ -24,7 +24,21 @@ import { DELEGATED_SCOPES } from '../domain/delegated-token.util';
 import { DelegatedTokenService } from './delegated-token.service';
 import { PlaneClientService } from './plane-client.service';
 import { ChatToolContext } from '../../../ee/ai/chat/tools/chat-tool.types';
-import { delegateForPlane } from '../../../ee/ai/chat/tools/plane-delegation.helper';
+import {
+  GetProjectCyclesTool,
+  GetWorkItemTool,
+  ListConqrPlanProjectsTool,
+  SearchWorkItemsTool,
+} from '../../../ee/ai/chat/tools/plane-work-items.tools';
+import {
+  GetWorkItemCommentsTool,
+  ListConqrPlanMembersTool,
+  ListCycleWorkItemsTool,
+  ListEstimatePointsTool,
+  ListWorkItemLabelsTool,
+  ListWorkItemStatesTool,
+} from '../../../ee/ai/chat/tools/plane-work-management.tools';
+import { GetEstimateSystemTool } from '../../../ee/ai/chat/tools/plane-control.tools';
 
 const enabled = process.env.CONTRACT_SUITE === '1';
 const d = enabled ? describe : describe.skip;
@@ -111,58 +125,33 @@ async function viaMcp(
 
 // --- the local implementation, in process ---------------------------------
 /**
- * Hub's own version of each read, called exactly as its chat tool calls it.
- * Deliberately the same client and delegation helper the tool classes use, so
- * a divergence in this file is a divergence in the product.
+ * Hub's own tool classes, built the way Nest builds them and called the way
+ * both dispatch surfaces call them. The comparison below is therefore of the
+ * complete tool result - every key, name and nesting - not of a
+ * re-implementation of it. An agent reads keys, so a key one route returns
+ * and the other does not is a behaviour change, never presentation.
  */
-const LOCAL: Record<string, (args: any, ctx: ChatToolContext) => Promise<any>> = {
-  list_conqrplan_projects: (_a, ctx) =>
-    plane.listProjects(delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead])),
-  list_conqrplan_members: (_a, ctx) =>
-    plane.listWorkspaceMembers(
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead]),
-    ),
-  list_work_item_states: (a, ctx) =>
-    plane.listStates(a.projectId, delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead])),
-  list_work_item_labels: (a, ctx) =>
-    plane.listLabels(a.projectId, delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead])),
-  get_project_cycles: (a, ctx) =>
-    plane.listCycles(a.projectId, delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead])),
-  list_cycle_work_items: (a, ctx) =>
-    plane.listCycleWorkItems(
-      a.projectId,
-      a.cycleId,
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead]),
-    ),
-  search_work_items: (a, ctx) =>
-    plane.listWorkItems(
-      a.projectId,
-      { search: a.query, perPage: a.limit ?? 20 },
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead]),
-    ),
-  get_work_item: (a, ctx) =>
-    plane.getWorkItem(
-      a.projectId,
-      a.workItemId,
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead]),
-    ),
-  get_work_item_comments: (a, ctx) =>
-    plane.listWorkItemComments(
-      a.projectId,
-      a.workItemId,
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.workItemRead]),
-    ),
-  get_estimate_system: (a, ctx) =>
-    plane.getProjectEstimate(
-      a.projectId,
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.estimateRead]),
-    ),
-  list_estimate_points: (a, ctx) =>
-    plane.getProjectEstimate(
-      a.projectId,
-      delegateForPlane(delegation, ctx, [DELEGATED_SCOPES.estimateRead]),
-    ),
+const registry = {} as any; // consulted only by onModuleInit, which is never called here
+const TOOLS: Record<string, { execute: (args: any, ctx: ChatToolContext) => Promise<any> }> = {
+  list_conqrplan_projects: new ListConqrPlanProjectsTool(plane, registry, delegation),
+  list_conqrplan_members: new ListConqrPlanMembersTool(plane, registry, delegation),
+  list_work_item_states: new ListWorkItemStatesTool(plane, registry, delegation),
+  list_work_item_labels: new ListWorkItemLabelsTool(plane, registry, delegation),
+  get_project_cycles: new GetProjectCyclesTool(plane, registry, delegation),
+  list_cycle_work_items: new ListCycleWorkItemsTool(plane, registry, delegation),
+  search_work_items: new SearchWorkItemsTool(plane, registry, delegation),
+  get_work_item: new GetWorkItemTool(plane, registry, delegation),
+  get_work_item_comments: new GetWorkItemCommentsTool(plane, registry, delegation),
+  get_estimate_system: new GetEstimateSystemTool(plane, registry, delegation),
+  list_estimate_points: new ListEstimatePointsTool(plane, registry, delegation),
 };
+const LOCAL: Record<string, (args: any, ctx: ChatToolContext) => Promise<any>> =
+  Object.fromEntries(
+    Object.entries(TOOLS).map(([name, tool]) => [
+      name,
+      (args: any, ctx: ChatToolContext) => tool.execute(args, ctx),
+    ]),
+  );
 
 /**
  * Compare what the two implementations *mean*, not how they render it.
@@ -222,6 +211,10 @@ d('ConqrPlan read tools: local and MCP answer the same', () => {
       expect(remote.status).toBe(200);
       expect(remote.value?.error).toBeUndefined();
       expect(idsOf(remote.value)).toEqual(idsOf(local));
+      // The same records is necessary, not sufficient: the complete result
+      // must match, because a routed caller must not be able to tell which
+      // process answered.
+      expect(remote.value).toEqual(local);
     });
 
     it('shows a restricted guest no more through MCP than locally', async () => {
@@ -262,6 +255,17 @@ d('ConqrPlan read tools: local and MCP answer the same', () => {
       expect(keys.filter((k) => !['error', 'code', 'message'].includes(k))).toEqual([]);
     });
 
+    it('refuses a person whose membership was removed, on both routes', async () => {
+      // Mapped, so this is not the unmapped case: the identity resolves and
+      // ConqrPlan's membership check is what has to say no.
+      const remote = await viaMcp(tool, args, F.formerPersonUid, F.orgUid, scope);
+      expect(remote.status === 200 ? remote.value?.error : remote.value.error).toBeTruthy();
+      expect(Array.isArray(remote.value)).toBe(false);
+      const local = await LOCAL[tool](args, ctxFor(F.formerPersonUid, F.orgUid));
+      expect(local?.error).toBeTruthy();
+      expect(Array.isArray(local)).toBe(false);
+    });
+
     it('refuses the wrong organisation before reaching ConqrPlan', async () => {
       const remote = await viaMcp(
         tool,
@@ -294,6 +298,16 @@ d('ConqrPlan read tools: local and MCP answer the same', () => {
       expect(JSON.stringify(remote.value)).not.toContain(F.memberIssueId);
     });
 
+    it('reports a deleted work item without its content, on both routes', async () => {
+      const args = { projectId: F.projectId, workItemId: F.deletedIssueId };
+      const remote = await viaMcp('get_work_item', args, F.memberPersonUid, F.orgUid);
+      const local = await LOCAL.get_work_item(args, MEMBER());
+      expect(remote.value?.error ?? remote.status).toBeTruthy();
+      expect(local?.error).toBeTruthy();
+      expect(JSON.stringify(remote.value)).not.toContain('MCPIT deleted work item');
+      expect(JSON.stringify(local)).not.toContain('MCPIT deleted work item');
+    });
+
     it('reports a missing project without listing another', async () => {
       const remote = await viaMcp(
         'list_work_item_states',
@@ -314,6 +328,7 @@ d('ConqrPlan read tools: local and MCP answer the same', () => {
       // implementation filters. That is a product behaviour, and the contract
       // that matters is that both behave identically.
       expect(idsOf(remote.value)).toEqual(idsOf(local));
+      expect(remote.value).toEqual(local);
     });
 
     it('honours a pagination limit', async () => {

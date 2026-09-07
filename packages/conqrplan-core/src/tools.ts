@@ -46,44 +46,61 @@ export function toolError(err: unknown): { error: string; code?: string } {
   };
 }
 
-/** The state name a payload can actually support, never a bare uuid. */
-function stateName(item: PlaneWorkItem): string | null {
-  const raw = item.state;
-  const expanded =
-    item.state_detail ?? (raw && typeof raw === 'object' ? raw : undefined);
-  const name = expanded?.name;
-  return typeof name === 'string' && name ? name : null;
+/** Same fallback as Hub: strip tags when ConqrPlan sent only comment_html. */
+function stripHtml(html?: string): string | undefined {
+  if (!html) return undefined;
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
+
 
 export function workItemSummary(w: PlaneWorkItem) {
   return {
     id: w.id,
     name: w.name,
-    sequenceId: w.sequence_id ?? null,
-    state: stateName(w),
+    // Field for field what Hub's summary returns, including the raw state id
+    // when ConqrPlan did not expand the state: a routed caller must lose
+    // nothing it had locally, and the read contract suite compares shapes.
+    sequenceId: w.sequence_id,
+    state: w.state_detail?.name ?? w.state ?? null,
     priority: w.priority ?? null,
     estimatePointId: w.estimate_point ?? null,
     updatedAt: w.updated_at ?? null,
   };
 }
 
+/**
+ * Field for field, in the same order, what Hub's normaliser returns.
+ *
+ * The two implementations answer the same tool name, so a routed caller must
+ * see the same keys: sequenceId (the citation the tool descriptions ask for),
+ * stateId (the handle update_work_item takes) and typeId were missing here.
+ */
 export function normalizeWorkItem(w: PlaneWorkItem, projectId: string) {
+  const anyItem = w as any;
   return {
     id: w.id,
     urn: `conqr://plane/work-item/${w.id}`,
-    projectId,
+    projectId: w.project ?? projectId ?? null,
     name: w.name,
+    sequenceId: w.sequence_id ?? null,
     description: w.description_stripped ?? null,
-    state: typeof w.state === 'string' ? w.state : (w.state?.id ?? null),
-    stateName: stateName(w),
+    // `state` is the name when ConqrPlan expanded it, else the raw id; the
+    // split fields are additive, exactly as in Hub.
+    state: w.state_detail?.name ?? (typeof w.state === 'string' ? w.state : null),
+    stateId: typeof w.state === 'string' ? w.state : null,
+    stateName: w.state_detail?.name ?? null,
     priority: w.priority ?? null,
-    assigneeIds: w.assignees ?? [],
-    labelIds: w.labels ?? [],
+    assigneeIds: (w.assignees ?? []).map(String),
+    labelIds: (w.labels ?? []).map(String),
     estimatePointId: w.estimate_point ?? null,
     startDate: w.start_date ?? null,
     targetDate: w.target_date ?? null,
     parentId: w.parent ?? null,
-    createdAt: w.created_at ?? null,
+    typeId: anyItem.type_id ?? anyItem.type ?? null,
+    createdAt: anyItem.created_at ?? null,
     updatedAt: w.updated_at ?? null,
     completedAt: w.completed_at ?? null,
     archivedAt: w.archived_at ?? null,
@@ -469,8 +486,8 @@ export const CONQRPLAN_TOOLS: ToolDefinition[] = [
         );
         return comments.slice(0, args.limit ?? 20).map((c: any) => ({
           id: c.id,
-          text: c.comment_stripped ?? null,
-          authorId: c.actor ?? c.created_by ?? null,
+          text: c.comment_stripped ?? stripHtml(c.comment_html) ?? '',
+          actorId: c.actor ?? null,
           createdAt: c.created_at ?? null,
         }));
       } catch (err) {
@@ -514,7 +531,16 @@ export const CONQRPLAN_TOOLS: ToolDefinition[] = [
       try {
         const estimate = await client.getProjectEstimate(args.projectId, call);
         if (!estimate) return [];
-        const points = await client.listEstimatePoints(args.projectId, estimate.id, call);
+        // Same source order as Hub: the points ConqrPlan embedded in the
+        // estimate, and the points endpoint only when it embedded none.
+        let points: any[] = estimate.points ?? [];
+        if (!points.length) {
+          try {
+            points = await client.listEstimatePoints(args.projectId, estimate.id, call);
+          } catch {
+            points = [];
+          }
+        }
         return [
           {
             id: estimate.id,
@@ -541,16 +567,28 @@ export const CONQRPLAN_TOOLS: ToolDefinition[] = [
     handler: async (args, { client, call }) => {
       try {
         const estimate = await client.getProjectEstimate(args.projectId, call);
-        if (!estimate) return { active: false, estimate: null };
-        const points = await client.listEstimatePoints(args.projectId, estimate.id, call);
+        // Hub's shape, so a routed caller cannot tell which process answered.
+        if (!estimate) {
+          return {
+            configured: false,
+            isActive: false,
+            message:
+              'This project has no estimation system. Create one with create_estimate_system before setting story points.',
+          };
+        }
+        let points: any[] = [];
+        try {
+          points = await client.listEstimatePoints(args.projectId, estimate.id, call);
+        } catch {
+          points = estimate.points ?? [];
+        }
         return {
-          active: Boolean(estimate.is_active ?? true),
-          estimate: {
-            id: estimate.id,
-            name: estimate.name,
-            type: estimate.type ?? null,
-            points: points.map((p: any) => ({ id: p.id, value: p.value, key: p.key })),
-          },
+          configured: true,
+          isActive: estimate.is_active !== false,
+          id: estimate.id,
+          name: estimate.name,
+          type: estimate.type ?? null,
+          points: points.map((p: any) => ({ id: p.id, key: p.key, value: p.value })),
         };
       } catch (err) {
         return toolError(err);
