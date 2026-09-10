@@ -61,7 +61,8 @@ if [ -n "${RUN_UNIT_SPECS:-}" ]; then
   log "running unit suites: pnpm exec jest --ci ${RUN_UNIT_SPECS}"
   set +e
   # shellcheck disable=SC2086
-  pnpm exec jest --ci --reporters=default --reporters=summary ${RUN_UNIT_SPECS}
+  # Path patterns must come before any array-valued flag, so no reporter flags here.
+  pnpm exec jest --ci ${RUN_UNIT_SPECS}
   unit_exit=$?
   set -e
   log "unit suites exit=${unit_exit}"
