@@ -55,6 +55,18 @@ for i in $(seq 1 40); do
 done
 [ "$mig_ok" -eq 1 ] || { log "migrations never succeeded"; exit 79; }
 
+# Optional unit suites (space-separated Jest path patterns), e.g. the areas a change touched.
+unit_exit="skipped"
+if [ -n "${RUN_UNIT_SPECS:-}" ]; then
+  log "running unit suites: pnpm exec jest --ci ${RUN_UNIT_SPECS}"
+  set +e
+  # shellcheck disable=SC2086
+  pnpm exec jest --ci --reporters=default --reporters=summary ${RUN_UNIT_SPECS}
+  unit_exit=$?
+  set -e
+  log "unit suites exit=${unit_exit}"
+fi
+
 log "running integration suite: pnpm run test:integration"
 set +e
 pnpm run test:integration
@@ -76,7 +88,7 @@ log "log-leak scan: $leak"
 
 printf '{"commit":"%s","deployment":"%s","jest_exit":%s,"leak_scan":"%s","finished_at":"%s"}\n' \
   "${HARNESS_GIT_SHA:-unknown}" "${RAILWAY_DEPLOYMENT_ID:-}" "$jest_exit" "$leak" "$(date -u +%FT%TZ)" > "$RESULT_FILE"
-log "HARNESS_RESULT jest_exit=$jest_exit leak_scan=$leak commit=${HARNESS_GIT_SHA:-unknown}"
+log "HARNESS_RESULT jest_exit=$jest_exit unit_exit=$unit_exit leak_scan=$leak commit=${HARNESS_GIT_SHA:-unknown}"
 
 # Optional: keep the container alive so the evidence file can be pulled with `railway ssh`.
 if [ "${HOLD_SECONDS:-0}" -gt 0 ] 2>/dev/null; then
@@ -85,4 +97,5 @@ if [ "${HOLD_SECONDS:-0}" -gt 0 ] 2>/dev/null; then
 fi
 
 if [ "$leak" = "fail" ]; then exit 80; fi
+if [ "$unit_exit" != "skipped" ] && [ "$unit_exit" -ne 0 ] && [ "$jest_exit" -eq 0 ]; then exit "$unit_exit"; fi
 exit "$jest_exit"
