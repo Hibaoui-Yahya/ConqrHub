@@ -7,7 +7,13 @@ import {
   Query,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import {
+  AI_CHAT_THROTTLER,
+  AUTH_THROTTLER,
+} from '../../../integrations/throttle/throttler-names';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Public } from '../../../common/decorators/public.decorator';
 import { TokenService } from '../services/token.service';
@@ -23,6 +29,12 @@ import { SuiteIdpService } from './suite-idp.service';
  * app's own session cookie — being signed into the Hub IS being signed into
  * the suite; the client never sees a second login.
  */
+// F28: every IdP endpoint is rate-limited per client IP with the auth throttler.
+// The browser-facing authorize endpoint keeps the default auth limit; the
+// back-channel token/userinfo/discovery endpoints are called by sibling servers
+// on behalf of many users, so their per-IP budget is raised (still bounded).
+@SkipThrottle({ [AI_CHAT_THROTTLER]: true })
+@UseGuards(ThrottlerGuard)
 @Controller('idp')
 export class SuiteIdpController {
   constructor(
@@ -33,6 +45,7 @@ export class SuiteIdpController {
   ) {}
 
   @Public()
+  @Throttle({ [AUTH_THROTTLER]: { limit: 60, ttl: 60_000 } })
   @Get('.well-known/openid-configuration')
   discovery(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
     if (!this.idp.isEnabled()) {
@@ -49,6 +62,7 @@ export class SuiteIdpController {
   }
 
   @Public()
+  @Throttle({ [AUTH_THROTTLER]: { limit: 30, ttl: 60_000 } })
   @Get('authorize')
   async authorize(
     @Req() req: FastifyRequest,
@@ -93,10 +107,12 @@ export class SuiteIdpController {
   }
 
   @Public()
+  @Throttle({ [AUTH_THROTTLER]: { limit: 60, ttl: 60_000 } })
   @Post('token')
   async token(@Body() body: Record<string, string>, @Res() res: FastifyReply) {
     const client = this.idp.findClient(body.client_id);
-    if (!client || body.client_secret !== client.clientSecret) {
+    // Constant-time; identical response for unknown client and wrong secret (F28).
+    if (!this.idp.verifyClientSecret(client, body.client_secret)) {
       return res.code(401).send({ error: 'invalid_client' });
     }
     if (body.grant_type === 'authorization_code' && body.code) {
@@ -127,6 +143,7 @@ export class SuiteIdpController {
   }
 
   @Public()
+  @Throttle({ [AUTH_THROTTLER]: { limit: 60, ttl: 60_000 } })
   @Get('userinfo')
   async userinfo(
     @Headers('authorization') authorization: string | undefined,
