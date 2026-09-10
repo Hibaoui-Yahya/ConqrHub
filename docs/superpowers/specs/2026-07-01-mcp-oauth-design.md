@@ -171,3 +171,28 @@ WWW-Authenticate: Bearer resource_metadata="https://app.conqrhub.com/.well-known
 - **Consent UX:** explicit consent screen (user-approved).
 - **Scope:** full user permissions via CASL, single `mcp` scope (user-approved).
 - **Token lifetime:** ~1h access + rotating refresh (user-approved).
+
+## Audience enforcement (security fix F27, 2026-09-10)
+
+OAuth-issued MCP access tokens are `type: api_key` JWTs that additionally carry `aud` (the
+canonical `/mcp` resource URL) and `scope`. Before this fix only `McpAuthGuard` checked `aud`;
+the ordinary `JwtAuthGuard` ignored it, so an MCP connector token authenticated against every
+`/api` route as a full user credential.
+
+Rule now enforced in `JwtStrategy` (core) and `ApiKeyService` (EE):
+
+- A route guard that legitimately accepts audience-bound tokens stamps the expected audience
+  (and required scope) on the raw request **before** Passport runs (`McpAuthGuard.canActivate`
+  sets `EXPECTED_TOKEN_AUDIENCE_KEY` = resource URL and `REQUIRED_TOKEN_SCOPE_KEY` = `mcp`).
+- `JwtStrategy` rejects any `api_key` token carrying `aud` unless the request declares that
+  exact audience and the token's scope includes the required scope. This happens before any
+  API-key, user or workspace lookup; there is no fallback to the key owner.
+- `ApiKeyService.validateApiKey` additionally requires the token kind to match the grant row:
+  an audience-bound token must map to an `mcp_oauth` row and a manual key token must not map to
+  one. Revoked (soft-deleted) and expired rows are refused as before.
+- `McpAuthGuard.handleRequest` keeps its audience check and now also refuses tokens without the
+  `mcp` scope with an `insufficient_scope` challenge.
+
+Manual API keys (no `aud`) and normal session cookies are unaffected. Tests:
+`core/auth/strategies/jwt.strategy.spec.ts`, `ee/ai/mcp/oauth/mcp-auth.guard.spec.ts`,
+`ee/api-key/api-key.service.grant-type.spec.ts`.
