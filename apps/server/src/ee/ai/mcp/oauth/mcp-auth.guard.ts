@@ -8,7 +8,12 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { EnvironmentService } from '../../../../integrations/environment/environment.service';
 import { extractBearerTokenFromHeader } from '../../../../common/helpers';
 import { resolveOAuthUrls } from './oauth-url.util';
-import { CHALLENGE_SCOPE } from './oauth.constants';
+import {
+  CHALLENGE_SCOPE,
+  MCP_EXPECTED_AUDIENCE_KEY,
+  MCP_REQUIRED_SCOPE_KEY,
+  SCOPE_MCP,
+} from './oauth.constants';
 
 /**
  * Auth guard for the MCP resource endpoints. Behaves like the standard JWT
@@ -29,12 +34,31 @@ export class McpAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
+  /**
+   * Declare, before Passport runs, that this route is the MCP resource: the
+   * JwtStrategy will then accept audience-bound tokens whose `aud` is this
+   * host's canonical resource URL and whose scope includes `mcp`. Any other
+   * route leaves these markers unset, so the same token is rejected there (F27).
+   */
+  canActivate(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest<FastifyRequest>();
+    const urls = resolveOAuthUrls(req.raw, {
+      defaultHttps: this.environmentService.isHttps(),
+    });
+    (req.raw as any)[MCP_EXPECTED_AUDIENCE_KEY] = urls.resource;
+    (req.raw as any)[MCP_REQUIRED_SCOPE_KEY] = SCOPE_MCP;
+    return super.canActivate(context);
+  }
+
   handleRequest(err: any, user: any, info: any, ctx: ExecutionContext) {
     const req = ctx.switchToHttp().getRequest<FastifyRequest>();
     const res = ctx.switchToHttp().getResponse<FastifyReply>();
 
     if (err || !user) {
-      this.setChallenge(req, res);
+      // The JwtStrategy already rejects audience-bound tokens that are not accepted on this route
+      // or lack the required scope (F27); translate its refusal into the RFC 6750 error code so
+      // clients can distinguish "get a token" from "get a token with the right scope".
+      this.setChallenge(req, res, this.challengeErrorFor(err, req));
       throw err || new UnauthorizedException();
     }
 
@@ -48,9 +72,25 @@ export class McpAuthGuard extends AuthGuard('jwt') {
         this.setChallenge(req, res, 'invalid_token');
         throw new UnauthorizedException('Invalid token audience');
       }
+      const granted = (claims.scope ?? '').split(' ').filter(Boolean);
+      if (!granted.includes(SCOPE_MCP)) {
+        this.setChallenge(req, res, 'insufficient_scope');
+        throw new UnauthorizedException('Insufficient token scope');
+      }
     }
 
     return user;
+  }
+
+  private challengeErrorFor(err: any, req: FastifyRequest): string | undefined {
+    if (!extractBearerTokenFromHeader(req)) {
+      return undefined; // no credential presented: bare discovery challenge
+    }
+    const message = typeof err?.message === 'string' ? err.message : '';
+    if (message === 'Insufficient token scope') {
+      return 'insufficient_scope';
+    }
+    return 'invalid_token';
   }
 
   private setChallenge(
@@ -69,17 +109,23 @@ export class McpAuthGuard extends AuthGuard('jwt') {
     (res as any).header('WWW-Authenticate', header);
   }
 
-  private decodeClaims(token: string): { aud?: string } | null {
+  private decodeClaims(
+    token: string,
+  ): { aud?: string; scope?: string } | null {
     try {
       const payload = token.split('.')[1];
       if (!payload) return null;
       const json = Buffer.from(payload, 'base64url').toString('utf8');
       const parsed = JSON.parse(json);
       // `aud` may be a string or array per JWT spec; we only mint strings.
+      const scope = typeof parsed?.scope === 'string' ? parsed.scope : undefined;
       if (Array.isArray(parsed?.aud)) {
-        return { aud: parsed.aud[0] };
+        return { aud: parsed.aud[0], scope };
       }
-      return { aud: typeof parsed?.aud === 'string' ? parsed.aud : undefined };
+      return {
+        aud: typeof parsed?.aud === 'string' ? parsed.aud : undefined,
+        scope,
+      };
     } catch {
       return null;
     }
