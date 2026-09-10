@@ -1,22 +1,41 @@
 {
   "rootDir": "../..",
-  "moduleFileExtensions": ["js", "json", "ts"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts",
+    "tsx"
+  ],
   "testEnvironment": "node",
   "testRegex": "test/integration/.*\\.int-spec\\.ts$",
   "testTimeout": 180000,
   "maxWorkers": 1,
   "transform": {
-    "^.+\\.(t|j)sx?$": "ts-jest"
+    "^.+.(t|j)sx?$": [
+      "ts-jest",
+      {
+        "tsconfig": "<rootDir>/test/integration/tsconfig.json",
+        "diagnostics": false,
+        "isolatedModules": true
+      }
+    ]
   },
   "transformIgnorePatterns": [
-    "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:@react-email[\\\\/+][^\\\\/]+|uuid|nanoid)(?:@[^\\\\/]+)?[\\\\/])"
+    "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:@react-email[\\\\/+][^\\\\/]+|lib0|y-protocols|@asamuzakjp[\\\\/+]css-color|@asamuzakjp[\\\\/+]dom-selector|@borewit[\\\\/+]text-codec|@chevrotain[\\\\/+]cst-dts-gen|@chevrotain[\\\\/+]gast|@chevrotain[\\\\/+]regexp-to-ast|@chevrotain[\\\\/+]types|@chevrotain[\\\\/+]utils|@csstools[\\\\/+]color-helpers|@csstools[\\\\/+]css-calc|@csstools[\\\\/+]css-color-parser|@csstools[\\\\/+]css-parser-algorithms|@csstools[\\\\/+]css-tokenizer|@epic-web[\\\\/+]invariant|@excalidraw[\\\\/+]common|@excalidraw[\\\\/+]element|@excalidraw[\\\\/+]excalidraw|@excalidraw[\\\\/+]math|@excalidraw[\\\\/+]mermaid-to-excalidraw|@exodus[\\\\/+]bytes|@humanfs[\\\\/+]core|@humanfs[\\\\/+]node|@iconify[\\\\/+]types|@iconify[\\\\/+]utils|@mermaid-js[\\\\/+]parser|@noble[\\\\/+]hashes|@nodable[\\\\/+]entities|@oxc-project[\\\\/+]types|@rolldown[\\\\/+]pluginutils|@sindresorhus[\\\\/+]slugify|@sindresorhus[\\\\/+]transliterate|@tokenizer[\\\\/+]inflate|@types[\\\\/+]chai|@ungap[\\\\/+]structured-clone|@vitejs[\\\\/+]plugin-react|@vitest[\\\\/+]mocker|@vitest[\\\\/+]spy|ansi-regex|assertion-error|atomically|chai|chalk|chevrotain|chevrotain-allstar|cli-cursor|conf|confbox|cross-env|d3|d3-array|d3-axis|d3-brush|d3-chord|d3-color|d3-contour|d3-delaunay|d3-dispatch|d3-drag|d3-dsv|d3-ease|d3-fetch|d3-force|d3-format|d3-geo|d3-hierarchy|d3-interpolate|d3-path|d3-polygon|d3-quadtree|d3-random|d3-scale|d3-scale-chromatic|d3-selection|d3-shape|d3-time|d3-time-format|d3-timer|d3-transition|d3-zoom|dagre-d3-es|debounce-fn|delaunator|devlop|dot-prop|entities|env-paths|escape-string-regexp|eslint-plugin-react-refresh|estree-walker|exsolve|file-type|flatted|fractional-indexing|get-east-asian-width|hachure-fill|happy-dom|image-dimensions|internmap|is-interactive|is-unicode-supported|jose|json-schema-typed|khroma|langium|lodash-es|log-symbols|lowlight|magic-string|marked|mermaid|mimic-function|nanoid|node-readable-to-web-readable-stream|node-releases|nypm|oauth4webapi|obug|onetime|openid-client|ora|p-limit|package-manager-detector|parse5|postgres|react-email|restore-cursor|robust-predicates|rolldown|std-env|stdin-discarder|string-width|strip-ansi|strip-json-comments|strnum|strtok3|stubborn-fs|stubborn-utils|tagged-tag|tinybench|tinyexec|token-types|type-fest|uint8array-extras|uuid|vite|when-exit|yocto-queue|yoctocolors)(?:@[^\\\\/]+)?[\\\\/])"
   ],
   "moduleNameMapper": {
     "^@docmost/db/(.*)$": "<rootDir>/src/database/$1",
     "^@docmost/transactional/(.*)$": "<rootDir>/src/integrations/transactional/$1",
     "^@docmost/ee/(.*)$": "<rootDir>/src/ee/$1",
     "^src/(.*)$": "<rootDir>/src/$1",
-    "^(\\.{1,2}/.+)\\.js$": "$1"
+    "^(\\.{1,2}/.+)\\.js$": "$1",
+    "^image-dimensions$": "<rootDir>/src/__mocks__/image-dimensions.ts"
   },
-  "reporters": ["default", ["<rootDir>/test/integration/helpers/output-capture-reporter.cjs", {}]]
+  "reporters": [
+    "default",
+    [
+      "<rootDir>/test/integration/helpers/output-capture-reporter.cjs",
+      {}
+    ]
+  ]
 }
