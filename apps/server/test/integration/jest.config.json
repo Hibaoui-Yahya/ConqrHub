@@ -1,0 +1,22 @@
+{
+  "rootDir": "../..",
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testEnvironment": "node",
+  "testRegex": "test/integration/.*\\.int-spec\\.ts$",
+  "testTimeout": 180000,
+  "maxWorkers": 1,
+  "transform": {
+    "^.+\\.(t|j)sx?$": "ts-jest"
+  },
+  "transformIgnorePatterns": [
+    "node_modules[\\\\/](?!(?:\\.pnpm[\\\\/])?(?:@react-email[\\\\/+][^\\\\/]+|uuid|nanoid)(?:@[^\\\\/]+)?[\\\\/])"
+  ],
+  "moduleNameMapper": {
+    "^@docmost/db/(.*)$": "<rootDir>/src/database/$1",
+    "^@docmost/transactional/(.*)$": "<rootDir>/src/integrations/transactional/$1",
+    "^@docmost/ee/(.*)$": "<rootDir>/src/ee/$1",
+    "^src/(.*)$": "<rootDir>/src/$1",
+    "^(\\.{1,2}/.+)\\.js$": "$1"
+  },
+  "reporters": ["default", ["<rootDir>/test/integration/helpers/output-capture-reporter.cjs", {}]]
+}
