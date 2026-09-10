@@ -17,7 +17,7 @@ describe('F28 — suite IdP client registry validation at startup', () => {
   ])('refuses to start on a malformed registry (%s) without exposing the secret', async (_n, registry, pattern) => {
     let error: Error | undefined;
     try {
-      const app = await bootTestApp({ SUITE_IDP_CLIENTS: registry });
+      const app = await bootTestApp({ SUITE_IDP_CLIENTS: registry }, { isolateModules: true });
       await app.close();
     } catch (e) {
       error = e as Error;
@@ -44,7 +44,7 @@ describe('F28 — suite IdP token endpoint over HTTP (PostgreSQL, Redis)', () =>
       .set('Cookie', cookie);
 
   beforeAll(async () => {
-    t = await bootTestApp({ SUITE_IDP_CLIENTS: REGISTRY });
+    t = await bootTestApp({ SUITE_IDP_CLIENTS: REGISTRY }, { isolateModules: true });
     await resetDatabase(t);
     ({ cookie } = await setupWorkspace(t));
   });
