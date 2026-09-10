@@ -1,3 +1,8 @@
+import {
+  EXPECTED_TOKEN_AUDIENCE_KEY,
+  REQUIRED_TOKEN_SCOPE_KEY,
+} from '../../../../core/auth/auth.constants';
+
 /**
  * MCP OAuth 2.1 authorization-server constants.
  *
@@ -39,3 +44,13 @@ export const GRANT_TYPE_MCP_OAUTH = 'mcp_oauth';
 
 /** Path segment of the MCP resource (relative to the origin). */
 export const MCP_RESOURCE_PATH = '/mcp';
+
+/**
+ * Request-scoped marker set by McpAuthGuard on the raw request before Passport
+ * runs. JwtStrategy accepts an audience-bound (`aud`) api_key token ONLY when
+ * this marker is present and equals the token's audience; on every other route
+ * such a token is rejected before any lookup (F27).
+ */
+export const MCP_EXPECTED_AUDIENCE_KEY = EXPECTED_TOKEN_AUDIENCE_KEY;
+/** Scope the MCP route requires of an audience-bound token. */
+export const MCP_REQUIRED_SCOPE_KEY = REQUIRED_TOKEN_SCOPE_KEY;
