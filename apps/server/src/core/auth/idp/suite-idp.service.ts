@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
 import { User } from '@docmost/db/types/entity.types';
@@ -22,6 +22,58 @@ export interface SuiteIdpClient {
   redirectUri: string;
 }
 
+const CLIENT_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/**
+ * Parse and validate `SUITE_IDP_CLIENTS` (`id|secret|redirectUri;…`). Throws on a malformed
+ * entry so a typo fails startup instead of silently dropping a client. Error messages name
+ * the entry position and client id only — never the secret (F28). Legacy well-formed
+ * entries (short secrets, http://localhost redirect URIs) keep working unchanged.
+ */
+export function parseSuiteIdpClients(raw: string | undefined): SuiteIdpClient[] {
+  const entries = (raw ?? '')
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const clients: SuiteIdpClient[] = [];
+  entries.forEach((entry, index) => {
+    const [clientId, clientSecret, ...rest] = entry.split('|');
+    const redirectUri = rest.join('|').trim();
+    const id = clientId?.trim() ?? '';
+    const where = `SUITE_IDP_CLIENTS entry #${index + 1}${id ? ` (client '${id}')` : ''}`;
+    if (!CLIENT_ID_PATTERN.test(id)) {
+      throw new Error(`${where}: client id is missing or contains invalid characters`);
+    }
+    if (!clientSecret || !clientSecret.trim()) {
+      throw new Error(`${where}: client secret is missing`);
+    }
+    let url: URL;
+    try {
+      url = new URL(redirectUri);
+    } catch {
+      throw new Error(`${where}: redirect URI is not an absolute URL`);
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new Error(`${where}: redirect URI must use http or https`);
+    }
+    if (url.hash) {
+      throw new Error(`${where}: redirect URI must not contain a fragment`);
+    }
+    if (clients.some((c) => c.clientId === id)) {
+      throw new Error(`${where}: duplicate client id`);
+    }
+    clients.push({ clientId: id, clientSecret: clientSecret.trim(), redirectUri });
+  });
+  return clients;
+}
+
+/** Constant-time comparison that is safe for inputs of different length. */
+function secretsEqual(a: string, b: string): boolean {
+  const da = createHash('sha256').update(a, 'utf8').digest();
+  const db = createHash('sha256').update(b, 'utf8').digest();
+  return timingSafeEqual(da, db);
+}
+
 /**
  * ConqrHub as the suite's identity provider (blueprint §9.1, §14 #4 decided:
  * ConqrHub owns suite identity). A minimal OIDC-shaped surface for TRUSTED
@@ -33,6 +85,7 @@ export interface SuiteIdpClient {
 @Injectable()
 export class SuiteIdpService {
   private readonly redis: Redis;
+  private readonly registeredClients: SuiteIdpClient[];
 
   constructor(
     private readonly jwtService: JwtService,
@@ -40,24 +93,31 @@ export class SuiteIdpService {
     redisService: RedisService,
   ) {
     this.redis = redisService.getOrThrow();
+    // Parsed and validated once at startup (F28): a malformed registry fails boot
+    // with a secret-free message instead of silently dropping a client.
+    this.registeredClients = parseSuiteIdpClients(
+      this.environment.getSuiteIdpClientsRaw(),
+    );
   }
 
-  /** SUITE_IDP_CLIENTS="id|secret|redirectUri;id2|secret2|redirect2" */
+  /** SUITE_IDP_CLIENTS="id|secret|redirectUri;id2|secret2|redirect2" (validated at startup). */
   clients(): SuiteIdpClient[] {
-    const raw = process.env.SUITE_IDP_CLIENTS ?? '';
-    return raw
-      .split(';')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const [clientId, clientSecret, ...rest] = entry.split('|');
-        return {
-          clientId: clientId?.trim() ?? '',
-          clientSecret: clientSecret?.trim() ?? '',
-          redirectUri: rest.join('|').trim(),
-        };
-      })
-      .filter((c) => c.clientId && c.clientSecret && c.redirectUri);
+    return this.registeredClients;
+  }
+
+  /**
+   * Constant-time client authentication. Unknown clients are compared against a
+   * dummy value so response timing does not reveal whether the client id exists;
+   * callers must return the same `invalid_client` error in both cases (F28).
+   */
+  verifyClientSecret(
+    client: SuiteIdpClient | undefined,
+    presented: unknown,
+  ): boolean {
+    const expected = client?.clientSecret ?? randomUUID();
+    const given = typeof presented === 'string' ? presented : '';
+    const equal = secretsEqual(expected, given);
+    return client !== undefined && given.length > 0 && equal;
   }
 
   isEnabled(): boolean {
