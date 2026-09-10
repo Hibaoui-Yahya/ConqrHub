@@ -11,9 +11,7 @@
 import 'reflect-metadata';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { Test } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
 import fastifyCookie from '@fastify/cookie';
 import Redis from 'ioredis';
 import * as supertest from 'supertest';
@@ -57,9 +55,26 @@ const GLOBAL_PREFIX_EXCLUDE = [
   'oauth/revoke',
 ];
 
-export async function bootTestApp(extraEnv: Record<string, string> = {}): Promise<TestApp> {
+export interface BootOptions {
+  /**
+   * ConfigModule.forRoot snapshots process.env when app.module is first evaluated, so a second
+   * boot in the same file would silently reuse the first environment. Set this to evaluate the
+   * application (and the Nest runtime) in a fresh module registry. Specs that resolve providers
+   * by statically imported classes must not use it (class identity would differ).
+   */
+  isolateModules?: boolean;
+}
+
+export async function bootTestApp(extraEnv: Record<string, string> = {}, options: BootOptions = {}): Promise<TestApp> {
   Object.assign(process.env, BASE_ENV, extraEnv);
+  if (options.isolateModules) {
+    jest.resetModules();
+  }
   // Imported after the environment is set: ConfigModule validation runs at module evaluation.
+  // Nest runtime pieces are imported here too so they share one registry with the application.
+  const { ValidationPipe } = await import('@nestjs/common');
+  const { Reflector } = await import('@nestjs/core');
+  const { Test } = await import('@nestjs/testing');
   const { AppModule } = await import('../../../src/app.module');
   const { FastifyAdapter } = await import('@nestjs/platform-fastify');
   const { TransformHttpResponseInterceptor } = await import(
