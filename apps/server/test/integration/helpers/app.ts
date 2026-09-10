@@ -27,7 +27,10 @@ export const BASE_ENV: Record<string, string> = {
   DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://hub:hub_ci_password@127.0.0.1:5432/hub_ci',
   REDIS_URL: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
   STORAGE_DRIVER: 'local',
-  MAIL_DRIVER: 'log',
+  // 'log' is not an accepted MAIL_DRIVER (validation allows smtp|postmark); nothing listens on this port.
+  MAIL_DRIVER: 'smtp',
+  SMTP_HOST: '127.0.0.1',
+  SMTP_PORT: '2525',
   DISABLE_TELEMETRY: 'true',
 };
 
