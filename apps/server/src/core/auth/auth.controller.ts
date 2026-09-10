@@ -32,6 +32,14 @@ import { PasswordResetDto } from './dto/password-reset.dto';
 import { VerifyUserTokenDto } from './dto/verify-user-token.dto';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { validateSsoEnforcement } from './auth.util';
+import {
+  AUTH_COOKIE_NAME,
+  clearAuthTokenCookie,
+  setAuthTokenCookie,
+} from './auth-cookie.util';
+import { TokenService } from './services/token.service';
+import { JwtType } from './dto/jwt-payload';
+import { extractBearerTokenFromHeader } from '../../common/helpers';
 import { ModuleRef } from '@nestjs/core';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
@@ -51,6 +59,7 @@ export class AuthController {
     private environmentService: EnvironmentService,
     private moduleRef: ModuleRef,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private tokenService: TokenService,
   ) {}
 
   @HttpCode(HttpStatus.OK)
@@ -203,40 +212,55 @@ export class AuthController {
     return this.authService.getCollabToken(user, workspace.id);
   }
 
+  /**
+   * F29: logout is idempotent and always clears the cookie with the exact
+   * attributes it was set with. The token is verified here rather than by
+   * JwtAuthGuard so that a repeated logout — or one with an already-revoked
+   * or expired cookie — still succeeds and clears the cookie instead of
+   * answering 401 and leaving it in place. Revocation deletes the server
+   * session row and its Redis cache entry (SessionService.revokeSession).
+   */
   @SkipThrottle({ [AUTH_THROTTLER]: true })
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('logout')
   async logout(
-    @AuthUser() user: User,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    const sessionId = (req.raw as any).sessionId;
-    if (sessionId) {
-      await this.sessionService.revokeSession(
-        sessionId,
-        user.id,
-        user.workspaceId,
-      );
+    const cookies = (req as any).cookies as
+      | Record<string, string | undefined>
+      | undefined;
+    const token = cookies?.[AUTH_COOKIE_NAME] ?? extractBearerTokenFromHeader(req);
+
+    let payload: { sub?: string; workspaceId?: string; sessionId?: string } | null =
+      null;
+    if (token) {
+      try {
+        payload = await this.tokenService.verifyJwt(token, JwtType.ACCESS);
+      } catch {
+        payload = null; // expired/invalid: nothing to revoke, still clear the cookie
+      }
     }
 
-    res.clearCookie('authToken');
+    if (payload?.sessionId && payload.sub && payload.workspaceId) {
+      await this.sessionService.revokeSession(
+        payload.sessionId,
+        payload.sub,
+        payload.workspaceId,
+      );
+      this.auditService.setActorId(payload.sub);
+      this.auditService.log({
+        event: AuditEvent.USER_LOGOUT,
+        resourceType: AuditResource.USER,
+        resourceId: payload.sub,
+      });
+    }
 
-    this.auditService.log({
-      event: AuditEvent.USER_LOGOUT,
-      resourceType: AuditResource.USER,
-      resourceId: user.id,
-    });
+    clearAuthTokenCookie(res, this.environmentService);
+    return {};
   }
 
   setAuthCookie(res: FastifyReply, token: string) {
-    res.setCookie('authToken', token, {
-      httpOnly: true,
-      sameSite: this.environmentService.getAuthCookieSameSite(),
-      path: '/',
-      expires: this.environmentService.getCookieExpiresIn(),
-      secure: this.environmentService.isHttps(),
-    });
+    setAuthTokenCookie(res, token, this.environmentService);
   }
 }

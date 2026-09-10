@@ -4,6 +4,7 @@ import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorat
 import { Workspace } from '@docmost/db/types/entity.types';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { OidcAuthService, OidcFlowChecks } from './oidc-auth.service';
+import { setAuthTokenCookie } from '../auth-cookie.util';
 
 const FLOW_COOKIE = 'oidc_flow';
 
@@ -80,13 +81,7 @@ export class OidcController {
 
       // Clear the single-use flow cookie and set the session.
       res.clearCookie(FLOW_COOKIE, { path: '/' });
-      res.setCookie('authToken', authToken, {
-        httpOnly: true,
-        sameSite: this.env.getAuthCookieSameSite(),
-        path: '/',
-        expires: this.env.getCookieExpiresIn(),
-        secure: this.env.isHttps(),
-      });
+      setAuthTokenCookie(res, authToken, this.env);
       return res.header('Location', this.env.getAppUrl()).code(302).send();
     } catch (err) {
       return this.fail(res, err instanceof Error ? err.message : String(err));
