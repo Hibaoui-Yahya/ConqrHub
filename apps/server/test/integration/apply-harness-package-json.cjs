@@ -7,7 +7,7 @@ const file = process.argv[2];
 const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
 pkg.scripts = pkg.scripts || {};
 pkg.scripts["test:integration"] =
-  pkg.scripts["test:integration"] || "jest --config test/integration/jest.config.json --runInBand";
+  pkg.scripts["test:integration"] || "jest --config test/integration/jest.config.json --runInBand --forceExit";
 pkg.jest = pkg.jest || {};
 pkg.jest.moduleNameMapper = pkg.jest.moduleNameMapper || {};
 if (!pkg.jest.moduleNameMapper["^src/(.*)$"]) {

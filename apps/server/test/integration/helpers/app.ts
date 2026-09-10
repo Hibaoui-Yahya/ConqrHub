@@ -134,7 +134,9 @@ export function recordMintedToken(token: string): void {
 export async function resetDatabase(testApp: TestApp): Promise<void> {
   const { sql } = await import('kysely');
   const { KYSELY_MODULE_CONNECTION_TOKEN } = await import('nestjs-kysely');
-  const db: any = testApp.get(KYSELY_MODULE_CONNECTION_TOKEN);
+  // nestjs-kysely exposes the token as a factory (namespace) => string.
+  const token: any = typeof KYSELY_MODULE_CONNECTION_TOKEN === 'function' ? (KYSELY_MODULE_CONNECTION_TOKEN as any)() : KYSELY_MODULE_CONNECTION_TOKEN;
+  const db: any = testApp.get(token);
   await sql`DO $$ DECLARE r RECORD; BEGIN
       FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('kysely_migration','kysely_migration_lock')) LOOP
         EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
