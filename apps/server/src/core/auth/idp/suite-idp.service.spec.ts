@@ -4,7 +4,10 @@ import { SuiteIdpService } from './suite-idp.service';
 
 function make(redisSetResults: Array<'OK' | null> = ['OK']) {
   const jwt = new JwtService({ secret: 'test-secret' });
-  const environment = { getAppUrl: () => 'http://localhost:5173' };
+  const environment = {
+    getAppUrl: () => 'http://localhost:5173',
+    getSuiteIdpClientsRaw: () => process.env.SUITE_IDP_CLIENTS ?? '',
+  };
   const setResults = [...redisSetResults];
   const redis = {
     set: jest.fn(async () => setResults.shift() ?? null),
@@ -114,7 +117,10 @@ describe('SuiteIdpService refresh tokens', () => {
   /** Stateful redis mock: set stores, getdel consumes (rotation semantics). */
   function makeStateful() {
     const jwt = new JwtService({ secret: 'test-secret' });
-    const environment = { getAppUrl: () => 'http://localhost:5173' };
+    const environment = {
+      getAppUrl: () => 'http://localhost:5173',
+      getSuiteIdpClientsRaw: () => process.env.SUITE_IDP_CLIENTS ?? '',
+    };
     const store = new Map<string, string>();
     const redis = {
       set: jest.fn(async (key: string, value: string) => {
