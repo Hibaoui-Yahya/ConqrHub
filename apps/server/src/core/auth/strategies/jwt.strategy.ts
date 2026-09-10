@@ -10,6 +10,10 @@ import { SessionActivityService } from '../../session/session-activity.service';
 import { FastifyRequest } from 'fastify';
 import { extractBearerTokenFromHeader, isUserDisabled } from '../../../common/helpers';
 import { SUITE_IDP_ACCESS_AUD } from '../idp/suite-idp.service';
+import {
+  EXPECTED_TOKEN_AUDIENCE_KEY,
+  REQUIRED_TOKEN_SCOPE_KEY,
+} from '../auth.constants';
 import { ModuleRef } from '@nestjs/core';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
@@ -78,6 +82,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
 
     if (payload.type === JwtType.API_KEY) {
+      this.assertAudienceAcceptedOnRoute(req, payload as JwtApiKeyPayload);
       return this.validateApiKey(req, payload as JwtApiKeyPayload);
     }
 
@@ -172,6 +177,35 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
     return { user, workspace };
+  }
+
+  /**
+   * F27: an api_key token that carries `aud` was minted for one resource (the
+   * MCP endpoint). It is accepted only on a route whose guard declared that
+   * exact audience (and, when declared, the required scope) on the raw
+   * request. Everywhere else it is rejected here — before any API-key, user
+   * or workspace lookup — so it can never act as a generic user credential.
+   * Manual API keys carry no `aud` and are unaffected.
+   */
+  private assertAudienceAcceptedOnRoute(req: any, payload: JwtApiKeyPayload) {
+    const aud = (payload as { aud?: string | string[] }).aud;
+    if (aud === undefined) return;
+
+    const expected: string | undefined = req?.raw?.[EXPECTED_TOKEN_AUDIENCE_KEY];
+    const audiences = Array.isArray(aud) ? aud : [aud];
+    if (!expected || !audiences.includes(expected)) {
+      throw new UnauthorizedException(
+        'Audience-bound token is not accepted on this route',
+      );
+    }
+
+    const requiredScope: string | undefined = req?.raw?.[REQUIRED_TOKEN_SCOPE_KEY];
+    if (requiredScope) {
+      const granted = (payload.scope ?? '').split(' ').filter(Boolean);
+      if (!granted.includes(requiredScope)) {
+        throw new UnauthorizedException('Insufficient token scope');
+      }
+    }
   }
 
   private async validateApiKey(req: any, payload: JwtApiKeyPayload) {
