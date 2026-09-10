@@ -14,6 +14,7 @@ import {
   EXPECTED_TOKEN_AUDIENCE_KEY,
   REQUIRED_TOKEN_SCOPE_KEY,
 } from '../auth.constants';
+import { jwtAuthCacheKey } from '../auth-cache.util';
 import { ModuleRef } from '@nestjs/core';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
@@ -66,7 +67,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       (payload as JwtPayload).sessionId ??
       (payload as JwtApiKeyPayload).apiKeyId ??
       payload.sub;
-    return `jwt:auth:${payload.workspaceId}:${id}`;
+    return jwtAuthCacheKey(payload.workspaceId, id);
   }
 
   async validate(
