@@ -28,7 +28,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config test/jest-e2e.json"
+    "test:e2e": "jest --config test/jest-e2e.json",
+    "test:integration": "jest --config test/integration/jest.config.json --runInBand --forceExit"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.52",
@@ -185,7 +186,8 @@
       "^@docmost/ee/(.*)$": "<rootDir>/ee/$1",
       "^@docmost/editor-ext$": "<rootDir>/__mocks__/editor-ext.ts",
       "^image-dimensions$": "<rootDir>/__mocks__/image-dimensions.ts",
-      "^(\\.{1,2}/.+)\\.js$": "$1"
+      "^(\\.{1,2}/.+)\\.js$": "$1",
+      "^src/(.*)$": "<rootDir>/$1"
     }
   }
 }
