@@ -143,15 +143,15 @@ export class AuthService {
       workspaceId,
     );
 
-    if (currentSessionId) {
-      await this.userSessionRepo.deleteAllExceptCurrent(
-        currentSessionId,
-        userId,
-        workspaceId,
-      );
-    } else {
-      await this.userSessionRepo.deleteByUserId(userId, workspaceId);
-    }
+    const removedSessionIds = currentSessionId
+      ? await this.userSessionRepo.deleteAllExceptCurrent(
+          currentSessionId,
+          userId,
+          workspaceId,
+        )
+      : await this.userSessionRepo.deleteByUserId(userId, workspaceId);
+    // F29: removed sessions must stop working now, not after the auth cache TTL.
+    await this.sessionService.invalidateSessionCache(workspaceId, removedSessionIds);
 
     this.auditService.log({
       event: AuditEvent.USER_PASSWORD_CHANGED,
@@ -245,6 +245,7 @@ export class AuthService {
     // invalidation must be atomic. A partial state (e.g. password updated,
     // token consumed, but old sessions still valid) leaves a window in
     // which a previously-stolen session can outlive the reset.
+    let removedSessionIds: string[] = [];
     await executeTx(this.db, async (trx) => {
       await this.userRepo.updateUser(
         {
@@ -262,8 +263,14 @@ export class AuthService {
         .where('type', '=', UserTokenType.FORGOT_PASSWORD)
         .execute();
 
-      await this.userSessionRepo.deleteByUserId(user.id, workspace.id, trx);
+      removedSessionIds = await this.userSessionRepo.deleteByUserId(
+        user.id,
+        workspace.id,
+        trx,
+      );
     });
+    // F29: removed sessions must stop working now, not after the auth cache TTL.
+    await this.sessionService.invalidateSessionCache(workspace.id, removedSessionIds);
 
     this.auditService.setActorId(user.id);
     this.auditService.log({
