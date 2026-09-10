@@ -1,0 +1,178 @@
+# ConqrHub — test harness (Phase 0C verification infrastructure).
+#
+# Runs the server unit suite and the real HTTP/PostgreSQL/Redis integration suite on the
+# repository's deployed runtime (Node 22, pnpm 10.4.0 — see Dockerfile and package.json).
+#
+# Two ways to run:
+#   * pull_request / push to main or ci-run/**: tests the branch as-is.
+#   * workflow_dispatch with `ref`: checks out `ref` (e.g. a security branch that predates this
+#     harness) and overlays the integration specs from this workflow's own commit so the target
+#     branch's code is exercised by the harness without merging either side first.
+#
+# Synthetic configuration only: throwaway Postgres/Redis service containers, fixed test secrets,
+# no production URLs, credentials, storage or e-mail. Nothing here reads repository secrets.
+name: CI
+
+on:
+  pull_request:
+  push:
+    # ci-run/<finding>: throwaway verification branches = <security branch> merged with this
+    # harness, so a security branch can be exercised by CI before either side merges.
+    branches: [main, "ci-run/**"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to test (defaults to the workflow's own ref)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Deployed runtime (Dockerfile: node:22-slim). Do not test on a different major.
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.4.0"
+
+jobs:
+  unit:
+    name: server unit tests (Node ${{ '22' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Overlay harness files from this workflow's commit (dispatch only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          path: _harness
+      - name: Apply overlay (dispatch only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ref != ''
+        run: |
+          set -euo pipefail
+          mkdir -p apps/server/test
+          rm -rf apps/server/test/integration
+          cp -r _harness/apps/server/test/integration apps/server/test/integration
+          # Test-harness fix only (Jest module mapper for absolute `src/` imports + scripts).
+          node _harness/apps/server/test/integration/apply-harness-package-json.cjs apps/server/package.json
+          rm -rf _harness
+          git status --porcelain
+
+      - name: Setup pnpm (repository pin)
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node (deployed major)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build workspace packages the server imports
+        run: pnpm exec nx run-many -t build --projects=@docmost/editor-ext,@conqr/conqrplan-core
+      - name: Unit tests
+        working-directory: apps/server
+        run: pnpm exec jest --ci --reporters=default --reporters=summary
+      - name: Typecheck
+        working-directory: apps/server
+        run: pnpm exec tsc --noEmit -p tsconfig.json
+
+  integration:
+    name: HTTP + PostgreSQL + Redis integration (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: hub_ci_password
+          POSTGRES_DB: hub_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hub -d hub_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Synthetic, CI-only values. Not production; not secrets.
+      DATABASE_URL: postgresql://hub:hub_ci_password@127.0.0.1:5432/hub_ci
+      REDIS_URL: redis://127.0.0.1:6379
+      APP_URL: http://hub.test
+      APP_SECRET: ci-only-app-secret-0123456789abcdef0123456789abcdef
+      STORAGE_DRIVER: local
+      MAIL_DRIVER: log
+      DISABLE_TELEMETRY: "true"
+      NODE_ENV: test
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+      - name: Overlay harness files from this workflow's commit (dispatch only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          path: _harness
+      - name: Apply overlay (dispatch only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ref != ''
+        run: |
+          set -euo pipefail
+          rm -rf apps/server/test/integration
+          cp -r _harness/apps/server/test/integration apps/server/test/integration
+          node _harness/apps/server/test/integration/apply-harness-package-json.cjs apps/server/package.json
+          rm -rf _harness
+
+      - name: Setup pnpm (repository pin)
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node (deployed major)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build workspace packages the server imports
+        run: pnpm exec nx run-many -t build --projects=@docmost/editor-ext,@conqr/conqrplan-core
+      - name: Run database migrations (synthetic database)
+        working-directory: apps/server
+        run: pnpm run migration:latest
+      - name: Integration tests
+        working-directory: apps/server
+        run: pnpm run test:integration
+      - name: Log leak scan (tokens minted during the run must not appear in the job output)
+        if: always()
+        working-directory: apps/server
+        run: |
+          set -euo pipefail
+          if [ -f test/integration/.minted-tokens ]; then
+            echo "minted token count: $(wc -l < test/integration/.minted-tokens)"
+            # The integration run writes the full jest output to this file (see jest.config.json
+            # reporters); every minted token must be absent from it.
+            if [ -f test/integration/.jest-output.log ]; then
+              while IFS= read -r tok; do
+                [ -z "$tok" ] && continue
+                if grep -qF -- "$tok" test/integration/.jest-output.log; then
+                  echo "::error::a minted token appeared in test/server output"; exit 1
+                fi
+              done < test/integration/.minted-tokens
+              echo "no minted token found in captured output"
+            fi
+          fi
