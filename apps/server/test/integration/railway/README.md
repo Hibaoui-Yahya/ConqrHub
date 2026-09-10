@@ -37,6 +37,7 @@ this directory is a GitHub Actions workflow.
 | `STORAGE_DRIVER`, `MAIL_DRIVER`, `SMTP_HOST`, `SMTP_PORT`, `DISABLE_TELEMETRY`, `NODE_ENV` | `local`, `smtp`, `127.0.0.1`, `2525` (nothing listens; `log` is not an accepted driver), `true`, `test` |
 | `HARNESS_GIT_SHA` | the exact commit being deployed (set before each `railway up`) |
 | `HOLD_SECONDS` | optional; keeps the container alive after the run so `result.json` can be read over `railway ssh` |
+| `RUN_UNIT_SPECS` | optional; space-separated Jest path patterns run with `pnpm exec jest --ci` before the integration suite (exit code reported as `unit_exit`) |
 
 Restart policy for the service must be `NEVER` (a finished test run is not a crash to retry).
 
