@@ -96,4 +96,38 @@ describe('McpAuthGuard (F27)', () => {
       expect.stringContaining('resource_metadata='),
     );
   });
+
+  it('handleRequest maps a strategy scope refusal (token present) to error="insufficient_scope"', () => {
+    const guard = new McpAuthGuard(env);
+    const { ctx, res } = makeCtx({
+      authorization: `Bearer ${fakeJwt({ aud: 'https://hub.example.com/mcp', scope: 'offline_access' })}`,
+    });
+    const refusal = new UnauthorizedException('Insufficient token scope');
+    expect(() => guard.handleRequest(refusal, null, null, ctx)).toThrow(refusal);
+    expect(res.header).toHaveBeenCalledWith(
+      'WWW-Authenticate',
+      expect.stringContaining('error="insufficient_scope"'),
+    );
+  });
+
+  it('handleRequest maps any other strategy refusal of a presented token to error="invalid_token"', () => {
+    const guard = new McpAuthGuard(env);
+    const { ctx, res } = makeCtx({
+      authorization: `Bearer ${fakeJwt({ aud: 'https://other.example.com/mcp', scope: 'mcp' })}`,
+    });
+    const refusal = new UnauthorizedException('Audience-bound token is not accepted on this route');
+    expect(() => guard.handleRequest(refusal, null, null, ctx)).toThrow(refusal);
+    expect(res.header).toHaveBeenCalledWith(
+      'WWW-Authenticate',
+      expect.stringContaining('error="invalid_token"'),
+    );
+  });
+
+  it('handleRequest emits the bare discovery challenge when no credential is presented', () => {
+    const guard = new McpAuthGuard(env);
+    const { ctx, res } = makeCtx({});
+    expect(() => guard.handleRequest(null, null, null, ctx)).toThrow(UnauthorizedException);
+    const header = (res.header as jest.Mock).mock.calls.find((c) => c[0] === 'WWW-Authenticate')[1];
+    expect(header).not.toContain('error=');
+  });
 });

@@ -55,7 +55,10 @@ export class McpAuthGuard extends AuthGuard('jwt') {
     const res = ctx.switchToHttp().getResponse<FastifyReply>();
 
     if (err || !user) {
-      this.setChallenge(req, res);
+      // The JwtStrategy already rejects audience-bound tokens that are not accepted on this route
+      // or lack the required scope (F27); translate its refusal into the RFC 6750 error code so
+      // clients can distinguish "get a token" from "get a token with the right scope".
+      this.setChallenge(req, res, this.challengeErrorFor(err, req));
       throw err || new UnauthorizedException();
     }
 
@@ -77,6 +80,17 @@ export class McpAuthGuard extends AuthGuard('jwt') {
     }
 
     return user;
+  }
+
+  private challengeErrorFor(err: any, req: FastifyRequest): string | undefined {
+    if (!extractBearerTokenFromHeader(req)) {
+      return undefined; // no credential presented: bare discovery challenge
+    }
+    const message = typeof err?.message === 'string' ? err.message : '';
+    if (message === 'Insufficient token scope') {
+      return 'insufficient_scope';
+    }
+    return 'invalid_token';
   }
 
   private setChallenge(
