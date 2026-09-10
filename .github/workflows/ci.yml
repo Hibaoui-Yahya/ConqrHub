@@ -4,7 +4,7 @@
 # repository's deployed runtime (Node 22, pnpm 10.4.0 — see Dockerfile and package.json).
 #
 # Two ways to run:
-#   * pull_request / push to main: tests the branch as-is.
+#   * pull_request / push to main or ci-run/**: tests the branch as-is.
 #   * workflow_dispatch with `ref`: checks out `ref` (e.g. a security branch that predates this
 #     harness) and overlays the integration specs from this workflow's own commit so the target
 #     branch's code is exercised by the harness without merging either side first.
@@ -16,7 +16,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # ci-run/<finding>: throwaway verification branches = <security branch> merged with this
+    # harness, so a security branch can be exercised by CI before either side merges.
+    branches: [main, "ci-run/**"]
   workflow_dispatch:
     inputs:
       ref:
