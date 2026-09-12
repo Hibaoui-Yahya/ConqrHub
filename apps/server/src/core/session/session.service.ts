@@ -55,6 +55,33 @@ export class SessionService {
     return this.tokenService.generateAccessToken(user, session.id);
   }
 
+  /**
+   * A session for a platform-mode login.
+   *
+   * The row is exactly the same as a standalone session's — same table, same expiry, same device
+   * and address capture — because it is the same thing: proof that this browser authenticated.
+   * Only the token differs, by carrying the claims the guard needs to ask ConqrAccess anything at
+   * all.
+   */
+  async createPlatformSessionAndToken(
+    user: User,
+    platform: { personUrn: string; conqrTenantId: string },
+  ): Promise<string> {
+    const auditContext = this.cls.get<AuditContext>(AUDIT_CONTEXT_KEY);
+    const ipAddress = auditContext?.ipAddress ?? null;
+    const userAgent = auditContext?.userAgent ?? null;
+
+    const session = await this.userSessionRepo.insertSession({
+      userId: user.id,
+      workspaceId: user.workspaceId,
+      deviceName: this.parseDeviceName(userAgent),
+      ipAddress,
+      expiresAt: this.environmentService.getCookieExpiresIn(),
+    });
+
+    return this.tokenService.generatePlatformAccessToken(user, session.id, platform);
+  }
+
   async getActiveSessions(
     userId: string,
     workspaceId: string,

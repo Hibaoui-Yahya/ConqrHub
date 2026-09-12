@@ -42,6 +42,35 @@ export class TokenService {
     return this.jwtService.sign(payload);
   }
 
+  /**
+   * An access token for a platform-mode session.
+   *
+   * Identical to the standalone one except for three claims that say *who* and *which tenant was
+   * requested*. Deliberately no role: in platform mode the guard replaces whatever the session
+   * claims about authority with what ConqrAccess says on this request, so putting a role here
+   * would be putting a lie in a token with a lifetime measured in hours.
+   */
+  async generatePlatformAccessToken(
+    user: User,
+    sessionId: string,
+    platform: { personUrn: string; conqrTenantId: string },
+  ): Promise<string> {
+    if (isUserDisabled(user)) {
+      throw new ForbiddenException();
+    }
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      workspaceId: user.workspaceId,
+      type: JwtType.ACCESS,
+      sessionId,
+      personUrn: platform.personUrn,
+      conqrTenantId: platform.conqrTenantId,
+    };
+    return this.jwtService.sign(payload);
+  }
+
   async generateCollabToken(user: User, workspaceId: string): Promise<string> {
     if (isUserDisabled(user)) {
       throw new ForbiddenException();

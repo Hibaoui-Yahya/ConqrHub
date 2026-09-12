@@ -5,6 +5,8 @@ import { EnvironmentService } from '../../../integrations/environment/environmen
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { SignupService } from '../services/signup.service';
 import { SessionService } from '../../session/session.service';
+import { PlatformConfigService } from '../../platform/platform.config';
+import { PlatformLoginService } from '../../platform/platform-login.service';
 import { mapOidcClaimsToUser } from './oidc.util';
 
 export interface OidcFlowChecks {
@@ -26,6 +28,8 @@ export class OidcAuthService {
     private readonly userRepo: UserRepo,
     private readonly signupService: SignupService,
     private readonly sessionService: SessionService,
+    private readonly platformConfig: PlatformConfigService,
+    private readonly platformLogin: PlatformLoginService,
   ) {}
 
   isEnabled(): boolean {
@@ -126,7 +130,32 @@ export class OidcAuthService {
       'OIDC token exchange timed out',
     );
 
-    const mapped = mapOidcClaimsToUser(tokens.claims());
+    const claims = tokens.claims();
+    const mapped = mapOidcClaimsToUser(claims);
+
+    // Platform mode: the platform decides who this is, which tenant they are in and which
+    // workspace that maps to. Nothing below this branch runs, and in particular the e-mail lookup
+    // does not — resolving a person by e-mail address is the thing platform mode exists to stop
+    // (invariant ID-1). The subject and issuer the provider stated are what identify them.
+    if (this.platformConfig.isPlatformMode()) {
+      const issuer = this.env.getOidcIssuerUrl();
+      if (!issuer) {
+        throw new UnauthorizedException(
+          'platform mode requires OIDC_ISSUER_URL to resolve the canonical person',
+        );
+      }
+      const subject = typeof claims?.sub === 'string' ? claims.sub : undefined;
+      if (!subject) {
+        throw new UnauthorizedException('the identity provider returned no subject');
+      }
+      const { authToken } = await this.platformLogin.establishSession({
+        issuer,
+        subject,
+        email: mapped.email,
+        displayName: mapped.name,
+      });
+      return authToken;
+    }
 
     let user = await this.userRepo.findByEmail(mapped.email, workspaceId);
     if (!user) {
