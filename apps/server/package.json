@@ -125,7 +125,9 @@
     "ws": "^8.20.0",
     "yauzl": "^3.2.1",
     "zod": "^4.3.6",
-    "@conqr/conqrplan-core": "workspace:*"
+    "@conqr/conqrplan-core": "workspace:*",
+    "@conqr/contracts": "file:../../vendor/conqr/conqr-contracts-0.1.0.tgz",
+    "@conqr/sdk": "file:../../vendor/conqr/conqr-sdk-0.1.0.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

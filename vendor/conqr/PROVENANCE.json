@@ -1,0 +1,10 @@
+{
+  "source": "https://github.com/Hibaoui-Yahya/ConqrPlatform",
+  "commit": "5473e22e1a12edb7d978d3f532dadfa2db3e068e",
+  "vendored_at": "2026-09-12T11:50:50.782Z",
+  "note": "Built by vendor/conqr/refresh.mjs. @conqr/sdk's dependency on @conqr/contracts is moved to peerDependencies so both share one instance; nothing else is modified.",
+  "artefacts": {
+    "conqr-contracts-0.1.0.tgz": "sha256:08121f8df6035ac52952ab50f90f6a8ca5c2f7a69b63f4d85129560acee78eb6",
+    "conqr-sdk-0.1.0.tgz": "sha256:2534fdd07150a51f0e3e420ba9c9cafb50fecbe62440a83ba6f65b8c74d3ae28"
+  }
+}

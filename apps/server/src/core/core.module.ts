@@ -25,6 +25,7 @@ import { SessionModule } from './session/session.module';
 import { DocHealthModule } from './doc-health/doc-health.module';
 import { ExpertInsightsModule } from './expert-insights/expert-insights.module';
 import { IntegrationModule } from './integration/integration.module';
+import { PlatformModule } from './platform/platform.module';
 import { ClsMiddleware } from 'nestjs-cls';
 import { DOMAIN_EXEMPT_ROUTES } from '../common/middlewares/domain-exempt-routes';
 
@@ -49,6 +50,9 @@ import { DOMAIN_EXEMPT_ROUTES } from '../common/middlewares/domain-exempt-routes
     DocHealthModule,
     ExpertInsightsModule,
     IntegrationModule,
+    // Platform integration. Global and inert in standalone mode: PlatformConfigService reports
+    // standalone and nothing inside is ever consulted.
+    PlatformModule,
   ],
 })
 export class CoreModule implements NestModule {

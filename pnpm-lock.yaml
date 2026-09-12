@@ -540,6 +540,12 @@ importers:
       '@conqr/conqrplan-core':
         specifier: workspace:*
         version: link:../../packages/conqrplan-core
+      '@conqr/contracts':
+        specifier: file:../../vendor/conqr/conqr-contracts-0.1.0.tgz
+        version: file:vendor/conqr/conqr-contracts-0.1.0.tgz
+      '@conqr/sdk':
+        specifier: file:../../vendor/conqr/conqr-sdk-0.1.0.tgz
+        version: file:vendor/conqr/conqr-sdk-0.1.0.tgz(@conqr/contracts@file:vendor/conqr/conqr-contracts-0.1.0.tgz)
       '@fastify/cookie':
         specifier: ^11.0.2
         version: 11.0.2
@@ -1936,6 +1942,16 @@ packages:
     resolution: {integrity: sha512-GuvZ38d23H+7Tz2C9DhzCepivsOsky03s5NI+KCy7ke1FNUvsJ2oO47scQ9YaGGhgjgNW5OYYNSADmbjcSoIhw==}
     peerDependencies:
       commander: 11.1.x
+
+  '@conqr/contracts@file:vendor/conqr/conqr-contracts-0.1.0.tgz':
+    resolution: {integrity: sha512-bod39PNHHqRqKgeZmHcvHXsSvSIx+oDZ54vbhvKySd6twNPOO44WRWb+9hhT3AXb76890iA6f9ITjIqaPg4OyQ==, tarball: file:vendor/conqr/conqr-contracts-0.1.0.tgz}
+    version: 0.1.0
+
+  '@conqr/sdk@file:vendor/conqr/conqr-sdk-0.1.0.tgz':
+    resolution: {integrity: sha512-EaMi71e06sA8C0ydsa4GjFpkrZ7LaBhWb3V+wUhaXRIHefoUyNCTOlZxmOkl81/qXJDMNu18qfFhRXfVSmQOWg==, tarball: file:vendor/conqr/conqr-sdk-0.1.0.tgz}
+    version: 0.1.0
+    peerDependencies:
+      '@conqr/contracts': 0.1.0
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -12803,6 +12819,12 @@ snapshots:
   '@commander-js/extra-typings@11.1.0(commander@11.1.0)':
     dependencies:
       commander: 11.1.0
+
+  '@conqr/contracts@file:vendor/conqr/conqr-contracts-0.1.0.tgz': {}
+
+  '@conqr/sdk@file:vendor/conqr/conqr-sdk-0.1.0.tgz(@conqr/contracts@file:vendor/conqr/conqr-contracts-0.1.0.tgz)':
+    dependencies:
+      '@conqr/contracts': file:vendor/conqr/conqr-contracts-0.1.0.tgz
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:

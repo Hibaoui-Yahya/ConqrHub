@@ -14,6 +14,20 @@ export type JwtPayload = {
   workspaceId: string;
   type: 'access';
   sessionId?: string;
+  /**
+   * Platform-mode claims. Identity and intent only — never authority.
+   *
+   * In platform mode the guard discards whatever this token says about the workspace and the role
+   * and asks ConqrAccess on every request; these three say *who* and *which tenant was requested*
+   * so that it has something to ask about.
+   *
+   * **Not yet minted.** The login half of the integration — resolving the canonical person through
+   * ConqrIdentity and letting ConqrAccess choose the tenant before the session is signed — is not
+   * implemented, so no session currently carries these. Until it is, enabling
+   * CONQR_PLATFORM_MODE=platform refuses every request, which is the correct direction to fail.
+   */
+  personUrn?: string;
+  conqrTenantId?: string;
 };
 
 export type JwtCollabPayload = {
