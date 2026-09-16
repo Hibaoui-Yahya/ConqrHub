@@ -222,7 +222,7 @@ export class PlatformContextService {
       // during a login has no owner, no audit and no deliberate decision behind it.
       throw new ForbiddenException({
         error: 'tenant_not_bound',
-        message: 'This workspace is not set up for ConqrService yet.',
+        message: 'This workspace is not set up for ConqrHub yet.',
       });
     }
 

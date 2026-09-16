@@ -294,7 +294,7 @@ describe('refusals that come from the platform', () => {
     // no owner, no audit and no deliberate decision behind it.
     const h = harness({ binding: undefined as never });
     h.resolveBinding.mockResolvedValue(undefined);
-    await expect(h.service.resolve(request)).rejects.toThrow(/not set up for ConqrService/);
+    await expect(h.service.resolve(request)).rejects.toThrow(/not set up for ConqrHub/);
   });
 });
 
