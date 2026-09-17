@@ -191,6 +191,44 @@ describe('TenantBindingService.resolve', () => {
   });
 });
 
+describe('TenantBindingService.list', () => {
+  it('returns every binding, retired ones included, in the mapped shape', async () => {
+    // The mapped shape is the assertion. A listing that handed back driver rows would satisfy
+    // "two entries" and then print undefined for every field, which is exactly what the
+    // operator command did until this method existed.
+    const { service } = serviceOver({
+      bindings: [
+        row(),
+        row({
+          id: 'binding-2',
+          conqrTenantId: TENANT_B,
+          workspaceId: WORKSPACE_B,
+          status: 'retired',
+        }),
+      ],
+    });
+    const all = await service.list();
+    expect(all).toHaveLength(2);
+    expect(all[0]).toMatchObject({
+      conqrTenantId: TENANT_A,
+      workspaceId: WORKSPACE_A,
+      applicationId: APP,
+      status: 'active',
+    });
+    expect(all[1]).toMatchObject({ conqrTenantId: TENANT_B, status: 'retired' });
+    for (const b of all) {
+      expect(b.conqrTenantId).toBeDefined();
+      expect(b.workspaceId).toBeDefined();
+      expect(b.applicationId).toBeDefined();
+    }
+  });
+
+  it('says nothing when there is nothing to say', async () => {
+    const { service } = serviceOver();
+    expect(await service.list()).toEqual([]);
+  });
+});
+
 describe('TenantBindingService.bind', () => {
   it('binds a tenant to an existing workspace', async () => {
     const { service, fake } = serviceOver();

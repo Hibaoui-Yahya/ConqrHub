@@ -86,18 +86,18 @@ async function main(): Promise<void> {
 
   try {
     if (args[0] === '--list') {
-      const rows = await db
-        .selectFrom('platform_tenant_bindings')
-        .selectAll()
-        .orderBy('created_at')
-        .execute();
+      // Through the service, not a query of its own. The version that queried directly read
+      // snake_case columns from a camelCasing connection and printed "undefined → undefined"
+      // for every binding — the same defect that made resolve() ignore bindings while
+      // appearing to work, surviving in the one path no test looked at.
+      const rows = await bindings.list();
       if (rows.length === 0) {
         console.log('no bindings');
         return;
       }
-      for (const r of rows as Array<Record<string, unknown>>) {
+      for (const b of rows) {
         console.log(
-          `${String(r['status']).padEnd(8)} ${String(r['conqr_tenant_id'])} → ${String(r['workspace_id'])} (${String(r['application_id'])})`,
+          `${b.status.padEnd(8)} ${b.conqrTenantId} → ${b.workspaceId} (${b.applicationId})`,
         );
       }
       return;

@@ -89,6 +89,23 @@ export class TenantBindingService {
   }
 
   /**
+   * Every binding, live and retired, oldest first.
+   *
+   * It exists because the operator command was doing this query itself, and drifted exactly
+   * the way this file warns a second copy will: it read snake_case columns from a connection
+   * that camelCases them, so it printed `undefined → undefined` for every row. Reading rows is
+   * part of knowing what a binding is, so it belongs here with the rest of that knowledge.
+   */
+  async list(): Promise<TenantBinding[]> {
+    const rows = (await this.db
+      .selectFrom('platform_tenant_bindings')
+      .selectAll()
+      .orderBy('created_at')
+      .execute()) as BindingRow[];
+    return rows.map(TenantBindingService.toBinding);
+  }
+
+  /**
    * Bind a Conqr tenant to an existing workspace.
    *
    * Refuses rather than overwriting. Re-binding a tenant to a different workspace, or a workspace
