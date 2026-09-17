@@ -108,6 +108,11 @@ export class SessionService {
     });
   }
 
+  /** Ends a session known only by its id — see the repository method for why that is enough. */
+  async revokeSessionById(sessionId: string): Promise<void> {
+    await this.userSessionRepo.revokeByIdOnly(sessionId);
+  }
+
   async revokeSession(
     sessionId: string,
     userId: string,

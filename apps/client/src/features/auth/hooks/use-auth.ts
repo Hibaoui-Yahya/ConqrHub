@@ -8,6 +8,7 @@ import {
   verifyUserToken,
 } from "@/features/auth/services/auth-service";
 import { useNavigate } from "react-router-dom";
+import { getWorkspacePublicData } from "@/features/workspace/services/workspace-service";
 import { useAtom } from "jotai";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import {
@@ -165,6 +166,26 @@ export default function useAuth() {
 
   const handleLogout = async () => {
     setCurrentUser(RESET);
+
+    // In platform mode, signing out of ConqrHub means signing out of Conqr: this product's
+    // session, the identity engine's, and ConqrHome's. The server does all three in one journey,
+    // which is why this navigates rather than fetching — a fetch would end the first and leave the
+    // other two standing, and the person would be signed out of the page in front of them and
+    // nowhere else. Same act, and the same wording, as ConqrService.
+    try {
+      const data = await getWorkspacePublicData();
+      const platform = (
+        data as unknown as { conqrPlatform?: { homeUrl: string } }
+      )?.conqrPlatform;
+      if (platform?.homeUrl) {
+        window.location.assign("/api/auth/oidc/logout");
+        return;
+      }
+    } catch {
+      // Cannot tell which mode this is; the standalone sign-out below is the safe answer, because
+      // it always ends this product's session.
+    }
+
     await logout();
     window.location.replace(APP_ROUTE.AUTH.LOGIN);
   };

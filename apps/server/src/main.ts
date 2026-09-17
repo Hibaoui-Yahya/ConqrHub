@@ -81,6 +81,57 @@ async function bootstrap() {
     .decorateReply('end', function () {
       this.send('');
     })
+    /**
+     * A launch arrives as `/?tenant=<conqr tenant urn>`, and somebody has to answer it.
+     *
+     * ConqrHome sends people here that way, and until this hook existed nothing in ConqrHub acted
+     * on it: the browser loaded the application, found no session, went to /login, and /login —
+     * which shows no sign-in in platform mode — sent them back to ConqrHome, which sent them here
+     * again. An infinite loop between two products that were each behaving as designed.
+     *
+     * So the launch is completed here: a named tenant means start the handshake for that tenant.
+     * The engine still holds the person's session, so it finishes without anything being shown.
+     *
+     * **Whatever session this browser already holds.** An earlier version skipped when an
+     * `authToken` cookie was present, and that reopened the loop for the one browser most likely to
+     * hit it: a stale or expired cookie satisfied the check, the hook stood aside, the application
+     * found itself unauthenticated, went to /login, and /login sent the person back to ConqrHome. A
+     * fresh browser worked perfectly and a returning one span forever.
+     *
+     * Completing it unconditionally is also the correct reading of a launch. It names a workspace,
+     * and a session for a *different* workspace must not quietly serve it — the defect ConqrService
+     * had, where switching tenants in ConqrHome and clicking the tile landed in the old one.
+     *
+     * Not attempted when the callback has just failed (`error=sso`), which is the one case where
+     * retrying makes a loop rather than preventing one.
+     */
+    .addHook('onRequest', function (req, reply, done) {
+      const url = req.raw.url ?? '';
+      const platformMode =
+        (process.env.CONQR_PLATFORM_MODE ?? 'standalone').trim() === 'platform';
+      const wantsHtml = (req.headers.accept ?? '').includes('text/html');
+      if (
+        platformMode &&
+        req.method === 'GET' &&
+        wantsHtml &&
+        !url.startsWith('/api') &&
+        !url.includes('error=sso')
+      ) {
+        const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+        const tenant = new URLSearchParams(query).get('tenant');
+        if (tenant) {
+          void reply
+            .header(
+              'Location',
+              `/api/auth/oidc/login?tenant=${encodeURIComponent(tenant)}`,
+            )
+            .code(302)
+            .send();
+          return;
+        }
+      }
+      done();
+    })
     .addHook('preHandler', function (req, reply, done) {
       // Don't require a resolved workspaceId for these. Derived, not
       // hand-maintained: a route excluded from DomainMiddleware can never

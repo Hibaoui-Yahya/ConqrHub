@@ -5,6 +5,7 @@ import useAuth from "@/features/auth/hooks/use-auth";
 import {
   Container,
   Title,
+  Text,
   TextInput,
   Button,
   PasswordInput,
@@ -68,6 +69,28 @@ export function LoginForm() {
   const platform = (data as { conqrPlatform?: { homeUrl: string; applicationId: string } })
     ?.conqrPlatform;
   if (platform?.homeUrl && platform.applicationId) {
+    // A failed callback lands here. Going back to ConqrHome would have it send the person straight
+    // back, and the two would pass each other forever — the loop this whole path exists to avoid.
+    // Stop, say so, and offer the way back as something to click rather than something automatic.
+    if (new URLSearchParams(window.location.search).get("error") === "sso") {
+      return (
+        <Container size={420} className={classes.container}>
+          <Box p="xl" mt={200}>
+            <Title order={2} ta="center" fw={500} mb="md">
+              {t("Sign-in could not be completed")}
+            </Title>
+            <Text ta="center" c="dimmed" mb="lg">
+              {t(
+                "Open ConqrHub from Conqr and choose the workspace you want to work in.",
+              )}
+            </Text>
+            <Button component="a" href={platform.homeUrl} fullWidth>
+              {t("Go to Conqr")}
+            </Button>
+          </Box>
+        </Container>
+      );
+    }
     const home = new URL(platform.homeUrl);
     home.searchParams.set("app", platform.applicationId);
     const path = window.location.pathname;

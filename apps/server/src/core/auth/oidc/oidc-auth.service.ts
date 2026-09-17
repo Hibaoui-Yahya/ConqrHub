@@ -37,6 +37,28 @@ export class OidcAuthService {
     private readonly platformLogin: PlatformLoginService,
   ) {}
 
+  /**
+   * The ID token from the most recent exchange, handed to the controller to store against the
+   * browser. Not state this service owns for longer than that: it is written on the way through.
+   */
+  lastIdToken?: string | undefined;
+
+  /**
+   * Where to send the browser to end the engine's session. `postLogoutRedirectUri` must be one the
+   * client registered, exactly — the engine compares strings — and `idTokenHint` is what lets it
+   * end the session without stopping to ask which one.
+   */
+  async endSessionUrl(
+    postLogoutRedirectUri: string,
+    idTokenHint?: string,
+  ): Promise<string> {
+    const config = await this.config();
+    return openid.buildEndSessionUrl(config, {
+      post_logout_redirect_uri: postLogoutRedirectUri,
+      ...(idTokenHint ? { id_token_hint: idTokenHint } : {}),
+    }).href;
+  }
+
   isEnabled(): boolean {
     return this.env.isOidcEnabled();
   }
@@ -136,6 +158,9 @@ export class OidcAuthService {
     );
 
     const claims = tokens.claims();
+    // Kept so the sign-out can tell the engine which of its sessions to end. Without the hint it
+    // lists them and asks the person to click one, which reads as the sign-out having stalled.
+    this.lastIdToken = tokens.id_token;
     const mapped = mapOidcClaimsToUser(claims);
 
     // Platform mode: the platform decides who this is, which tenant they are in and which

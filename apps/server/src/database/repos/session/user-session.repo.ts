@@ -57,6 +57,21 @@ export class UserSessionRepo {
       .execute();
   }
 
+  /**
+   * Revoke by session id alone.
+   *
+   * The signed-out path has the session id from the token and nothing else: it must work for a
+   * browser whose token is stale, which is exactly the browser that cannot supply a verified user
+   * or workspace. A session id is a random identifier and names one row.
+   */
+  async revokeByIdOnly(id: string): Promise<void> {
+    await this.db
+      .updateTable('userSessions')
+      .set({ revokedAt: new Date() })
+      .where('id', '=', id)
+      .execute();
+  }
+
   async revokeById(
     id: string,
     userId: string,
