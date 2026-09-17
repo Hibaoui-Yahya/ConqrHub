@@ -59,6 +59,26 @@ export function LoginForm() {
    return null;
   }
 
+  // In platform mode there is no sign-in here to show. The suite has one front door: a person who
+  // opens ConqrHub without a session is handed to ConqrHome naming this application and the page
+  // they wanted, signs in once, and is handed back. The form below asks for an e-mail and a
+  // password, and in platform mode ConqrHub holds neither — authentication happens at the identity
+  // engine, and a second credential prompt is how somebody learns to type their password into
+  // whatever asks.
+  const platform = (data as { conqrPlatform?: { homeUrl: string; applicationId: string } })
+    ?.conqrPlatform;
+  if (platform?.homeUrl && platform.applicationId) {
+    const home = new URL(platform.homeUrl);
+    home.searchParams.set("app", platform.applicationId);
+    const path = window.location.pathname;
+    // The login page itself is not a destination worth returning to.
+    if (path && path !== "/" && !path.startsWith("/login")) {
+      home.searchParams.set("path", path);
+    }
+    window.location.assign(home.toString());
+    return null;
+  }
+
   if (isError && error?.["response"]?.status === 404) {
     return <Error404 />;
   }

@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { LicenseCheckService } from '../../../integrations/environment/license-check.service';
+import { PlatformConfigService } from '../../platform/platform.config';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
 import { CreateWorkspaceDto } from '../dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from '../dto/update-workspace.dto';
@@ -55,6 +56,7 @@ export class WorkspaceService {
 
   constructor(
     private workspaceRepo: WorkspaceRepo,
+    private platformConfig: PlatformConfigService,
     private spaceService: SpaceService,
     private spaceMemberService: SpaceMemberService,
     private groupRepo: GroupRepo,
@@ -121,7 +123,21 @@ export class WorkspaceService {
 
     const { licenseKey, plan, ...rest } = workspace;
 
-    return rest;
+    // In platform mode the login form is not shown at all: it offers an e-mail and a password,
+    // and in platform mode neither exists here — authentication happens at the identity engine.
+    // This is what tells the client to hand the person to ConqrHome instead, and it rides on the
+    // query the form already makes so there is no extra round trip and nothing to flash.
+    const homeUrl = this.platformConfig.isPlatformMode()
+      ? this.platformConfig.getSuiteHomeUrl()
+      : undefined;
+    const conqrPlatform = homeUrl
+      ? {
+          homeUrl,
+          applicationId: this.platformConfig.requirePlatform().applicationId,
+        }
+      : undefined;
+
+    return conqrPlatform ? { ...rest, conqrPlatform } : rest;
   }
 
   async create(

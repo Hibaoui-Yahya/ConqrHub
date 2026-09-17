@@ -122,6 +122,16 @@ export class PlatformConfigService {
     }
   }
 
+  /**
+   * ConqrHome, the suite's front door. In platform mode ConqrHub is not a place anybody signs in:
+   * a person who opens it without a session is handed to Home naming the application they wanted,
+   * and Home hands them back. Absent, the login form stays — which is the standalone deployment.
+   */
+  getSuiteHomeUrl(): string | undefined {
+    const configured = this.cfg.get<string>('CONQR_HOME_URL')?.trim();
+    return configured ? configured.replace(/\/$/, '') + '/' : undefined;
+  }
+
   getMode(): AuthMode {
     return this.mode;
   }
