@@ -30,11 +30,24 @@ export class OidcController {
       .send();
   }
 
+  /**
+   * `tenant` is the Conqr tenant the launcher named — ConqrHome appends it to every launch, and it
+   * is the only thing that says which workspace a person meant. It is carried across the redirect
+   * in the flow cookie, not in the callback URL: the callback URL is registered with the engine and
+   * compared exactly, so anything added to it would be refused.
+   *
+   * It is a *request*, never an answer. ConqrAccess decides whether this person may work in that
+   * tenant, and the binding decides which workspace that is; a tenant on a query string that the
+   * product trusted would be a workspace chosen by whoever wrote the link.
+   */
   @Get('login')
-  async login(@Res() res: FastifyReply) {
+  async login(
+    @Res() res: FastifyReply,
+    @Query('tenant') tenant?: string,
+  ) {
     try {
       const { url, state, nonce, codeVerifier } = await this.oidc.beginLogin();
-      res.setCookie(FLOW_COOKIE, JSON.stringify({ state, nonce, codeVerifier }), {
+      res.setCookie(FLOW_COOKIE, JSON.stringify({ state, nonce, codeVerifier, tenant }), {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',

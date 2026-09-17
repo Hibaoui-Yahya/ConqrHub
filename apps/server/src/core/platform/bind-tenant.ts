@@ -42,6 +42,8 @@ const DEFAULT_APPLICATION = process.env.CONQR_APPLICATION_ID ?? 'conqrhub';
 
 /** The URN shape ConqrAccess issues. Catching a slug here saves a binding nothing resolves. */
 const TENANT_URN = /^conqr:tenant:[0-9A-HJKMNP-TV-Z]{26}$/;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function usage(message?: string): never {
   if (message) console.error(`error: ${message}\n`);
@@ -49,12 +51,16 @@ function usage(message?: string): never {
     [
       'Bind a Conqr tenant to an existing ConqrHub workspace.',
       '',
-      '  bind-tenant.ts <conqr-tenant-urn> <workspace-id> [application-id]',
+      '  bind-tenant.ts <conqr-tenant-urn> <workspace-id> [application-id] [--by <user-id>]',
       '  bind-tenant.ts --list',
       '  bind-tenant.ts --retire <conqr-tenant-urn> [application-id]',
       '',
       `application-id defaults to ${DEFAULT_APPLICATION}.`,
       'The workspace must already exist; this creates nothing but the binding.',
+      '',
+      '--by records which ConqrHub user decided this, and must be their user id. It is',
+      'optional: an unattributed binding is honest, and a name in a column that holds',
+      'user ids is not.',
     ].join('\n'),
   );
   process.exit(message ? 2 : 0);
@@ -107,15 +113,28 @@ async function main(): Promise<void> {
       return;
     }
 
+    // `created_by` is a uuid referencing users.id, so it holds a ConqrHub user or nothing. It
+    // used to be filled from USER/USERNAME, which is an operating-system account name — every
+    // invocation died on "invalid input syntax for type uuid", so the command that exists because
+    // nothing could create a binding could not create one either. Naming the operator is opt-in
+    // now, and unattributed is the honest default rather than a name in a column of ids.
+    const byIndex = args.indexOf('--by');
+    const by = byIndex >= 0 ? args[byIndex + 1] : undefined;
+    if (byIndex >= 0) {
+      if (!by || !UUID.test(by)) usage('--by requires a ConqrHub user id');
+      args.splice(byIndex, 2);
+    }
+
     const [tenant, workspace, application = DEFAULT_APPLICATION] = args;
     if (!tenant || !workspace) usage('a tenant URN and a workspace id are both required');
     if (!TENANT_URN.test(tenant)) usage(`${tenant} is not a conqr:tenant URN`);
+    if (!UUID.test(workspace)) usage(`${workspace} is not a workspace id`);
 
     const result = await bindings.bind({
       conqrTenantId: tenant,
       applicationId: application,
       workspaceId: workspace,
-      createdBy: process.env.USER ?? process.env.USERNAME ?? 'operator',
+      ...(by ? { createdBy: by } : {}),
     });
     console.log(`bound ${result.conqrTenantId} → workspace ${result.workspaceId} (${result.applicationId})`);
   } finally {

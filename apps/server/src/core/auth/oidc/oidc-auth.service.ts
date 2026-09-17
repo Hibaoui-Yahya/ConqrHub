@@ -10,6 +10,11 @@ import { PlatformLoginService } from '../../platform/platform-login.service';
 import { mapOidcClaimsToUser } from './oidc.util';
 
 export interface OidcFlowChecks {
+  /**
+   * The Conqr tenant the launcher named, when it named one. Platform mode only, and a request
+   * rather than a decision — `PlatformLoginService` asks ConqrAccess whether it is allowed.
+   */
+  tenant?: string;
   state: string;
   nonce: string;
   codeVerifier: string;
@@ -153,6 +158,11 @@ export class OidcAuthService {
         subject,
         email: mapped.email,
         displayName: mapped.name,
+        // The launcher's tenant. Without this, a person entitled to ConqrHub in more than one
+        // workspace is refused with tenant_ambiguous no matter which tile they clicked — the
+        // parameter was accepted here and never supplied, so the launch contract existed on one
+        // side only.
+        requestedTenant: checks.tenant,
       });
       return authToken;
     }

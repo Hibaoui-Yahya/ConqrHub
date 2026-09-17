@@ -13,7 +13,7 @@
  * against a live database would prove the same rules hold once, where this proves the insert is
  * not reached at all when a conflict exists.
  */
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { TenantBindingService } from './tenant-binding.service';
 
 const TENANT_A = 'conqr:tenant:01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -21,15 +21,30 @@ const TENANT_B = 'conqr:tenant:01ARZ3NDEKTSV4RRFFQ69G5FBW';
 const WORKSPACE_A = '00000000-0000-7000-8000-00000000000a';
 const WORKSPACE_B = '00000000-0000-7000-8000-00000000000b';
 const APP = 'conqrhub';
+/** A ConqrHub user id: created_by is a uuid referencing users.id, not a person's name. */
+const OPERATOR = '00000000-0000-7000-8000-0000000000c1';
 
 interface Row {
   id: string;
-  conqr_tenant_id: string;
-  application_id: string;
-  workspace_id: string;
+  conqrTenantId: string;
+  applicationId: string;
+  workspaceId: string;
   status: string;
   revision: number;
 }
+
+/**
+ * Column names as this application's connection resolves them.
+ *
+ * The real Kysely is built with `CamelCasePlugin`: a query may name a column in either case, and
+ * every row comes back camelCase. The double has to do the same, and the reason is not tidiness.
+ * When it stored rows under the snake_case names the queries use, the service could read
+ * `row.conqr_tenant_id` and these tests passed — while production, which camelCases its results,
+ * returned `undefined` for every field. The double agreed with the service about a database
+ * neither of them was talking to.
+ */
+const asStored = (column: string): string =>
+  column.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
 /**
  * A Kysely double over two in-memory tables.
@@ -51,7 +66,7 @@ function fakeDb(seed: { bindings?: Row[]; workspaces?: string[] } = {}) {
       select: () => builder,
       where: (col: string, op: string, val: unknown) => {
         if (op !== '=') throw new Error(`unsupported operator ${op}`);
-        filters.push([col, val]);
+        filters.push([asStored(col), val]);
         return builder;
       },
       orderBy: () => builder,
@@ -78,7 +93,9 @@ function fakeDb(seed: { bindings?: Row[]; workspaces?: string[] } = {}) {
       let pending: Record<string, unknown> = {};
       const builder: Record<string, unknown> = {
         values: (v: Record<string, unknown>) => {
-          pending = v;
+          pending = Object.fromEntries(
+            Object.entries(v).map(([k, value]) => [asStored(k), value]),
+          );
           return builder;
         },
         returningAll: () => builder,
@@ -97,11 +114,13 @@ function fakeDb(seed: { bindings?: Row[]; workspaces?: string[] } = {}) {
       const filters: Array<[string, unknown]> = [];
       const builder: Record<string, unknown> = {
         set: (v: Record<string, unknown>) => {
-          pending = v;
+          pending = Object.fromEntries(
+            Object.entries(v).map(([k, value]) => [asStored(k), value]),
+          );
           return builder;
         },
         where: (col: string, _op: string, val: unknown) => {
-          filters.push([col, val]);
+          filters.push([asStored(col), val]);
           return builder;
         },
         execute: async () => {
@@ -124,9 +143,9 @@ function fakeDb(seed: { bindings?: Row[]; workspaces?: string[] } = {}) {
 
 const row = (over: Partial<Row> = {}): Row => ({
   id: 'binding-0',
-  conqr_tenant_id: TENANT_A,
-  application_id: APP,
-  workspace_id: WORKSPACE_A,
+  conqrTenantId: TENANT_A,
+  applicationId: APP,
+  workspaceId: WORKSPACE_A,
   status: 'active',
   revision: 1,
   ...over,
@@ -179,11 +198,28 @@ describe('TenantBindingService.bind', () => {
       conqrTenantId: TENANT_A,
       applicationId: APP,
       workspaceId: WORKSPACE_A,
-      createdBy: 'operator',
+      createdBy: OPERATOR,
     });
     expect(bound.workspaceId).toBe(WORKSPACE_A);
     expect(fake.inserts).toHaveLength(1);
-    expect(fake.inserts[0]).toMatchObject({ status: 'active', created_by: 'operator' });
+    expect(fake.inserts[0]).toMatchObject({ status: 'active', createdBy: OPERATOR });
+  });
+
+  it('refuses a creator that is not a user id, and writes nothing', async () => {
+    // `created_by` references users.id. The operator command used to fill it from USER/USERNAME —
+    // an operating-system account name — so every real invocation died inside Postgres with
+    // "invalid input syntax for type uuid" and no binding could be created by the only path that
+    // existed to create one. Refused here, where the message can say which argument was wrong.
+    const { service, fake } = serviceOver();
+    await expect(
+      service.bind({
+        conqrTenantId: TENANT_A,
+        applicationId: APP,
+        workspaceId: WORKSPACE_A,
+        createdBy: 'YahyaHibaoui',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(fake.inserts).toHaveLength(0);
   });
 
   it('refuses a workspace that does not exist, and writes nothing', async () => {

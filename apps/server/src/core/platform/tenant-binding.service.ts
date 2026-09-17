@@ -15,7 +15,13 @@
  * **Resolution never widens.** It matches on the tenant *and* the application id, and only live
  * bindings. A binding for another application, or a retired one, resolves to nothing.
  */
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import type { Kysely } from 'kysely';
 
@@ -28,14 +34,24 @@ export interface TenantBinding {
   revision: number;
 }
 
+/**
+ * A row as this application's Kysely returns it — **camelCase**, because the connection is built
+ * with `CamelCasePlugin` (database.module.ts). That is not a detail: written as snake_case, every
+ * field read here came back `undefined`, and because `resolve` still returned an object, a login
+ * passed the "is this tenant bound?" check and then provisioned the person into workspace
+ * `undefined`. The binding was being ignored while appearing to work.
+ */
 interface BindingRow {
   id: string;
-  conqr_tenant_id: string;
-  application_id: string;
-  workspace_id: string;
+  conqrTenantId: string;
+  applicationId: string;
+  workspaceId: string;
   status: string;
   revision: string | number;
 }
+
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class TenantBindingService {
@@ -46,9 +62,9 @@ export class TenantBindingService {
   private static toBinding(row: BindingRow): TenantBinding {
     return {
       id: row.id,
-      conqrTenantId: row.conqr_tenant_id,
-      applicationId: row.application_id,
-      workspaceId: row.workspace_id,
+      conqrTenantId: row.conqrTenantId,
+      applicationId: row.applicationId,
+      workspaceId: row.workspaceId,
       status: row.status,
       revision: Number(row.revision),
     };
@@ -83,8 +99,16 @@ export class TenantBindingService {
     conqrTenantId: string;
     applicationId: string;
     workspaceId: string;
+    /** A ConqrHub user id, or nothing. The column references users.id. */
     createdBy?: string | undefined;
   }): Promise<TenantBinding> {
+    // Refused here rather than at the database, which reports it as "invalid input syntax for type
+    // uuid" — a message about a column, from a layer that cannot say which argument was wrong.
+    if (input.createdBy !== undefined && !UUID.test(input.createdBy)) {
+      throw new BadRequestException(
+        `createdBy must be a ConqrHub user id; got "${input.createdBy}"`,
+      );
+    }
     const workspace = await this.db
       .selectFrom('workspaces')
       .select(['id'])
@@ -111,7 +135,7 @@ export class TenantBindingService {
       .executeTakeFirst()) as BindingRow | undefined;
     if (boundElsewhere) {
       throw new ConflictException(
-        `workspace ${input.workspaceId} is already bound to tenant ${boundElsewhere.conqr_tenant_id}`,
+        `workspace ${input.workspaceId} is already bound to tenant ${boundElsewhere.conqrTenantId}`,
       );
     }
 
