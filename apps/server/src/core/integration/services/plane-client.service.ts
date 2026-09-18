@@ -94,6 +94,17 @@ export interface PlaneState {
   default?: boolean;
 }
 
+export interface PlaneProject {
+  id: string;
+  name: string;
+  identifier?: string;
+  description?: string | null;
+  network?: number;
+  project_lead?: string | null;
+  archived_at?: string | null;
+  created_at?: string;
+}
+
 export interface PlaneCycle {
   id: string;
   name: string;
@@ -1017,5 +1028,99 @@ export class PlaneClientService {
       readContext(ctx),
     );
     return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+  // ---------------------------------------------------------------------
+  // Projects. A project is the container everything else lives in, so the
+  // tool surface could fill one but never make one.
+  // ---------------------------------------------------------------------
+
+  /** Create a project. `identifier` is the short key ConqrPlan puts on every work item. */
+  async createProject(
+    body: {
+      name: string;
+      identifier: string;
+      description?: string;
+      network?: number;
+      project_lead?: string;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(`/workspaces/${slug}/projects/`, {
+      method: 'POST',
+      body,
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** One project's full record. */
+  async getProject(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(
+      `/workspaces/${slug}/projects/${projectId}/`,
+      readContext(ctx),
+    );
+  }
+
+  /** Update a project's name, description, visibility or lead. */
+  async updateProject(
+    projectId: string,
+    body: {
+      name?: string;
+      description?: string;
+      network?: number;
+      project_lead?: string | null;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(
+      `/workspaces/${slug}/projects/${projectId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a project and everything inside it. Irreversible. */
+  async deleteProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(`/workspaces/${slug}/projects/${projectId}/`, {
+      method: 'DELETE',
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** Archive a project: hidden from the active list, contents preserved. */
+  async archiveProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Bring an archived project back. */
+  async unarchiveProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** A project's headline counts, in one call. */
+  async getProjectSummary(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<Record<string, unknown>> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<Record<string, unknown>>(
+      `/workspaces/${slug}/projects/${projectId}/summary/`,
+      readContext(ctx),
+    );
   }
 }

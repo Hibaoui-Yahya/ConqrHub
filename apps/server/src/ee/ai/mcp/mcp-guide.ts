@@ -63,7 +63,7 @@ Tool groups:
 - Spaces: list_spaces, get_space, get_space_info (read; get_space_info also returns members); create_space, update_space, delete_space (write — delete_space is permanent and has no trash)
 - Comments: get_page_comments (read); create_comment, update_comment, delete_comment (write)
 - People: get_current_user, list_workspace_members
-- ConqrPlan (project mgmt): list_conqrplan_projects, list_project_members, list_conqrplan_members, get_project_cycles, create_cycle, update_cycle, delete_cycle, list_cycle_work_items, list_modules, list_module_work_items, create_module, update_module, delete_module, get_work_item, search_work_items, create_work_item, update_work_item, delete_work_item, list_work_item_states, create_work_item_state, update_work_item_state, delete_work_item_state, list_work_item_labels, create_work_item_label, update_work_item_label, delete_work_item_label, list_estimate_points, get_work_item_comments, add_work_item_comment, update_work_item_comment, delete_work_item_comment
+- ConqrPlan (project mgmt): list_conqrplan_projects, create_project, get_project, get_project_summary, update_project, archive_project, delete_project, list_project_members, list_conqrplan_members, get_project_cycles, create_cycle, update_cycle, delete_cycle, list_cycle_work_items, list_modules, list_module_work_items, create_module, update_module, delete_module, get_work_item, search_work_items, create_work_item, update_work_item, delete_work_item, list_work_item_states, create_work_item_state, update_work_item_state, delete_work_item_state, list_work_item_labels, create_work_item_label, update_work_item_label, delete_work_item_label, list_estimate_points, get_work_item_comments, add_work_item_comment, update_work_item_comment, delete_work_item_comment
 - Suite integration (Hub ↔ Plane in one call): search_suite, link_page_to_work_item, unlink_page_from_work_item, get_page_links, create_work_item_from_page, get_page_work_coverage
 - Verification (controls RAG eligibility): get_verification_status, list_unverified_pages, verify_page, create_verification, submit_for_approval, mark_obsolete
 
@@ -121,7 +121,7 @@ Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — 
     title: 'Project management (ConqrPlan)',
     description: 'Tasks, issues, and cycles — separate from wiki pages.',
     body: `Project/task work is NOT stored as wiki pages. Use the ConqrPlan tools:
-- list_conqrplan_projects — available projects.
+- list_conqrplan_projects — available projects. create_project makes a new one (the identifier is the MELOCHE-142 key and cannot change afterwards); get_project reads one; get_project_summary gives its counts; archive_project hides a finished project while keeping its contents; delete_project destroys everything in it and needs the identifier as confirmation.
 - get_project_cycles — sprints/cycles for a project; list_cycle_work_items — what is inside one cycle.
 - search_work_items — text search over work items. Pass a query alone to search every project you belong to; add projectId to narrow it. Pass projectId with no query to list that project instead.
 - get_work_item — read one item in full.

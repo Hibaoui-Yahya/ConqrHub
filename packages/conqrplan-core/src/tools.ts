@@ -643,6 +643,8 @@ const WRITE_SCOPES: string[] = [
   DELEGATED_SCOPES.cycleAssign,
   DELEGATED_SCOPES.moduleAssign,
   DELEGATED_SCOPES.projectConfigure,
+  DELEGATED_SCOPES.projectCreate,
+  DELEGATED_SCOPES.projectDelete,
 ];
 
 /**

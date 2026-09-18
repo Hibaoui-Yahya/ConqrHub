@@ -29,6 +29,10 @@ export const DELEGATED_SCOPES = {
   moduleAssign: 'module:assign',
   projectConfigure: 'project:configure',
   memberRead: 'member:read',
+  /** Creating a project is not configuring one, so it stands apart. */
+  projectCreate: 'project:create',
+  /** Deleting a project destroys every work item in it. */
+  projectDelete: 'project:delete',
 } as const;
 
 export type DelegatedScope =
