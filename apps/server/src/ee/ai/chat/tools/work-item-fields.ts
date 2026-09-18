@@ -210,7 +210,9 @@ export const workItemWritableFields = {
     .array(z.string())
     .nullable()
     .optional()
-    .describe('Modules to add this item to. Applied as separate membership calls after the write.'),
+    .describe(
+      "The item's complete module membership, not a list of additions: modules you leave out are removed. Applied as separate membership calls after the write. null or [] takes it off every module.",
+    ),
   externalId: z
     .string()
     .optional()
@@ -559,7 +561,53 @@ export async function applyMembership(
   }
 
   if (built.modules !== undefined) {
-    for (const moduleId of built.modules.ids) {
+    // moduleIds is the desired membership, not a list of additions. Adding
+    // only, as this did before, meant `moduleIds: null` ("take it off its
+    // modules") iterated an empty array, touched nothing, and was still
+    // reported as applied — a silent wrong answer. A subset was equally
+    // wrong: the modules left out stayed attached.
+    const desired = new Set(built.modules.ids);
+
+    // ConqrPlan's work-item payload does not say which modules an item is in,
+    // so current membership has to be resolved the same way the cycle path
+    // resolves its own: by scanning. Only done when modules are being written.
+    let current: Set<string> | undefined;
+    try {
+      const modules = await plane.listModules(projectId, ctxOf(opts));
+      const found = new Set<string>();
+      for (const mod of modules) {
+        const items = await plane.listModuleWorkItems(projectId, mod.id, ctxOf(opts));
+        if (items.some((i) => i.id === workItemId)) found.add(mod.id);
+      }
+      current = found;
+    } catch (err) {
+      current = undefined;
+      outcome.failures.push({
+        target: 'moduleIds:current',
+        reason: `could not read current module membership, so removals were skipped: ${planeError(err).error}`,
+      });
+    }
+
+    if (current) {
+      for (const moduleId of current) {
+        if (desired.has(moduleId)) continue;
+        try {
+          await plane.removeWorkItemFromModule(projectId, moduleId, workItemId, ctxOf(opts));
+          outcome.applied.push(`moduleId:${moduleId}:removed`);
+        } catch (err) {
+          outcome.failures.push({
+            target: `moduleId:${moduleId}:removed`,
+            reason: planeError(err).error,
+          });
+        }
+      }
+      if (desired.size === 0 && outcome.failures.length === 0) {
+        outcome.applied.push('moduleIds:cleared');
+      }
+    }
+
+    for (const moduleId of desired) {
+      if (current?.has(moduleId)) continue; // already a member
       try {
         await plane.addWorkItemsToModule(projectId, moduleId, [workItemId], ctxOf(opts));
         outcome.applied.push(`moduleId:${moduleId}`);

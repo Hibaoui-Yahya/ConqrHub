@@ -211,13 +211,37 @@ describe('ConqrPlan CRUD tools', () => {
     it('rejects a date that is not YYYY-MM-DD', () => {
       const tool = new CreateCycleTool(makePlaneMock() as any, registry, delegation);
       expect(
-        tool.parameters.safeParse({ projectId: 'p1', name: 'S1', startDate: '01/02/2026' })
-          .success,
+        tool.parameters.safeParse({
+          projectId: 'p1',
+          name: 'S1',
+          startDate: '01/02/2026',
+          endDate: '2026-02-14',
+        }).success,
       ).toBe(false);
+      expect(
+        tool.parameters.safeParse({
+          projectId: 'p1',
+          name: 'S1',
+          startDate: '2026-02-01',
+          endDate: '2026-02-14',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('refuses half a cycle date range before calling ConqrPlan', () => {
+      // ConqrPlan rejects one end without the other; catching it in the schema
+      // gives the model something it can correct.
+      const tool = new CreateCycleTool(makePlaneMock() as any, registry, delegation);
       expect(
         tool.parameters.safeParse({ projectId: 'p1', name: 'S1', startDate: '2026-02-01' })
           .success,
-      ).toBe(true);
+      ).toBe(false);
+      expect(
+        tool.parameters.safeParse({ projectId: 'p1', name: 'S1', endDate: '2026-02-14' })
+          .success,
+      ).toBe(false);
+      // Neither is fine: an undated cycle is legal.
+      expect(tool.parameters.safeParse({ projectId: 'p1', name: 'S1' }).success).toBe(true);
     });
 
     it('maps cycle dates onto ConqrPlan’s snake_case body', async () => {

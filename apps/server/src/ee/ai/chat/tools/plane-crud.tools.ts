@@ -385,14 +385,21 @@ const MODULE_STATUSES = [
 export class CreateCycleTool extends PlaneTool {
   readonly name = 'create_cycle';
   readonly description =
-    'Create a cycle (sprint) in a ConqrPlan project. Put work items into it with update_work_item cycleId, not here.';
-  readonly parameters = z.object({
-    projectId: z.string(),
-    name: z.string().min(1).max(255),
-    description: z.string().max(2000).optional(),
-    startDate: isoDate.optional().describe('YYYY-MM-DD'),
-    endDate: isoDate.optional().describe('YYYY-MM-DD'),
-  });
+    'Create a cycle (sprint) in a ConqrPlan project. Dates come as a pair: give both startDate and endDate, or neither. Put work items into it with update_work_item cycleId, not here.';
+  readonly parameters = z
+    .object({
+      projectId: z.string(),
+      name: z.string().min(1).max(255),
+      description: z.string().max(2000).optional(),
+      startDate: isoDate.optional().describe('YYYY-MM-DD'),
+      endDate: isoDate.optional().describe('YYYY-MM-DD'),
+    })
+    // ConqrPlan rejects a cycle carrying only one end of its range. Refusing
+    // it here gives the model a correctable message instead of a raw 400.
+    .refine((v) => (v.startDate === undefined) === (v.endDate === undefined), {
+      message: 'Give both startDate and endDate, or neither.',
+      path: ['endDate'],
+    });
   async execute(
     args: {
       projectId: string;
@@ -676,6 +683,31 @@ export class DeleteModuleTool extends PlaneTool {
 }
 
 // ---------------------------------------------------------------------------
+// Estimation
+// ---------------------------------------------------------------------------
+
+@Injectable()
+export class DeleteEstimateSystemTool extends PlaneTool {
+  readonly name = 'delete_estimate_system';
+  readonly description =
+    "Delete a ConqrPlan project's estimation system. A project holds one system, so this is how you replace it: delete, then create_estimate_system. Work items keep their estimate ids but those ids no longer resolve to a value, so prefer activate_estimate_system when you only want to switch estimation off.";
+  readonly parameters = z.object({
+    projectId: z.string(),
+  });
+  async execute(args: { projectId: string }, ctx: ChatToolContext) {
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.estimateConfigure,
+    ]);
+    try {
+      await this.plane.deleteEstimate(args.projectId, call);
+      return { success: true, projectId: args.projectId, deleted: true };
+    } catch (err) {
+      return planeError(err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Members
 // ---------------------------------------------------------------------------
 
@@ -714,5 +746,6 @@ export const PLANE_CRUD_TOOLS = [
   CreateModuleTool,
   UpdateModuleTool,
   DeleteModuleTool,
+  DeleteEstimateSystemTool,
   ListProjectMembersTool,
 ];

@@ -159,7 +159,9 @@ export class AddWorkItemCommentTool implements ChatTool, OnModuleInit {
         args.projectId,
         args.workItemId,
         toHtml(args.text)!,
-        delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemUpdate]),
+        // commentWrite, not workItemUpdate: posting a comment must not need a
+        // token that can also rewrite the work item.
+        delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.commentWrite]),
       );
       return { id: c.id, createdAt: c.created_at ?? null, success: true };
     } catch (err) {
@@ -277,7 +279,9 @@ export class ListConqrPlanMembersTool implements ChatTool, OnModuleInit {
     if (this.plane.isEnabled()) this.registry.register(this);
   }
   async execute(_args: unknown, ctx: ChatToolContext) {
-    const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemRead]);
+    // Reading who is in the workspace is a membership read, not a work-item
+    // read; list_project_members already uses this scope.
+    const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.memberRead]);
     try {
       const members = await this.plane.listWorkspaceMembers(call);
       return members.map((m) => ({

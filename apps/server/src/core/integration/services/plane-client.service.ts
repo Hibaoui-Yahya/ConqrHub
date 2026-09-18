@@ -990,6 +990,21 @@ export class PlaneClientService {
     );
   }
 
+  /**
+   * Delete a project's estimate system.
+   *
+   * A project holds one system, so replacing it means deleting the old one
+   * first — which create_estimate_system's own error message told callers to
+   * do while nothing here could.
+   */
+  async deleteEstimate(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/estimates/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
   /** List the work items belonging to a module. */
   async listModuleWorkItems(
     projectId: string,
