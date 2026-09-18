@@ -73,7 +73,7 @@ describe('Suite integration tools', () => {
       new GetPageWorkCoverageTool(m.plane, m.traceability, m.pageService, m.spaceAbility, registry),
     ].forEach((t) => t.onModuleInit());
     expect(registry.getAll()).toHaveLength(0);
-    expect(SUITE_INTEGRATION_TOOLS).toHaveLength(5);
+    expect(SUITE_INTEGRATION_TOOLS).toHaveLength(6);
   });
 
   it('search_suite maps federated results to product-labeled hits', async () => {

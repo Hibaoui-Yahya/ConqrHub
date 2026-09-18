@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SearchService } from '../../search/search.service';
-import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-space-mapping.repo';
 import { PlaneClientService } from './plane-client.service';
 import { DelegatedTokenService } from './delegated-token.service';
 import { DELEGATED_SCOPES } from '../domain/delegated-token.util';
@@ -20,19 +19,21 @@ export interface FederatedResult {
   deepLink?: string;
 }
 
-// Bound the Plane fan-out so a federated query never blows the API rate limit.
-const MAX_PLANE_PROJECTS = 3;
-const PLANE_PER_PROJECT = 5;
+// Bound each half of a federated query. One workspace-wide work-item search,
+// so there is no per-project fan-out to cap any more. Set generously: the
+// caller slices to its own limit, and an agent reasoning over the result is
+// better served by the full candidate set than by a short one.
+const PLANE_SEARCH_LIMIT = 50;
+const HUB_SEARCH_LIMIT = 50;
 
 /**
  * Permission-aware unified search (blueprint §5.3B). Federates Hub knowledge
- * (Typesense/BM25, already workspace-scoped) with Plane work items from mapped
- * projects, returning one result shape that identifies its source product.
+ * (Typesense/BM25, already workspace-scoped) with ConqrPlan work items,
+ * returning one result shape that identifies its source product.
  *
- * Authorization note: Hub results are permission-filtered by Hub. Plane results
- * are bounded to the workspace's mapped projects (a coarse tenant boundary);
- * per-user Plane item permissions need a per-user token, which the API-token
- * integration model does not provide — so Plane results here are workspace-level.
+ * Authorization note: Hub results are permission-filtered by Hub. Work-item
+ * results come from ConqrPlan's search endpoint under a delegated token, so
+ * they are filtered to the projects the searcher is actually a member of.
  */
 @Injectable()
 export class FederatedSearchService {
@@ -40,7 +41,6 @@ export class FederatedSearchService {
 
   constructor(
     private readonly hubSearch: SearchService,
-    private readonly mappings: ProjectSpaceMappingRepo,
     private readonly plane: PlaneClientService,
     private readonly environment: EnvironmentService,
     private readonly delegation: DelegatedTokenService,
@@ -72,7 +72,7 @@ export class FederatedSearchService {
   ): Promise<FederatedResult[]> {
     try {
       const res = await this.hubSearch.searchPage(
-        { query, limit: 20 } as any,
+        { query, limit: HUB_SEARCH_LIMIT } as any,
         { workspaceId: opts.workspaceId, userId: opts.userId },
       );
       return (res.items ?? []).map((p: any) => ({
@@ -95,56 +95,43 @@ export class FederatedSearchService {
   ): Promise<FederatedResult[]> {
     if (!this.plane.isEnabled()) return [];
 
-    let projectIds: string[];
-    if (opts.planeProjectId) {
-      projectIds = [opts.planeProjectId];
-    } else {
-      const mapped = await this.mappings.listForWorkspace(opts.workspaceId);
-      projectIds = Array.from(new Set(mapped.map((m) => m.planeProjectId))).slice(
-        0,
-        MAX_PLANE_PROJECTS,
+    // One workspace-wide search rather than a fan-out over the first few
+    // mapped projects. The old path called the issue LIST endpoint with a
+    // `search` parameter it does not support, so every query came back with
+    // the same arbitrary first items of those projects — results that matched
+    // nothing the caller asked for, presented as hits.
+    try {
+      const { results } = await this.plane.searchWorkItems(
+        {
+          query,
+          limit: PLANE_SEARCH_LIMIT,
+          projectId: opts.planeProjectId,
+        },
+        // The Hub half of this search is already filtered to what the
+        // searcher may read; the ConqrPlan half has to be too, or federated
+        // search becomes a way to read titles from projects you are not in.
+        this.delegation.mintCallContext(opts.userId, opts.workspaceId, [
+          DELEGATED_SCOPES.workItemRead,
+        ]),
       );
+      const appUrl = this.environment.getPlaneAppUrl();
+      const slug = this.environment.getPlaneWorkspaceSlug();
+      return results.map((wi) => ({
+        source: 'plane' as const,
+        type: 'work-item',
+        urn: buildUrn('plane', 'work-item', wi.id),
+        title: wi.name,
+        key: wi.sequence_id ?? null,
+        state: wi.state__name ?? null,
+        deepLink:
+          appUrl && slug && wi.project_id
+            ? `${appUrl}/${slug}/projects/${wi.project_id}/issues/${wi.id}`
+            : undefined,
+      }));
+    } catch (err) {
+      this.logger.warn(`Plane search failed: ${(err as Error).message}`);
+      return [];
     }
-    if (projectIds.length === 0) return [];
-
-    const perProject = await Promise.all(
-      projectIds.map(async (pid) => {
-        try {
-          // The Hub half of this search is already filtered to what the
-          // searcher may read; the ConqrPlan half has to be too, or federated
-          // search becomes a way to read titles from projects you are not in.
-          const { results } = await this.plane.listWorkItems(
-            pid,
-            { search: query, perPage: PLANE_PER_PROJECT },
-            this.delegation.mintCallContext(opts.userId, opts.workspaceId, [
-              DELEGATED_SCOPES.workItemRead,
-            ]),
-          );
-          const appUrl = this.environment.getPlaneAppUrl();
-          const slug = this.environment.getPlaneWorkspaceSlug();
-          return results.map((wi) => ({
-            source: 'plane' as const,
-            type: 'work-item',
-            urn: buildUrn('plane', 'work-item', wi.id),
-            title: wi.name,
-            key: wi.sequence_id ?? null,
-            // state_detail only — the raw `state` field is an opaque id, worse
-            // than no badge at all.
-            state: wi.state_detail?.name ?? null,
-            deepLink:
-              appUrl && slug
-                ? `${appUrl}/${slug}/projects/${pid}/issues/${wi.id}`
-                : undefined,
-          }));
-        } catch (err) {
-          this.logger.warn(
-            `Plane search failed for project ${pid}: ${(err as Error).message}`,
-          );
-          return [];
-        }
-      }),
-    );
-    return perProject.flat();
   }
 }
 

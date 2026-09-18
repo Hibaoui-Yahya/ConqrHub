@@ -11,7 +11,7 @@ jest.mock('../../../../collaboration/collaboration.util', () => ({
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GetPageCommentsTool } from './get-page-comments.tool';
 
-const mockPage = { id: 'p1', spaceId: 'sp-1' };
+const mockPage = { id: 'p1', spaceId: 'sp-1', workspaceId: 'ws-1' };
 const mockComments = [
   { id: 'c1', content: { type: 'doc' }, type: 'page', creatorId: 'user-2', createdAt: new Date() },
 ];

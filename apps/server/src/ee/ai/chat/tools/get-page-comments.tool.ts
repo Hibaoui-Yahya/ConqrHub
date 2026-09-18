@@ -27,9 +27,9 @@ export class GetPageCommentsTool implements ChatTool, OnModuleInit {
       .number()
       .int()
       .min(1)
-      .max(50)
+      .max(200)
       .optional()
-      .default(20)
+      .default(50)
       .describe('Maximum number of comments to return'),
   });
 
@@ -79,7 +79,7 @@ export class GetPageCommentsTool implements ChatTool, OnModuleInit {
 
     return items.map((c: any) => ({
       id: c.id,
-      text: c.content ? jsonToText(c.content).slice(0, 500) : '',
+      text: c.content ? jsonToText(c.content).slice(0, 4000) : '',
       type: c.type ?? null,
       creatorId: c.creatorId,
       createdAt: c.createdAt?.toISOString?.() ?? new Date().toISOString(),

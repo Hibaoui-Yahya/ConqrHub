@@ -626,14 +626,23 @@ export const CONQRPLAN_TOOLS: ToolDefinition[] = [
 
 export const CONQRPLAN_TOOL_NAMES = CONQRPLAN_TOOLS.map((t) => t.name);
 
-/** Scopes that let a tool change something in ConqrPlan. */
+/**
+ * Scopes that let a tool change something in ConqrPlan.
+ *
+ * Every write scope must be listed. A scope missing here makes any tool
+ * carrying it read like a read, and a write mistaken for a read is the one
+ * that gets retried after an uncertain failure.
+ */
 const WRITE_SCOPES: string[] = [
   DELEGATED_SCOPES.workItemCreate,
   DELEGATED_SCOPES.workItemUpdate,
   DELEGATED_SCOPES.workItemBulkCreate,
+  DELEGATED_SCOPES.workItemDelete,
+  DELEGATED_SCOPES.commentWrite,
   DELEGATED_SCOPES.estimateConfigure,
   DELEGATED_SCOPES.cycleAssign,
   DELEGATED_SCOPES.moduleAssign,
+  DELEGATED_SCOPES.projectConfigure,
 ];
 
 /**

@@ -14,9 +14,9 @@ export class ListWorkspaceMembersTool implements ChatTool, OnModuleInit {
       .number()
       .int()
       .min(1)
-      .max(50)
+      .max(200)
       .optional()
-      .default(20)
+      .default(50)
       .describe('Maximum number of members to return'),
   });
 

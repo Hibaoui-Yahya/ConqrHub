@@ -28,7 +28,9 @@ describe('UpdateCommentTool', () => {
   it('updates a comment with plain text', async () => {
     const result = await tool.execute({ commentId: 'c1', text: 'Updated text' }, ctx);
     expect(result.id).toBe('c1');
-    expect(mockCommentService.findById).toHaveBeenCalledWith('c1');
+    // findById is workspace-scoped, so the lookup cannot reach a comment in
+    // another workspace.
+    expect(mockCommentService.findById).toHaveBeenCalledWith('c1', 'ws-1');
     expect(mockCommentService.update).toHaveBeenCalledWith(
       mockComment,
       expect.objectContaining({ commentId: 'c1' }),

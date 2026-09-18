@@ -1,4 +1,3 @@
-
 /** Delegation stub: reads must carry a signed on-behalf-of token. */
 function makeDelegation() {
   return {
@@ -22,21 +21,20 @@ import { FederatedSearchService } from './federated-search.service';
 function make(opts: {
   hubItems?: any[];
   planeEnabled?: boolean;
-  mappings?: any[];
-  listWorkItems?: jest.Mock;
+  searchWorkItems?: jest.Mock;
 }) {
   const hubSearch = {
     searchPage: jest
       .fn()
       .mockResolvedValue({ items: opts.hubItems ?? [] }),
   };
-  const mappings = {
-    listForWorkspace: jest.fn().mockResolvedValue(opts.mappings ?? []),
-  };
   const plane = {
     isEnabled: () => opts.planeEnabled ?? true,
-    listWorkItems:
-      opts.listWorkItems ?? jest.fn().mockResolvedValue({ results: [] }),
+    searchWorkItems:
+      opts.searchWorkItems ?? jest.fn().mockResolvedValue({ results: [] }),
+    // Present so a regression back to the list endpoint fails loudly rather
+    // than silently returning arbitrary items again.
+    listWorkItems: jest.fn().mockResolvedValue({ results: [] }),
   };
   const environment = {
     getPlaneAppUrl: () => 'https://plane.example.com',
@@ -45,7 +43,6 @@ function make(opts: {
   return {
     service: new FederatedSearchService(
       hubSearch as any,
-      mappings as any,
       plane as any,
       environment as any,
       makeDelegation(),
@@ -63,15 +60,22 @@ describe('FederatedSearchService', () => {
     const res = await service.search('   ', ctx);
     expect(res.items).toEqual([]);
     expect(hubSearch.searchPage).not.toHaveBeenCalled();
-    expect(plane.listWorkItems).not.toHaveBeenCalled();
+    expect(plane.searchWorkItems).not.toHaveBeenCalled();
   });
 
   it('merges Hub pages and Plane work items with source labels', async () => {
     const { service } = make({
       hubItems: [{ id: 'p1', title: 'PRD', slugId: 'prd', highlight: '…' }],
-      mappings: [{ planeProjectId: 'proj1' }],
-      listWorkItems: jest.fn().mockResolvedValue({
-        results: [{ id: 'wi1', name: 'Ship it', sequence_id: 5 }],
+      searchWorkItems: jest.fn().mockResolvedValue({
+        results: [
+          {
+            id: 'wi1',
+            name: 'Ship it',
+            sequence_id: 5,
+            project_id: 'proj1',
+            state__name: 'In Progress',
+          },
+        ],
       }),
     });
     const res = await service.search('ship', ctx);
@@ -81,6 +85,41 @@ describe('FederatedSearchService', () => {
     expect(hub?.urn).toBe('conqr://hub/page/p1');
     expect(plane?.urn).toBe('conqr://plane/work-item/wi1');
     expect(plane?.key).toBe(5);
+    expect(plane?.state).toBe('In Progress');
+    expect(plane?.deepLink).toBe(
+      'https://plane.example.com/acme/projects/proj1/issues/wi1',
+    );
+  });
+
+  it('searches work items by query rather than listing a project', async () => {
+    // The defect this replaces: the ConqrPlan half called the issue LIST
+    // endpoint, which ignores `search`, so unrelated items were returned as
+    // hits for every query.
+    const searchWorkItems = jest.fn().mockResolvedValue({ results: [] });
+    const { service, plane } = make({ searchWorkItems });
+    await service.search('meloche', ctx);
+    expect(searchWorkItems).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'meloche' }),
+      expect.anything(),
+    );
+    expect(plane.listWorkItems).not.toHaveBeenCalled();
+  });
+
+  it('scopes to one project only when asked, otherwise searches the workspace', async () => {
+    const searchWorkItems = jest.fn().mockResolvedValue({ results: [] });
+    const { service } = make({ searchWorkItems });
+
+    await service.search('x', ctx);
+    expect(searchWorkItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: undefined }),
+      expect.anything(),
+    );
+
+    await service.search('x', { ...ctx, planeProjectId: 'proj9' });
+    expect(searchWorkItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: 'proj9' }),
+      expect.anything(),
+    );
   });
 
   it('omits Plane when the integration is disabled', async () => {
@@ -90,19 +129,28 @@ describe('FederatedSearchService', () => {
     });
     const res = await service.search('x', ctx);
     expect(res.sources).toEqual(['hub']);
-    expect(plane.listWorkItems).not.toHaveBeenCalled();
+    expect(plane.searchWorkItems).not.toHaveBeenCalled();
   });
 
   it('degrades gracefully when Hub search throws (still returns Plane)', async () => {
     const { service, hubSearch } = make({
-      mappings: [{ planeProjectId: 'proj1' }],
-      listWorkItems: jest
+      searchWorkItems: jest
         .fn()
         .mockResolvedValue({ results: [{ id: 'wi1', name: 'W' }] }),
     });
     hubSearch.searchPage.mockRejectedValue(new Error('typesense down'));
     const res = await service.search('w', ctx);
     expect(res.sources).toEqual(['plane']);
+    expect(res.items).toHaveLength(1);
+  });
+
+  it('degrades gracefully when the work-item search throws', async () => {
+    const { service } = make({
+      hubItems: [{ id: 'p1', title: 'X' }],
+      searchWorkItems: jest.fn().mockRejectedValue(new Error('plane down')),
+    });
+    const res = await service.search('x', ctx);
+    expect(res.sources).toEqual(['hub']);
     expect(res.items).toHaveLength(1);
   });
 });

@@ -60,11 +60,11 @@ Tool groups:
 - Pages (read): get_page, get_page_breadcrumbs, get_page_history, list_child_pages, list_recent_pages, list_space_pages, list_page_attachments
 - Pages (write): create_page, update_page, update_page_content, update_page_title, delete_page, move_page, duplicate_page, copy_page_to_space, move_page_to_space, add_diagram
 - Attachments & media: read_attachment, read_page_media, list_page_attachments, search_attachments
-- Spaces: list_spaces, get_space, get_space_info (read); create_space, update_space (write)
-- Comments: get_comments, get_page_comments (read); create_comment, update_comment, delete_comment (write)
+- Spaces: list_spaces, get_space, get_space_info (read; get_space_info also returns members); create_space, update_space, delete_space (write — delete_space is permanent and has no trash)
+- Comments: get_page_comments (read); create_comment, update_comment, delete_comment (write)
 - People: get_current_user, list_workspace_members
-- ConqrPlan (project mgmt): list_conqrplan_projects, get_project_cycles, list_cycle_work_items, get_work_item, search_work_items, create_work_item, update_work_item, list_work_item_states, list_estimate_points, get_work_item_comments, add_work_item_comment, list_work_item_labels, list_conqrplan_members
-- Suite integration (Hub ↔ Plane in one call): search_suite, link_page_to_work_item, get_page_links, create_work_item_from_page, get_page_work_coverage
+- ConqrPlan (project mgmt): list_conqrplan_projects, list_project_members, list_conqrplan_members, get_project_cycles, create_cycle, update_cycle, delete_cycle, list_cycle_work_items, list_modules, list_module_work_items, create_module, update_module, delete_module, get_work_item, search_work_items, create_work_item, update_work_item, delete_work_item, list_work_item_states, create_work_item_state, update_work_item_state, delete_work_item_state, list_work_item_labels, create_work_item_label, update_work_item_label, delete_work_item_label, list_estimate_points, get_work_item_comments, add_work_item_comment, update_work_item_comment, delete_work_item_comment
+- Suite integration (Hub ↔ Plane in one call): search_suite, link_page_to_work_item, unlink_page_from_work_item, get_page_links, create_work_item_from_page, get_page_work_coverage
 - Verification (controls RAG eligibility): get_verification_status, list_unverified_pages, verify_page, create_verification, submit_for_approval, mark_obsolete
 
 Golden rule: read before you write, and cite what you read.`,
@@ -123,13 +123,18 @@ Excalidraw and Drawio drawings are hand-authored on the ConqrHub web canvas — 
     body: `Project/task work is NOT stored as wiki pages. Use the ConqrPlan tools:
 - list_conqrplan_projects — available projects.
 - get_project_cycles — sprints/cycles for a project; list_cycle_work_items — what is inside one cycle.
-- search_work_items / get_work_item — find and read tasks/issues.
+- search_work_items — text search over work items. Pass a query alone to search every project you belong to; add projectId to narrow it. Pass projectId with no query to list that project instead.
+- get_work_item — read one item in full.
+- delete_work_item — permanent, with no trash. Prefer moving the item to a Cancelled state with update_work_item.
 - create_work_item — create a task/issue (a write — confirm intent).
 - update_work_item — rename, edit description, change priority, move to another state, or set/clear the estimate. Get the target stateId from list_work_item_states and the estimatePointId from list_estimate_points first.
-- list_estimate_points — a project's estimate systems and point values (empty when no system is configured; work items then have no estimate field).
+- list_estimate_points — a project's estimate systems and point values. When no system is configured, get_estimate_system answers that plainly; create_estimate_system then creates and activates one.
 - get_work_item_comments / add_work_item_comment — read and join the discussion on an item (comments are team-visible).
 - list_work_item_states — a project's workflow states (Backlog/In Progress/Done…) with IDs and groups.
-- list_work_item_labels — label id → name/color.
+- list_work_item_labels / create_work_item_label / update_work_item_label / delete_work_item_label — labels are per-project; assign one to an item with update_work_item.
+- list_modules / list_module_work_items / create_module / update_module / delete_module — modules group work by feature or workstream, independently of cycles.
+- create_cycle / update_cycle / delete_cycle — deleting a cycle leaves its work items in place, with no cycle.
+- list_project_members — who can actually be assigned work on one project.
 - list_conqrplan_members — resolve assignee and comment-author IDs to people.
 
 Typical status flow: list_conqrplan_projects → get_project_cycles → list_cycle_work_items → summarise by state (use list_work_item_states to group correctly).
@@ -155,7 +160,7 @@ Pass plain page IDs (UUID or slugId) and work-item IDs — the server handles UR
     slug: 'comments',
     title: 'Comments',
     description: 'Reading and writing page discussion.',
-    body: `Read discussion with get_page_comments (a page's thread) or get_comments. Add or edit with create_comment / update_comment, and delete_comment (destructive — confirm). Comments are user-visible; write them as you would a teammate's note, and attribute context clearly.`,
+    body: `Read discussion with get_page_comments (a page's thread). Add or edit with create_comment / update_comment, and delete_comment (destructive — confirm). Comments are user-visible; write them as you would a teammate's note, and attribute context clearly.`,
   },
   {
     slug: 'spaces',

@@ -14,9 +14,9 @@ export class ListRecentPagesTool implements ChatTool, OnModuleInit {
       .number()
       .int()
       .min(1)
-      .max(20)
+      .max(100)
       .optional()
-      .default(10)
+      .default(25)
       .describe('Maximum number of pages to return'),
   });
 

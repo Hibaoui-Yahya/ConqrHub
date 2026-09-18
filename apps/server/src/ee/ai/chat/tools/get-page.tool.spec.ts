@@ -13,6 +13,9 @@ const mockPage = {
   title: 'Getting Started',
   slugId: 'abc123',
   spaceId: 'space-1',
+  // The tools reject a page from another workspace; without this the
+  // fixture fails that check rather than the behaviour under test.
+  workspaceId: 'ws-1',
   content: { type: 'doc', content: [] },
   updatedAt: new Date('2026-01-01'),
 };

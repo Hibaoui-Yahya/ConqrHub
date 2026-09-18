@@ -26,9 +26,9 @@ export class GetPageHistoryTool implements ChatTool, OnModuleInit {
       .number()
       .int()
       .min(1)
-      .max(20)
+      .max(100)
       .optional()
-      .default(10)
+      .default(25)
       .describe('Maximum number of history entries to return'),
   });
 
@@ -49,7 +49,10 @@ export class GetPageHistoryTool implements ChatTool, OnModuleInit {
   ): Promise<{
     id: string;
     title: string | null;
+    author: { id: string | null; name: string | null } | null;
+    /** Retained for callers that read the old field name. */
     creatorId: string | null;
+    contributors: { id: string; name: string | null }[];
     createdAt: string;
   }[]> {
     const page = await this.pageService.findById(args.pageId);
@@ -69,14 +72,28 @@ export class GetPageHistoryTool implements ChatTool, OnModuleInit {
 
     const { items } = await this.pageHistoryService.findHistoryByPageId(
       args.pageId,
-      { limit: args.limit ?? 10 } as any,
+      { limit: args.limit ?? 25 } as any,
     );
 
-    return items.map((h: any) => ({
-      id: h.id,
-      title: h.title ?? null,
-      creatorId: h.creatorId ?? null,
-      createdAt: h.createdAt?.toISOString?.() ?? new Date().toISOString(),
-    }));
+    // The revision row has no `creatorId`; the editor is `lastUpdatedById`,
+    // joined as `lastUpdatedBy`. Reading a field that does not exist is why
+    // every entry reported a null author while the description promised
+    // "who edited it".
+    return items.map((h: any) => {
+      const author = h.lastUpdatedBy ?? null;
+      const authorId = author?.id ?? h.lastUpdatedById ?? null;
+      return {
+        id: h.id,
+        title: h.title ?? null,
+        author: authorId
+          ? { id: authorId, name: author?.name ?? null }
+          : null,
+        creatorId: authorId,
+        contributors: (h.contributors ?? [])
+          .filter(Boolean)
+          .map((c: any) => ({ id: c.id, name: c.name ?? null })),
+        createdAt: h.createdAt?.toISOString?.() ?? new Date().toISOString(),
+      };
+    });
   }
 }

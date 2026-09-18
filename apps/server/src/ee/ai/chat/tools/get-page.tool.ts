@@ -15,7 +15,10 @@ import { jsonToText } from '../../../../collaboration/collaboration.util';
 import { ChatTool, ChatToolContext } from './chat-tool.types';
 import { ChatToolRegistry } from './chat-tool.registry';
 
-const MAX_CONTENT_CHARS = 8000;
+// Raised from 8k: agents were losing the tail of any substantial page, and a
+// truncated spec reads as a complete one. Long pages cost tokens, but a wrong
+// answer from a silently cut body costs more.
+const MAX_CONTENT_CHARS = 60000;
 
 @Injectable()
 export class GetPageTool implements ChatTool, OnModuleInit {

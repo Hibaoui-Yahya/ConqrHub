@@ -44,10 +44,22 @@ export const DELEGATED_SCOPES = {
   workItemCreate: 'work-item:create',
   workItemUpdate: 'work-item:update',
   workItemBulkCreate: 'work-item:bulk-create',
+  /** Removal is its own scope: a token allowed to edit must not delete. */
+  workItemDelete: 'work-item:delete',
+  /** Commenting is not editing the item, so it carries its own scope. */
+  commentWrite: 'comment:write',
   estimateRead: 'estimate:read',
   estimateConfigure: 'estimate:configure',
   cycleAssign: 'cycle:assign',
   moduleAssign: 'module:assign',
+  /**
+   * Shape of a project rather than its contents: labels, workflow states,
+   * cycles and modules. Creating a label is a different kind of act from
+   * moving one work item, and is gated separately.
+   */
+  projectConfigure: 'project:configure',
+  /** Reading who is in a project or workspace. */
+  memberRead: 'member:read',
 } as const;
 
 export type DelegatedScope =

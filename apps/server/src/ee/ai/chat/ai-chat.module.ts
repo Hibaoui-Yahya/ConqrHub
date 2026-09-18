@@ -51,6 +51,7 @@ import { CopyPageToSpaceTool } from './tools/copy-page-to-space.tool';
 import { MovePageToSpaceTool } from './tools/move-page-to-space.tool';
 import { CreateSpaceTool } from './tools/create-space.tool';
 import { UpdateSpaceTool } from './tools/update-space.tool';
+import { DeleteSpaceTool } from './tools/delete-space.tool';
 import { UpdateCommentTool } from './tools/update-comment.tool';
 import { DeletePageTool } from './tools/delete-page.tool';
 import { DeleteCommentTool } from './tools/delete-comment.tool';
@@ -70,6 +71,7 @@ import { GetGuideTool } from './tools/get-guide.tool';
 import { PLANE_WORK_ITEM_TOOLS } from './tools/plane-work-items.tools';
 import { PLANE_WORK_MANAGEMENT_TOOLS } from './tools/plane-work-management.tools';
 import { PLANE_CONTROL_TOOLS } from './tools/plane-control.tools';
+import { PLANE_CRUD_TOOLS } from './tools/plane-crud.tools';
 // Suite integration tools (federated search, links, create-and-link, coverage)
 import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
 
@@ -128,6 +130,7 @@ import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
     MovePageToSpaceTool,
     CreateSpaceTool,
     UpdateSpaceTool,
+    DeleteSpaceTool,
     UpdateCommentTool,
     DeletePageTool,
     DeleteCommentTool,
@@ -147,6 +150,9 @@ import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
     ...PLANE_WORK_ITEM_TOOLS,
     ...PLANE_WORK_MANAGEMENT_TOOLS,
     ...PLANE_CONTROL_TOOLS,
+    // CRUD completions: delete/update across work items, comments, labels,
+    // states, cycles, modules, plus module and project-member reads.
+    ...PLANE_CRUD_TOOLS,
     // Suite integration tools (federated search, links, create-and-link, coverage)
     ...SUITE_INTEGRATION_TOOLS,
   ],

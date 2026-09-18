@@ -117,7 +117,7 @@ describe('ReadAttachmentTool', () => {
   it('does not inline an oversized image', async () => {
     attachmentRepo.findByIdWithContent.mockResolvedValue({
       id: 'a4', fileName: 'huge.png', mimeType: 'image/png',
-      fileSize: String(20 * 1024 * 1024), filePath: '/x/a4.png', spaceId: 'sp-1', pageId: null, textContent: null,
+      fileSize: String(40 * 1024 * 1024), filePath: '/x/a4.png', spaceId: 'sp-1', pageId: null, textContent: null,
     });
     const res = await newTool().execute({ attachmentId: 'a4' }, ctx);
     expect(res.__mcpContent[0].type).toBe('text');
