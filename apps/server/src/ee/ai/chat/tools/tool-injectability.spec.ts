@@ -13,6 +13,7 @@ jest.mock('../../../../collaboration/collaboration.util', () => ({
 
 import { PLANE_CRUD_TOOLS } from './plane-crud.tools';
 import { PLANE_PROJECT_TOOLS } from './plane-project.tools';
+import { PLANE_VIEW_MEMBER_TOOLS } from './plane-view-member.tools';
 import { PLANE_WORK_ITEM_TOOLS } from './plane-work-items.tools';
 import { PLANE_WORK_MANAGEMENT_TOOLS } from './plane-work-management.tools';
 import { PLANE_CONTROL_TOOLS } from './plane-control.tools';
@@ -37,6 +38,7 @@ import { VERIFICATION_LIFECYCLE_TOOLS } from './verification-lifecycle.tools';
 const TOOL_GROUPS: Record<string, readonly unknown[]> = {
   'plane-crud.tools': PLANE_CRUD_TOOLS,
   'plane-project.tools': PLANE_PROJECT_TOOLS,
+  'plane-view-member.tools': PLANE_VIEW_MEMBER_TOOLS,
   'plane-work-items.tools': PLANE_WORK_ITEM_TOOLS,
   'plane-work-management.tools': PLANE_WORK_MANAGEMENT_TOOLS,
   'plane-control.tools': PLANE_CONTROL_TOOLS,

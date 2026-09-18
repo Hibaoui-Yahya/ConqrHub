@@ -105,6 +105,18 @@ export interface PlaneProject {
   created_at?: string;
 }
 
+export interface PlaneView {
+  id: string;
+  name: string;
+  description?: string | null;
+  filters?: Record<string, unknown>;
+  display_filters?: Record<string, unknown>;
+  access?: number;
+  is_locked?: boolean;
+  owned_by?: string | null;
+  created_at?: string;
+}
+
 export interface PlaneCycle {
   id: string;
   name: string;
@@ -1121,6 +1133,216 @@ export class PlaneClientService {
     return this.request<Record<string, unknown>>(
       `/workspaces/${slug}/projects/${projectId}/summary/`,
       readContext(ctx),
+    );
+  }
+  // ---------------------------------------------------------------------
+  // Archiving. Note the asymmetry in ConqrPlan's routes: archiving POSTs to
+  // the live object, while restoring DELETEs against an `archived-*` path.
+  // ---------------------------------------------------------------------
+
+  /** Archive a cycle. ConqrPlan refuses unless the cycle has already ended. */
+  async archiveCycle(
+    projectId: string,
+    cycleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Restore an archived cycle. */
+  async unarchiveCycle(
+    projectId: string,
+    cycleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archived-cycles/${cycleId}/unarchive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Cycles that have been archived out of the active list. */
+  async listArchivedCycles(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneCycle[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneCycle[] } | PlaneCycle[]>(
+      `/workspaces/${slug}/projects/${projectId}/archived-cycles/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+
+  /** Archive a module. ConqrPlan refuses unless it is completed or cancelled. */
+  async archiveModule(
+    projectId: string,
+    moduleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Restore an archived module. */
+  async unarchiveModule(
+    projectId: string,
+    moduleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archived-modules/${moduleId}/unarchive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Modules that have been archived out of the active list. */
+  async listArchivedModules(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneModule[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneModule[] } | PlaneModule[]>(
+      `/workspaces/${slug}/projects/${projectId}/archived-modules/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+  // ---------------------------------------------------------------------
+  // Saved views. Named filters over a project's work items — how a team
+  // actually looks at its work, previously reachable only from the
+  // session-authenticated app API.
+  // ---------------------------------------------------------------------
+
+  /** A project's saved views the caller may see. */
+  async listViews(projectId: string, ctx?: PlaneCallContext): Promise<PlaneView[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneView[] } | PlaneView[]>(
+      `/workspaces/${slug}/projects/${projectId}/views/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+
+  /** One saved view. */
+  async getView(
+    projectId: string,
+    viewId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      readContext(ctx),
+    );
+  }
+
+  /** Create a saved view. */
+  async createView(
+    projectId: string,
+    body: {
+      name: string;
+      description?: string;
+      filters?: Record<string, unknown>;
+      display_filters?: Record<string, unknown>;
+      access?: number;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Update a saved view. */
+  async updateView(
+    projectId: string,
+    viewId: string,
+    body: {
+      name?: string;
+      description?: string;
+      filters?: Record<string, unknown>;
+      display_filters?: Record<string, unknown>;
+      access?: number;
+      is_locked?: boolean;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a saved view. The work items it filtered are untouched. */
+  async deleteView(
+    projectId: string,
+    viewId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+  // ---------------------------------------------------------------------
+  // Project membership. ConqrPlan stores the role as a number:
+  // 20 admin, 15 member, 5 guest.
+  // ---------------------------------------------------------------------
+
+  /** Add an existing workspace member to a project. */
+  async addProjectMember(
+    projectId: string,
+    body: { member: string; role?: number },
+    opts?: PlaneCallContext,
+  ): Promise<{ id: string; member?: string; role?: number }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(`/workspaces/${slug}/projects/${projectId}/members/`, {
+      method: 'POST',
+      body,
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** Change a project member's role. */
+  async updateProjectMemberRole(
+    projectId: string,
+    memberRecordId: string,
+    role: number,
+    opts?: PlaneCallContext,
+  ): Promise<{ id: string; role?: number }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(
+      `/workspaces/${slug}/projects/${projectId}/members/${memberRecordId}/`,
+      { method: 'PATCH', body: { role }, delegation: opts?.delegation,
+        correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Remove someone from a project. Their work items stay. */
+  async removeProjectMember(
+    projectId: string,
+    memberRecordId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/members/${memberRecordId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
     );
   }
 }

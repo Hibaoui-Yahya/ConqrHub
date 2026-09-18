@@ -873,6 +873,139 @@ export class ListProjectMembersTool implements ChatTool, OnModuleInit {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Archiving cycles and modules
+// ---------------------------------------------------------------------------
+
+@Injectable()
+export class ArchiveCycleTool implements ChatTool, OnModuleInit {
+  readonly name = 'archive_cycle';
+  readonly description =
+    'Archive a finished ConqrPlan cycle, or bring one back. Archiving takes it out of the active cycle list and keeps its work items. ConqrPlan only archives a cycle whose end date has already passed, so move the dates with update_cycle first if it has not. Restoring never has that restriction.';
+  readonly parameters = z.object({
+    projectId: z.string(),
+    cycleId: z.string().describe('From get_project_cycles, or list_archived_cycles when restoring'),
+    archived: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('true archives the cycle, false restores it'),
+  });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(
+    args: { projectId: string; cycleId: string; archived?: boolean },
+    ctx: ChatToolContext,
+  ) {
+    const archived = args.archived ?? true;
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.projectConfigure,
+    ]);
+    try {
+      if (archived) await this.plane.archiveCycle(args.projectId, args.cycleId, call);
+      else await this.plane.unarchiveCycle(args.projectId, args.cycleId, call);
+      return { success: true, cycleId: args.cycleId, archived };
+    } catch (err) {
+      return planeError(err);
+    }
+  }
+}
+
+@Injectable()
+export class ListArchivedCyclesTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_archived_cycles';
+  readonly description =
+    'List a ConqrPlan project’s archived cycles. get_project_cycles returns only active ones, so past sprints live here.';
+  readonly parameters = z.object({ projectId: z.string() });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(args: { projectId: string }, ctx: ChatToolContext) {
+    const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemRead]);
+    try {
+      return await this.plane.listArchivedCycles(args.projectId, call);
+    } catch (err) {
+      return planeError(err);
+    }
+  }
+}
+
+@Injectable()
+export class ArchiveModuleTool implements ChatTool, OnModuleInit {
+  readonly name = 'archive_module';
+  readonly description =
+    "Archive a finished ConqrPlan module, or bring one back. Archiving takes it out of the active module list and keeps its work items. ConqrPlan only archives a module whose status is completed or cancelled, so set that with update_module first. Restoring never has that restriction.";
+  readonly parameters = z.object({
+    projectId: z.string(),
+    moduleId: z.string().describe('From list_modules, or list_archived_modules when restoring'),
+    archived: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('true archives the module, false restores it'),
+  });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(
+    args: { projectId: string; moduleId: string; archived?: boolean },
+    ctx: ChatToolContext,
+  ) {
+    const archived = args.archived ?? true;
+    const call = delegateForPlane(this.delegation, ctx, [
+      DELEGATED_SCOPES.projectConfigure,
+    ]);
+    try {
+      if (archived) await this.plane.archiveModule(args.projectId, args.moduleId, call);
+      else await this.plane.unarchiveModule(args.projectId, args.moduleId, call);
+      return { success: true, moduleId: args.moduleId, archived };
+    } catch (err) {
+      return planeError(err);
+    }
+  }
+}
+
+@Injectable()
+export class ListArchivedModulesTool implements ChatTool, OnModuleInit {
+  readonly name = 'list_archived_modules';
+  readonly description =
+    'List a ConqrPlan project’s archived modules. list_modules returns only active ones.';
+  readonly parameters = z.object({ projectId: z.string() });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly registry: ChatToolRegistry,
+    private readonly delegation: DelegatedTokenService,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(args: { projectId: string }, ctx: ChatToolContext) {
+    const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemRead]);
+    try {
+      return await this.plane.listArchivedModules(args.projectId, call);
+    } catch (err) {
+      return planeError(err);
+    }
+  }
+}
+
 /** Registered as a group from the AI chat module. */
 export const PLANE_CRUD_TOOLS = [
   DeleteWorkItemTool,
@@ -894,4 +1027,8 @@ export const PLANE_CRUD_TOOLS = [
   DeleteModuleTool,
   DeleteEstimateSystemTool,
   ListProjectMembersTool,
+  ArchiveCycleTool,
+  ListArchivedCyclesTool,
+  ArchiveModuleTool,
+  ListArchivedModulesTool,
 ];

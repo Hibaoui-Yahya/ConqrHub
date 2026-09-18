@@ -73,6 +73,7 @@ import { PLANE_WORK_MANAGEMENT_TOOLS } from './tools/plane-work-management.tools
 import { PLANE_CONTROL_TOOLS } from './tools/plane-control.tools';
 import { PLANE_CRUD_TOOLS } from './tools/plane-crud.tools';
 import { PLANE_PROJECT_TOOLS } from './tools/plane-project.tools';
+import { PLANE_VIEW_MEMBER_TOOLS } from './tools/plane-view-member.tools';
 // Suite integration tools (federated search, links, create-and-link, coverage)
 import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
 
@@ -156,6 +157,8 @@ import { SUITE_INTEGRATION_TOOLS } from './tools/suite-integration.tools';
     ...PLANE_CRUD_TOOLS,
     // Project lifecycle: the container every other ConqrPlan object needs.
     ...PLANE_PROJECT_TOOLS,
+    // Saved views and project membership.
+    ...PLANE_VIEW_MEMBER_TOOLS,
     // Suite integration tools (federated search, links, create-and-link, coverage)
     ...SUITE_INTEGRATION_TOOLS,
   ],
