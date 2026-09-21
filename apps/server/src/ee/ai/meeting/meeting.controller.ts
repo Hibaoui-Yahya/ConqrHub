@@ -11,12 +11,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
 import { RequireAiFeature } from '../guards/require-ai-feature.decorator';
+import { SkipTransform } from '../../../common/decorators/skip-transform.decorator';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
@@ -317,5 +319,26 @@ export class MeetingController {
     @Query('target') target?: string,
   ) {
     return this.meetingService.getAudioUrl(id, target || 'original');
+  }
+
+  // ──────────── GET /:id/audio/file (auth-protected audio stream) ────────────
+
+  @SkipTransform()
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/audio/file')
+  async streamAudio(
+    @Param('id') id: string,
+    @Query('target') target: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const { stream, mime } = await this.meetingService.getAudioFile(
+      id,
+      target || 'original',
+    );
+    reply
+      .header('Content-Type', mime)
+      .header('Content-Disposition', 'inline')
+      .header('Cache-Control', 'no-store')
+      .send(stream);
   }
 }

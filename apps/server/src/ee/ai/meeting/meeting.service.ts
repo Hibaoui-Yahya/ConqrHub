@@ -8,6 +8,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { StorageService } from '../../../integrations/storage/storage.service';
 import { SttService } from '../stt/stt.service';
 import { AiProviderService } from '../providers/ai-provider.service';
@@ -866,22 +867,30 @@ export class MeetingService {
 
   // ──────────── audio ────────────
 
-  async getAudioUrl(meetingId: string, target: string = 'original') {
+  /** Resolve the stored audio file backing a target, with its MIME type. */
+  private async resolveAudioFile(
+    meetingId: string,
+    target: string,
+  ): Promise<{ filePath: string; mime: string }> {
     const meeting = await this.getMeetingOrThrow(meetingId);
-    const manifest = this.parseJson<Record<string, any>>(meeting.audioManifest) || {};
-    const prefix = meeting.audioStoragePrefix;
+    const manifest =
+      this.parseJson<Record<string, any>>(meeting.audioManifest) || {};
 
     let filePath: string | null = null;
+    let mime: string | null = null;
 
     if (target === 'original') {
       filePath = manifest.originalPath || null;
+      mime = manifest.mime || null;
       if (!filePath && manifest.chunks?.length) {
         // Live recordings only store per-stream chunks — expose the first one.
         filePath = manifest.chunks[0].path || null;
+        mime = manifest.chunks[0].mime || 'audio/webm';
       }
     } else if (target === 'normalized') {
       filePath = manifest.normalizedPath || null;
       if (!filePath && manifest.originalPath) filePath = manifest.originalPath;
+      mime = manifest.mime || 'audio/webm';
     }
 
     if (!filePath) {
@@ -893,8 +902,35 @@ export class MeetingService {
       throw new NotFoundException(`Audio file not found: ${target}`);
     }
 
-    const url = await this.storage.getSignedUrl(filePath, 3600);
+    return { filePath, mime: mime || this.mimeForPath(filePath) };
+  }
+
+  async getAudioUrl(meetingId: string, target: string = 'original') {
+    const resolved = await this.resolveAudioFile(meetingId, target);
+
+    if (this.storage.getDriverName() === 'local') {
+      // Local storage can't emit signed URLs. Return a path that plays
+      // through ConqrMeet's BFF: it attaches the Bearer token and the
+      // /api/ai/meeting/* allowlist covers this stream route.
+      const query = target === 'original' ? '' : `?target=${target}`;
+      return {
+        url: `/hubapi/ai/meeting/${meetingId}/audio/file${query}`,
+        expiresIn: 3600,
+      };
+    }
+
+    const url = await this.storage.getSignedUrl(resolved.filePath, 3600);
     return { url, expiresIn: 3600 };
+  }
+
+  /** Binary stream backing the auth-protected /audio/file endpoint. */
+  async getAudioFile(
+    meetingId: string,
+    target: string = 'original',
+  ): Promise<{ stream: Readable; mime: string }> {
+    const { filePath, mime } = await this.resolveAudioFile(meetingId, target);
+    const stream = await this.storage.readStream(filePath);
+    return { stream, mime };
   }
 
   // ════════════════════ processing pipeline ════════════════════

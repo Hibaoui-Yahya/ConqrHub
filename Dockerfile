@@ -24,7 +24,7 @@ RUN pnpm build
 FROM base AS installer
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl bash fonts-dejavu-core fontconfig \
+  && apt-get install -y --no-install-recommends curl bash fonts-dejavu-core fontconfig ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

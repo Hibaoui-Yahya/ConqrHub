@@ -3,6 +3,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { spawn } from 'node:child_process';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -74,9 +75,16 @@ export class SttService {
     model: string,
     apiKey: string,
   ): Promise<string> {
-    const baseMime = (mime || 'audio/webm').split(';')[0].trim();
+    // MediaRecorder emits containerized streams (webm/ogg/opus) that some
+    // ASR backends decode poorly. Transcode to PCM WAV when ffmpeg is
+    // available; otherwise send the original bytes untouched.
+    const { buffer, mime: outMime } = await this.transcodeToWavIfPossible(
+      audio,
+      mime,
+    );
+    const baseMime = outMime.split(';')[0].trim();
     const ext = baseMime.split('/')[1] || 'webm';
-    const blob = new Blob([new Uint8Array(audio)], { type: baseMime });
+    const blob = new Blob([new Uint8Array(buffer)], { type: baseMime });
 
     const form = new FormData();
     form.append('file', blob, `recording.${ext}`);
@@ -96,7 +104,7 @@ export class SttService {
 
     if (!res.ok) {
       this.logger.error(
-        `Mistral transcription failed: ${res.status} ${raw} model=${model} mime=${baseMime} bytes=${audio.length}`,
+        `Mistral transcription failed: ${res.status} ${raw} model=${model} mime=${baseMime} bytes=${buffer.length}`,
       );
       throw new ServiceUnavailableException('Transcription failed');
     }
@@ -112,10 +120,79 @@ export class SttService {
     const text = (data.text ?? '').trim();
     if (!text) {
       this.logger.warn(
-        `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${audio.length} body=${raw.slice(0, 300)}`,
+        `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${buffer.length} body=${raw.slice(0, 300)}`,
       );
     }
     return text;
+  }
+
+  /**
+   * Convert containerized recorder output (webm/ogg) to 16kHz mono PCM WAV
+   * using ffmpeg when it is available. Never throws: any failure falls back
+   * to the original bytes so transcription still has a chance to succeed.
+   */
+  private async transcodeToWavIfPossible(
+    audio: Buffer,
+    mime: string,
+  ): Promise<{ buffer: Buffer; mime: string }> {
+    const baseMime = (mime || 'audio/webm').split(';')[0].trim();
+    const needsTranscode = [
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/x-m4a',
+      'video/mp4',
+    ].includes(baseMime);
+
+    if (!needsTranscode) return { buffer: audio, mime: baseMime };
+
+    const binary = this.env.getFfmpegPath() || 'ffmpeg';
+    try {
+      const { buffer } = await this.runFfmpeg(binary, audio);
+      if (buffer.length > 0) {
+        this.logger.debug(
+          `Transcoded ${baseMime} -> audio/wav (${audio.length} -> ${buffer.length} bytes)`,
+        );
+        return { buffer, mime: 'audio/wav' };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      this.logger.warn(
+        `ffmpeg transcode skipped (${msg}); sending original ${baseMime}`,
+      );
+    }
+    return { buffer: audio, mime: baseMime };
+  }
+
+  private runFfmpeg(bin: string, input: Buffer): Promise<{ buffer: Buffer }> {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-i',
+        'pipe:0',
+        '-ar',
+        '16000',
+        '-ac',
+        '1',
+        '-c:a',
+        'pcm_s16le',
+        '-f',
+        'wav',
+        'pipe:1',
+      ];
+      const proc = spawn(bin, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+      const chunks: Buffer[] = [];
+      proc.stdout.on('data', (c: Buffer) => chunks.push(c));
+      proc.on('error', reject);
+      proc.on('close', (code) => {
+        const buffer = Buffer.concat(chunks);
+        if (code === 0 && buffer.length > 0) resolve({ buffer });
+        else reject(new Error(`ffmpeg exited with code ${code}`));
+      });
+      proc.stdin.on('error', () => {
+        /* EPIPE if ffmpeg exits before consuming stdin */
+      });
+      proc.stdin.end(input);
+    });
   }
 
   private async correct(
