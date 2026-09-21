@@ -39,6 +39,8 @@ import {
   IntegrationWebhookDeliveries,
   IntegrationEvents,
   IntegrationRequirements,
+  SuiteOrgIdentity,
+  SuiteDelegationAudit,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -256,3 +258,11 @@ export type UpdatableAudit = Updateable<Omit<_Audit, 'id'>>;
 export type Template = Selectable<Templates>;
 export type InsertableTemplate = Insertable<Templates>;
 export type UpdatableTemplate = Updateable<Omit<Templates, 'id'>>;
+
+// Suite identity mapping (cross-product delegation)
+export type SuiteOrgIdentityRow = Selectable<SuiteOrgIdentity>;
+export type InsertableSuiteOrgIdentity = Insertable<SuiteOrgIdentity>;
+export type UpdatableSuiteOrgIdentity = Updateable<Omit<SuiteOrgIdentity, 'id'>>;
+
+export type DelegationAudit = Selectable<SuiteDelegationAudit>;
+export type InsertableDelegationAudit = Insertable<SuiteDelegationAudit>;

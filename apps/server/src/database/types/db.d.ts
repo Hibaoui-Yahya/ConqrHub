@@ -138,6 +138,7 @@ export interface AuthAccounts {
   createdAt: Generated<Timestamp>;
   deletedAt: Timestamp | null;
   id: Generated<string>;
+  idpKey: string | null;
   providerUserId: string;
   updatedAt: Generated<Timestamp>;
   userId: string;
@@ -917,6 +918,35 @@ export interface Workspaces {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface SuiteOrgIdentity {
+  createdAt: Generated<Timestamp>;
+  externalOrgId: string;
+  id: Generated<string>;
+  idpKey: string;
+  isActive: Generated<boolean>;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface SuiteDelegationAudit {
+  accepted: boolean;
+  correlationId: string | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  issuer: string | null;
+  jti: string | null;
+  keyId: string | null;
+  orgUid: string | null;
+  personUid: string | null;
+  reason: string | null;
+  requestMethod: string | null;
+  requestPath: string | null;
+  requiredScope: string | null;
+  scope: Json | null;
+  userId: string | null;
+  workspaceId: string | null;
+}
+
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
@@ -965,6 +995,8 @@ export interface DB {
   shares: Shares;
   spaceMembers: SpaceMembers;
   spaces: Spaces;
+  suiteDelegationAudit: SuiteDelegationAudit;
+  suiteOrgIdentity: SuiteOrgIdentity;
   templates: Templates;
   userMfa: UserMfa;
   users: Users;

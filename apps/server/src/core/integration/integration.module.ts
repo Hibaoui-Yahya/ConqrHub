@@ -3,6 +3,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { CaslModule } from '../casl/casl.module';
 import { SearchModule } from '../search/search.module';
 import { PageModule } from '../page/page.module';
+import { SpaceModule } from '../space/space.module';
+import { CommentModule } from '../comment/comment.module';
 import { QueueName } from '../../integrations/queue/constants';
 import { IntegrationController } from './integration.controller';
 import { PlaneWebhookController } from './plane-webhook.controller';
@@ -33,6 +35,11 @@ import { CrossProductInsightService } from './services/cross-product-insight.ser
 import { DelegatedTokenService } from './services/delegated-token.service';
 import { ConqrPlanToolRouter } from './services/conqrplan-tool-router.service';
 import { PagePromotionService } from './services/page-promotion.service';
+import { SuiteDelegationVerifierService } from './services/suite-delegation-verifier.service';
+import { SuiteDelegationGuard } from './delegation/suite-delegation.guard';
+import { SuiteDelegationController } from './delegation/suite-delegation.controller';
+import { DelegatedAuthoringService } from './services/delegated-authoring.service';
+import { DELEGATED_AUTHORING } from './delegation/delegated-authoring.port';
 
 /**
  * Conqr Integration Layer (blueprint §8). Owns cross-product relationships,
@@ -45,9 +52,15 @@ import { PagePromotionService } from './services/page-promotion.service';
     CaslModule,
     SearchModule,
     PageModule,
+    SpaceModule,
+    CommentModule,
     BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
   ],
-  controllers: [IntegrationController, PlaneWebhookController],
+  controllers: [
+    IntegrationController,
+    PlaneWebhookController,
+    SuiteDelegationController,
+  ],
   providers: [
     RelationshipService,
     ProjectSpaceMappingService,
@@ -76,6 +89,10 @@ import { PagePromotionService } from './services/page-promotion.service';
     DelegatedTokenService,
     ConqrPlanToolRouter,
     PagePromotionService,
+    SuiteDelegationVerifierService,
+    SuiteDelegationGuard,
+    DelegatedAuthoringService,
+    { provide: DELEGATED_AUTHORING, useExisting: DelegatedAuthoringService },
   ],
   exports: [
     RelationshipService,
@@ -93,6 +110,8 @@ import { PagePromotionService } from './services/page-promotion.service';
     CrossProductInsightService,
     DelegatedTokenService,
     ConqrPlanToolRouter,
+    SuiteDelegationVerifierService,
+    SuiteDelegationGuard,
   ],
 })
 export class IntegrationModule {}

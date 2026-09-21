@@ -528,6 +528,85 @@ export class EnvironmentService {
     return this.configService.get<string>('CONQR_OBO_ISSUER', 'conqrhub');
   }
 
+  // ---------------------------------------------------------------------------
+  // Inbound suite delegation (another product acting for a person in Hub).
+  //
+  // Hub already *issues* assertions to the ConqrPlan MCP service; this is the
+  // same contract with the roles reversed. Unset means the feature is simply
+  // off: an unconfigured verifier refuses everything rather than falling back
+  // to something more permissive.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Which identity provider Hub trusts subjects and organisations from.
+   *
+   * Must equal the value the issuing product uses to build its identifiers, or
+   * nothing resolves. It is a name rather than an issuer URL because it is
+   * baked into stored identifiers: a URL would change when the IdP moved and
+   * invalidate every auth_accounts row.
+   */
+  getSuiteIdpKey(): string {
+    return this.configService.get<string>('CONQR_SUITE_IDP_KEY', '');
+  }
+
+  /**
+   * ConqrFabric's Ed25519 public key (SPKI PEM). Only the public half is ever
+   * here: with a shared secret, holding the key to verify would also be
+   * holding the key to mint, and Hub would be able to forge the assertions it
+   * is supposed to be checking.
+   *
+   * Literal backslash-n escapes are unfolded because most secret stores will
+   * not carry a real newline, and a PEM that arrives on one line fails with
+   * "bad key" — an error that reads like a wrong key rather than a wrong
+   * transport.
+   */
+  getConqrFabricAssertionPublicKey(): string {
+    return this.configService
+      .get<string>('CONQRFABRIC_ASSERTION_PUBLIC_KEY_PEM', '')
+      .replace(/\\n/g, '\n');
+  }
+
+  /** Key id Fabric signs with. `kid` selects within this registry and does
+   * nothing else — it is never a URL or a hint to go and fetch anything. */
+  getConqrFabricAssertionKeyId(): string {
+    return this.configService.get<string>('CONQRFABRIC_ASSERTION_KEY_ID', '');
+  }
+
+  getConqrFabricOboIssuer(): string {
+    return this.configService.get<string>('CONQRFABRIC_OBO_ISSUER', 'conqrfabric');
+  }
+
+  /** The audience this Hub answers to. Checked, never inferred: a token signed
+   * with a key we happen to trust is not thereby addressed to us. */
+  getSuiteDelegationAudience(): string {
+    return this.configService.get<string>('CONQR_DELEGATION_AUDIENCE', 'conqrhub');
+  }
+
+  /** Ceiling on an inbound assertion's life, whatever it claims. */
+  getSuiteDelegationMaxTtlSeconds(): number {
+    const raw = this.configService.get<string>(
+      'CONQR_DELEGATION_MAX_TTL_SECONDS',
+      '300',
+    );
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 300;
+    return Math.min(parsed, 300);
+  }
+
+  /**
+   * Bearer tokens identifying a calling *service*, as opposed to the person it
+   * is acting for. Two credentials, because they answer different questions:
+   * this one says the caller is ConqrFabric, the assertion says whose
+   * permissions the call runs under. Either alone is insufficient.
+   */
+  getSuiteDelegationClientTokens(): string[] {
+    return this.configService
+      .get<string>('CONQR_DELEGATION_CLIENT_TOKENS', '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
   getPlaneWebhookSecret(): string {
     return this.configService.get<string>('PLANE_WEBHOOK_SECRET', '');
   }

@@ -33,6 +33,9 @@ import { ProjectSpaceMappingRepo } from '@docmost/db/repos/integration/project-s
 import { WebhookDeliveryRepo } from '@docmost/db/repos/integration/webhook-delivery.repo';
 import { IntegrationEventRepo } from '@docmost/db/repos/integration/integration-event.repo';
 import { RequirementRepo } from '@docmost/db/repos/integration/requirement.repo';
+import { SuiteOrgIdentityRepo } from '@docmost/db/repos/integration/suite-org-identity.repo';
+import { DelegationAuditRepo } from '@docmost/db/repos/integration/delegation-audit.repo';
+import { AuthAccountRepo } from '@docmost/db/repos/auth/auth-account.repo';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { normalizePostgresUrl } from '../common/helpers';
@@ -103,6 +106,9 @@ import { normalizePostgresUrl } from '../common/helpers';
     WebhookDeliveryRepo,
     IntegrationEventRepo,
     RequirementRepo,
+    SuiteOrgIdentityRepo,
+    DelegationAuditRepo,
+    AuthAccountRepo,
   ],
   exports: [
     WorkspaceRepo,
@@ -131,6 +137,9 @@ import { normalizePostgresUrl } from '../common/helpers';
     WebhookDeliveryRepo,
     IntegrationEventRepo,
     RequirementRepo,
+    SuiteOrgIdentityRepo,
+    DelegationAuditRepo,
+    AuthAccountRepo,
   ],
 })
 export class DatabaseModule implements OnApplicationBootstrap {

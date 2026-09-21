@@ -20,6 +20,15 @@ export function createPinoConfig(): Params {
   return {
     pinoHttp: {
       level,
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.x-conqr-delegation',
+          'headers.authorization',
+          'headers.x-conqr-delegation',
+        ],
+        censor: '[Redacted]',
+      },
       timestamp: stdTimeFunctions.isoTime,
       transport: !isProduction
         ? {
@@ -41,7 +50,10 @@ export function createPinoConfig(): Params {
             for (const arg of inputArgs) {
               if (typeof arg === 'object' && arg !== null && 'context' in arg) {
                 const context = (arg as Record<string, unknown>)['context'];
-                if (typeof context === 'string' && CONTEXTS_TO_IGNORE.includes(context)) {
+                if (
+                  typeof context === 'string' &&
+                  CONTEXTS_TO_IGNORE.includes(context)
+                ) {
                   return;
                 }
               }

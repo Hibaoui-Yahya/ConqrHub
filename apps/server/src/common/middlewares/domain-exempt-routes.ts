@@ -25,6 +25,14 @@ export const DOMAIN_EXEMPT_ROUTES = [
   { path: 'billing/stripe/webhook', method: RequestMethod.POST },
   // Plane webhook has no workspace/session context — trust is the HMAC.
   { path: 'integrations/plane/webhook', method: RequestMethod.POST },
+  // Suite delegation: the workspace comes from the verified assertion, not
+  // from the host. Another product calls the API directly rather than through
+  // a workspace subdomain, so DomainMiddleware would resolve nothing (cloud)
+  // or the wrong workspace (self-hosted, where it picks the first one) and
+  // then win over the one the assertion named. Every route on
+  // SuiteDelegationController has to be listed here;
+  // `suite-delegation.controller.spec.ts` fails if one is not.
+  { path: 'delegation/{*path}', method: RequestMethod.ALL },
 ] as const;
 
 /**
@@ -32,7 +40,7 @@ export const DOMAIN_EXEMPT_ROUTES = [
  * preHandler that requires a resolved workspace.
  */
 export const DOMAIN_EXEMPT_URL_PREFIXES = DOMAIN_EXEMPT_ROUTES.map(
-  (route) => `/api/${route.path}`,
+  (route) => `/api/${route.path.replace('/{*path}', '')}`,
 );
 
 /**

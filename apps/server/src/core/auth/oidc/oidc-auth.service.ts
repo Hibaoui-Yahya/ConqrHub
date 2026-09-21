@@ -2,10 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as openid from 'openid-client';
 import { randomBytes } from 'node:crypto';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
-import { UserRepo } from '@docmost/db/repos/user/user.repo';
-import { SignupService } from '../services/signup.service';
 import { SessionService } from '../../session/session.service';
 import { mapOidcClaimsToUser } from './oidc.util';
+import { OidcIdentityLinkService } from './oidc-identity-link.service';
 
 export interface OidcFlowChecks {
   state: string;
@@ -23,8 +22,7 @@ export interface OidcFlowChecks {
 export class OidcAuthService {
   constructor(
     private readonly env: EnvironmentService,
-    private readonly userRepo: UserRepo,
-    private readonly signupService: SignupService,
+    private readonly identityLink: OidcIdentityLinkService,
     private readonly sessionService: SessionService,
   ) {}
 
@@ -128,19 +126,10 @@ export class OidcAuthService {
 
     const mapped = mapOidcClaimsToUser(tokens.claims());
 
-    let user = await this.userRepo.findByEmail(mapped.email, workspaceId);
-    if (!user) {
-      // Just-in-time provisioning (§9.1). OIDC users authenticate via the IdP;
-      // the local password is a random value they never use.
-      user = await this.signupService.signup(
-        {
-          email: mapped.email,
-          name: mapped.name,
-          password: randomBytes(24).toString('base64url'),
-        },
-        workspaceId,
-      );
-    }
+    // Which user this subject *is* lives in its own service: the network flow
+    // and the identity decision are different problems, and only one of them
+    // is testable without a live IdP.
+    const user = await this.identityLink.resolveUser(mapped, workspaceId);
 
     return this.sessionService.createSessionAndToken(user);
   }

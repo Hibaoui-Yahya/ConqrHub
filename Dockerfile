@@ -12,9 +12,15 @@ WORKDIR /app
 ARG PLANE_APP_URL
 ARG MEET_APP_URL
 ARG SERVICE_APP_URL
+# OIDC_ENABLED is read by vite's loadEnv, so it decides at *build* time whether
+# the "Sign in with SSO" button exists in the bundle at all. Setting it only as
+# a runtime service variable leaves the button compiled out and the login page
+# with no way to reach /api/auth/oidc/login, which reads as OIDC being broken.
+ARG OIDC_ENABLED
 ENV PLANE_APP_URL=$PLANE_APP_URL \
     MEET_APP_URL=$MEET_APP_URL \
-    SERVICE_APP_URL=$SERVICE_APP_URL
+    SERVICE_APP_URL=$SERVICE_APP_URL \
+    OIDC_ENABLED=$OIDC_ENABLED
 
 COPY . .
 
