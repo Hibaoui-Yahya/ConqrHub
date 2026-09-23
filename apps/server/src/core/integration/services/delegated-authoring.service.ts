@@ -188,10 +188,17 @@ export class DelegatedAuthoringService {
       limit,
     } as any);
     return {
+      // `author`, not `creator_id`. Two reasons. The history row has no `creatorId` at all —
+      // page history records who last edited (`lastUpdatedById`), so `h.creatorId` was
+      // always undefined and every entry reported a null author. And an opaque user id is
+      // not an answer to "who changed this": Fabric renders a delegated result verbatim and
+      // cannot resolve a Hub user, so an edit history arrived in the assistant as two
+      // scrubbed identifiers and nothing else. The repo already selects the user row, so the
+      // name costs no extra query.
       items: items.map((h: any) => ({
         id: h.id,
         title: h.title ?? null,
-        creator_id: h.creatorId ?? null,
+        author: h.lastUpdatedBy?.name ?? null,
         created_at: h.createdAt?.toISOString?.() ?? String(h.createdAt),
       })),
     };
@@ -256,9 +263,13 @@ export class DelegatedAuthoringService {
       { limit } as any,
     );
     return {
+      // `author` beside the id, for the reason given on `history` above: who wrote a comment
+      // is the point of listing them, and a consumer that renders the result verbatim has no
+      // way to turn a user id into a person. `findPageComments` already joins the user row.
       items: items.map((c: any) => ({
         id: c.id,
         text: c.content ? documentText(c.content).slice(0, 500) : '',
+        author: c.creator?.name ?? null,
         creator_id: c.creatorId,
         created_at: c.createdAt?.toISOString?.() ?? String(c.createdAt),
       })),
