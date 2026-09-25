@@ -1,0 +1,4 @@
+# Written by the integration run (log-leak scan inputs and results). Never commit.
+.minted-tokens
+.jest-output.log
+result.json
