@@ -466,7 +466,7 @@ export class MeetingService {
           event: e.event,
           fromStatus: e.fromStatus,
           toStatus: e.toStatus,
-          detail: e.detail,
+          detail: this.parseJson(e.detail),
           createdAt: e.createdAt,
         }))
         .reverse(),
@@ -506,8 +506,10 @@ export class MeetingService {
       status: transcript.status,
       provider: transcript.provider,
       language: transcript.language,
-      segments: transcript.segments,
-      speakers: transcript.speakers,
+      // jsonb columns may come back double-encoded (a JSON string) — the
+      // client iterates these, so always hand it real arrays/objects.
+      segments: this.parseJson<unknown[]>(transcript.segments) ?? [],
+      speakers: this.parseJson<Record<string, unknown>>(transcript.speakers) ?? {},
     };
   }
 
@@ -632,7 +634,7 @@ export class MeetingService {
       id: d.id,
       title: d.title,
       contentMarkdown: d.contentMarkdown,
-      structured: d.structured,
+      structured: this.parseJson(d.structured),
       status: d.status,
       templateId: d.templateId,
       transcriptVersion: d.transcriptVersion,
@@ -739,16 +741,16 @@ export class MeetingService {
       kind: p.kind,
       targetApp: p.targetApp,
       title: p.title,
-      payload: p.payload,
+      payload: this.parseJson(p.payload) ?? {},
       reason: p.reason,
-      evidence: p.evidence,
+      evidence: this.parseJson(p.evidence) ?? [],
       confidence: p.confidence,
       commitment: p.commitment,
       riskLevel: p.riskLevel,
-      validation: p.validation,
-      duplicateCheck: p.duplicateCheck,
+      validation: this.parseJson(p.validation),
+      duplicateCheck: this.parseJson(p.duplicateCheck),
       status: p.status,
-      executionResult: p.executionResult,
+      executionResult: this.parseJson(p.executionResult),
     }));
   }
 
@@ -1061,6 +1063,8 @@ export class MeetingService {
 
     const segments: Array<Record<string, unknown>> = [];
     const texts: string[] = [];
+    const speakers: Record<string, Record<string, unknown>> = {};
+    const multiChannel = new Set(sources.map((s) => s.source ?? 'mic')).size > 1;
 
     for (const src of sources) {
       const buffer = await this.storage.read(src.path);
@@ -1073,23 +1077,50 @@ export class MeetingService {
       );
       const text = (result.corrected || result.raw || '').trim();
       if (!text) {
-        throw new Error(`Transcription produced no text for ${src.path}`);
+        // A silent stream (e.g. shared tab audio with nobody talking) must
+        // not sink the whole meeting — keep whatever the other stream has.
+        this.logger.warn(
+          `Meeting ${meetingId}: no speech in ${src.source ?? 'audio'} source ${src.path}`,
+        );
+        continue;
       }
-      texts.push(text);
-      segments.push({
-        id: randomUUID(),
-        speaker: 'Speaker 1',
-        channel: src.source ?? null,
-        startMs: src.startMs ?? 0,
-        endMs: (src.startMs ?? 0) + (src.durationMs ?? 0),
-        text,
+
+      const label = !multiChannel
+        ? 'Speaker 1'
+        : src.source === 'system'
+          ? 'Participants'
+          : 'Me';
+      speakers[label] ??= {
+        label,
+        displayName: null,
+        userId: null,
         confidence: null,
-      });
+      };
+
+      texts.push(multiChannel ? `${label}:\n${text}` : text);
+      segments.push(
+        ...this.splitIntoSegments(text, {
+          speaker: label,
+          channel: src.source ?? null,
+          startMs: src.startMs ?? 0,
+          durationMs: src.durationMs ?? 0,
+        }),
+      );
     }
 
+    if (segments.length === 0) {
+      throw new Error(
+        'Transcription produced no text — no speech was detected in the recording. Check your microphone and retry.',
+      );
+    }
+
+    segments.sort((a, b) => Number(a.startMs) - Number(b.startMs));
+
     const fullText = texts.join('\n\n').slice(0, MAX_TRANSCRIPT_CHARS);
+    // Mic and system streams cover the same wall-clock span — take the
+    // longest, don't add them up.
     const totalMs =
-      sources.reduce((sum, s) => sum + (s.durationMs ?? 0), 0) || null;
+      sources.reduce((max, s) => Math.max(max, s.durationMs ?? 0), 0) || null;
 
     await this.db
       .insertInto('meetingTranscripts')
@@ -1101,14 +1132,7 @@ export class MeetingService {
         provider: 'mistral',
         language: null,
         segments: JSON.stringify(segments),
-        speakers: JSON.stringify({
-          'Speaker 1': {
-            label: 'Speaker 1',
-            displayName: null,
-            userId: null,
-            confidence: null,
-          },
-        }),
+        speakers: JSON.stringify(speakers),
         isProvisional: true,
       })
       .executeTakeFirst();
@@ -1120,6 +1144,58 @@ export class MeetingService {
       .executeTakeFirst();
 
     return { segments, text: fullText };
+  }
+
+  /**
+   * Break one source's transcript into readable paragraph segments (a few
+   * sentences each). The STT call returns no word timings, so start/end are
+   * estimated proportionally to the character offset within the source.
+   */
+  private splitIntoSegments(
+    text: string,
+    src: { speaker: string; channel: string | null; startMs: number; durationMs: number },
+  ): Array<Record<string, unknown>> {
+    const sentences = text
+      .replace(/\s+/g, ' ')
+      .match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)/g)
+      ?.map((x) => x.trim())
+      .filter(Boolean) ?? [text];
+
+    const paragraphs: string[] = [];
+    let current = '';
+    for (const sentence of sentences) {
+      if (current && (current.length + sentence.length > 400)) {
+        paragraphs.push(current);
+        current = sentence;
+      } else {
+        current = current ? `${current} ${sentence}` : sentence;
+      }
+    }
+    if (current) paragraphs.push(current);
+
+    const totalChars = paragraphs.reduce((n, p) => n + p.length, 0) || 1;
+    let offset = 0;
+    return paragraphs.map((para) => {
+      const startMs = src.startMs + Math.round((offset / totalChars) * src.durationMs);
+      offset += para.length;
+      const endMs = src.startMs + Math.round((offset / totalChars) * src.durationMs);
+      return {
+        id: randomUUID(),
+        speaker: src.speaker,
+        channel: src.channel,
+        startMs,
+        endMs,
+        text: para,
+        confidence: null,
+      };
+    });
+  }
+
+  /** Strip a ```markdown fence the model sometimes wraps its answer in. */
+  private stripCodeFence(text: string): string {
+    const trimmed = text.trim();
+    const m = trimmed.match(/^```[a-zA-Z]*\s*\n([\s\S]*?)\n?```$/);
+    return (m ? m[1] : trimmed).trim();
   }
 
   /**
@@ -1172,7 +1248,7 @@ export class MeetingService {
           temperature: 0.4,
           maxOutputTokens: maxTokens,
         });
-        const out = (result.text ?? '').trim();
+        const out = this.stripCodeFence(result.text ?? '');
         // "_"-prefixed keys are internal (e.g. classification) and must not
         // be persisted into aiOutputs.
         if (out && !key.startsWith('_')) outputs[key] = out;
@@ -1361,14 +1437,17 @@ export class MeetingService {
 
   private parseJson<T = any>(value: unknown): T | null {
     if (value == null || value === '') return null;
-    if (typeof value === 'string') {
+    let current: unknown = value;
+    // Values written as JSON.stringify(...) into jsonb can be stored as a
+    // JSON string literal (double-encoded) — unwrap until it's structured.
+    for (let i = 0; i < 3 && typeof current === 'string'; i++) {
       try {
-        return JSON.parse(value) as T;
+        current = JSON.parse(current);
       } catch {
         return null;
       }
     }
-    return value as T;
+    return current as T;
   }
 
   private toCamelMeeting(row: any) {
