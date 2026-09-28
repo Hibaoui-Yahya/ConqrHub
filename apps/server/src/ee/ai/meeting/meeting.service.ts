@@ -18,6 +18,7 @@ import {
 import { DelegatedTokenService } from '../../../core/integration/services/delegated-token.service';
 import { DELEGATED_SCOPES } from '../../../core/integration/domain/delegated-token.util';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import { PageService } from '../../../core/page/services/page.service';
 import {
   buildSourceSegments,
   TranscriptSegment,
@@ -93,6 +94,7 @@ export class MeetingService {
     private readonly plane: PlaneClientService,
     private readonly delegatedTokens: DelegatedTokenService,
     private readonly environment: EnvironmentService,
+    private readonly pages: PageService,
   ) {}
 
   // ──────────── start ────────────
@@ -786,45 +788,27 @@ export class MeetingService {
     }
 
     if (doc.status === 'published') {
-      let pageUrl: string | null = null;
-      if (doc.pageId) {
-        const page = await this.db
-          .selectFrom('pages')
-          .select('slugId')
-          .where('id', '=', doc.pageId)
-          .executeTakeFirst();
-        pageUrl = page ? `/pages/${page.slugId}` : null;
-      }
+      // "/p/<pageId>" is resolved by the Hub SPA (PageRedirect accepts a page
+      // id) and redirected to the canonical space URL.
       return {
         pageId: doc.pageId,
-        pageUrl,
+        pageUrl: doc.pageId ? `/p/${doc.pageId}` : null,
         documentStatus: 'published',
       };
     }
 
-    // Create a page in the Hub
+    // Create the page through the Hub's own page service so it gets a
+    // routable slug id, a position in the space, the Markdown converted to
+    // editor content (and the collaborative ydoc), and watchers — a raw
+    // insert produced an empty page with a slug the SPA could not resolve.
     const meeting = await this.getMeetingOrThrow(meetingId);
-    const slugBase = doc.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60);
-    // Avoid slug collisions with previously published documents.
-    const slugId = `${slugBase || 'meeting-doc'}-${randomUUID().slice(0, 8)}`;
-
-    const page = await this.db
-      .insertInto('pages')
-      .values({
-        title: doc.title,
-        spaceId: opts.spaceId,
-        workspaceId: meeting.workspaceId,
-        creatorId: meeting.userId,
-        icon: null,
-        slugId,
-        parentPageId: opts.parentPageId || null,
-      })
-      .returning(['id', 'slugId'])
-      .executeTakeFirstOrThrow();
+    const page = await this.pages.create(meeting.userId, meeting.workspaceId, {
+      title: doc.title,
+      spaceId: opts.spaceId,
+      parentPageId: opts.parentPageId || undefined,
+      content: doc.contentMarkdown || `# ${doc.title}`,
+      format: 'markdown',
+    });
 
     // Update the document with the page link
     await this.db
@@ -841,7 +825,7 @@ export class MeetingService {
 
     return {
       pageId: page.id,
-      pageUrl: `/pages/${page.slugId}`,
+      pageUrl: `/p/${page.id}`,
       documentStatus: 'published',
     };
   }
