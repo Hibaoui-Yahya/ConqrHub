@@ -30,6 +30,7 @@ import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
+import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
@@ -255,6 +256,17 @@ export class MeetingController {
       reassign: dto.reassign,
       confirm: dto.confirm,
     });
+  }
+
+  // ──────────── POST /:id/transcript/attribute (AI turn attribution proposal) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/transcript/attribute')
+  async attributeSpeakers(
+    @Param('id') id: string,
+    @Body() dto: AttributeSpeakersDto,
+  ) {
+    return this.meetingService.attributeSpeakers(id, dto.baseVersion);
   }
 
   // ──────────── GET /:id/documents ────────────
