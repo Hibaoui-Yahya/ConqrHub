@@ -110,6 +110,50 @@ export function buildSourceSegments(
   return { segments, speakers: [...labels.values()] };
 }
 
+const SENTENCE_RE = /[^.!?…]+(?:[.!?…]+["')\]]*|$)/g;
+
+/**
+ * Split every multi-sentence segment into one segment per sentence so a
+ * speaker can be attributed per sentence (paragraph-level segments hide
+ * speaker changes inside them). Timings are interpolated by character
+ * offset; single-sentence segments keep their id.
+ */
+export function splitSegmentsIntoSentences(
+  segments: TranscriptSegment[],
+): TranscriptSegment[] {
+  const out: TranscriptSegment[] = [];
+  for (const seg of segments) {
+    const sentences =
+      seg.text
+        .replace(/\s+/g, ' ')
+        .match(SENTENCE_RE)
+        ?.map((x) => x.trim())
+        .filter((x) => x.length > 0) ?? [];
+    if (sentences.length <= 1) {
+      out.push(seg);
+      continue;
+    }
+    const total = sentences.reduce((n, s) => n + s.length, 0) || 1;
+    const span = Math.max(0, seg.endMs - seg.startMs);
+    let offset = 0;
+    for (const sentence of sentences) {
+      const startMs = seg.startMs + Math.round((offset / total) * span);
+      offset += sentence.length;
+      const endMs = seg.startMs + Math.round((offset / total) * span);
+      out.push({
+        id: randomUUID(),
+        speaker: seg.speaker,
+        channel: seg.channel,
+        startMs,
+        endMs,
+        text: sentence,
+        confidence: seg.confidence,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Break a plain transcript into readable paragraph segments (a few
  * sentences each). Without word timings, start/end are estimated
