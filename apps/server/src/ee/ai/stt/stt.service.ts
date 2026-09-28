@@ -24,6 +24,21 @@ export type SttResult = {
   durationMs: number;
 };
 
+export type DiarizedSegment = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  /** Provider speaker id (e.g. "speaker_1"); null when not diarized. */
+  speakerId: string | null;
+};
+
+export type DiarizedResult = {
+  text: string;
+  language: string | null;
+  segments: DiarizedSegment[];
+  model: string;
+};
+
 const CORRECTION_SYSTEM = [
   'You are a speech-to-text correction service.',
   'Your sole function is to fix punctuation, capitalization, and obvious mishearings in the supplied transcript.',
@@ -69,12 +84,64 @@ export class SttService {
     return { raw, corrected, model, durationMs: Date.now() - started };
   }
 
+  /**
+   * Meeting transcription with speaker diarization. Returns Voxtral's
+   * timed segments (speaker_id, start/end seconds) untouched by the LLM
+   * correction pass — rewriting text would break the segment timings.
+   */
+  async transcribeDiarized(
+    audio: Buffer,
+    mime: string,
+  ): Promise<DiarizedResult> {
+    const apiKey = this.env.getMistralApiKey();
+    if (!apiKey) {
+      throw new ServiceUnavailableException('Mistral API key not configured');
+    }
+    const model = this.env.getAiSttModel();
+    const data = await this.requestTranscription(audio, mime, model, apiKey, {
+      diarize: 'true',
+      timestamp_granularities: 'segment',
+    });
+
+    const segments: DiarizedSegment[] = (
+      Array.isArray(data.segments) ? data.segments : []
+    )
+      .map((seg: any) => ({
+        text: String(seg?.text ?? '').trim(),
+        startMs: Math.max(0, Math.round(Number(seg?.start ?? 0) * 1000)),
+        endMs: Math.max(0, Math.round(Number(seg?.end ?? 0) * 1000)),
+        speakerId:
+          seg?.speaker_id != null && seg.speaker_id !== ''
+            ? String(seg.speaker_id)
+            : null,
+      }))
+      .filter((seg: DiarizedSegment) => seg.text !== '');
+
+    return {
+      text: String(data.text ?? '').trim(),
+      language: typeof data.language === 'string' ? data.language : null,
+      segments,
+      model,
+    };
+  }
+
   private async transcribe(
     audio: Buffer,
     mime: string,
     model: string,
     apiKey: string,
   ): Promise<string> {
+    const data = await this.requestTranscription(audio, mime, model, apiKey);
+    return String(data.text ?? '').trim();
+  }
+
+  private async requestTranscription(
+    audio: Buffer,
+    mime: string,
+    model: string,
+    apiKey: string,
+    extraFields: Record<string, string> = {},
+  ): Promise<Record<string, any>> {
     // MediaRecorder emits containerized streams (webm/ogg/opus) that some
     // ASR backends decode poorly. Transcode to PCM WAV when ffmpeg is
     // available; otherwise send the original bytes untouched.
@@ -90,6 +157,9 @@ export class SttService {
     form.append('file', blob, `recording.${ext}`);
     form.append('model', model);
     form.append('response_format', 'json');
+    for (const [key, value] of Object.entries(extraFields)) {
+      form.append(key, value);
+    }
 
     const res = await fetch(
       'https://api.mistral.ai/v1/audio/transcriptions',
@@ -109,7 +179,7 @@ export class SttService {
       throw new ServiceUnavailableException('Transcription failed');
     }
 
-    let data: { text?: string } = {};
+    let data: Record<string, any> = {};
     try {
       data = JSON.parse(raw);
     } catch {
@@ -117,13 +187,12 @@ export class SttService {
         `Mistral returned non-JSON body for transcription: ${raw.slice(0, 200)}`,
       );
     }
-    const text = (data.text ?? '').trim();
-    if (!text) {
+    if (!String(data.text ?? '').trim()) {
       this.logger.warn(
         `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${buffer.length} body=${raw.slice(0, 300)}`,
       );
     }
-    return text;
+    return data;
   }
 
   /**

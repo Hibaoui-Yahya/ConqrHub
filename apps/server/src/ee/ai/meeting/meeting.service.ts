@@ -10,7 +10,13 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { StorageService } from '../../../integrations/storage/storage.service';
-import { SttService } from '../stt/stt.service';
+import { DiarizedSegment, SttService } from '../stt/stt.service';
+import {
+  buildSourceSegments,
+  TranscriptSegment,
+  TranscriptSpeaker,
+  transcriptToText,
+} from './meeting-transcript.util';
 import { AiProviderService } from '../providers/ai-provider.service';
 
 /** Meeting types the analyzer can classify a transcript into. */
@@ -551,7 +557,7 @@ export class MeetingService {
     if (req.renames) {
       for (const [oldName, newName] of Object.entries(req.renames)) {
         if (speakers[oldName]) {
-          speakers[newName] = speakers[oldName];
+          speakers[newName] = { ...speakers[oldName], label: newName };
           delete speakers[oldName];
         }
         for (const seg of segments) {
@@ -606,10 +612,30 @@ export class MeetingService {
         })
         .executeTakeFirst();
 
-      // Speakers confirmed → the meeting is ready for the review page.
-      await this.logTransition(meetingId, meeting.status, 'awaiting_review', {
-        speakersConfirmed: true,
-      });
+      const edited =
+        Object.keys(req.renames ?? {}).length > 0 ||
+        (req.merges ?? []).length > 0;
+
+      if (edited) {
+        // Keep the copyable transcript in sync, then re-run the analysis so
+        // the summary / action items use the real speaker names.
+        await this.db
+          .updateTable('meetings')
+          .set({
+            transcript: transcriptToText(segments, speakers).slice(
+              0,
+              MAX_TRANSCRIPT_CHARS,
+            ),
+          })
+          .where('id', '=', meetingId)
+          .executeTakeFirst();
+        await this.kickPipeline(meetingId, meeting.status, 'analyzing');
+      } else {
+        // Speakers confirmed → the meeting is ready for the review page.
+        await this.logTransition(meetingId, meeting.status, 'awaiting_review', {
+          speakersConfirmed: true,
+        });
+      }
 
       return { version: newVersion, confirmed: true };
     }
@@ -1059,24 +1085,27 @@ export class MeetingService {
   /** Transcribe every audio source and persist transcript version 1. */
   private async transcribeMeeting(meetingId: string, sources: AudioSource[]) {
     const meeting = await this.getMeetingOrThrow(meetingId);
-    const workspaceName = await this.getWorkspaceName(meeting.workspaceId);
 
-    const segments: Array<Record<string, unknown>> = [];
-    const texts: string[] = [];
-    const speakers: Record<string, Record<string, unknown>> = {};
+    const segments: TranscriptSegment[] = [];
+    const speakers: Record<string, TranscriptSpeaker> = {};
     const multiChannel = new Set(sources.map((s) => s.source ?? 'mic')).size > 1;
+    let language: string | null = null;
 
     for (const src of sources) {
       const buffer = await this.storage.read(src.path);
-      const result = await this.stt.transcribeAndCorrect(
-        buffer,
-        src.mime,
-        { kind: 'search' },
-        meeting.workspaceId,
-        workspaceName,
+      const result = await this.transcribeSource(meeting, buffer, src.mime);
+      language ??= result.language;
+
+      const built = buildSourceSegments(
+        result,
+        {
+          channel: src.source ?? null,
+          startMs: src.startMs ?? 0,
+          durationMs: src.durationMs ?? 0,
+        },
+        multiChannel,
       );
-      const text = (result.corrected || result.raw || '').trim();
-      if (!text) {
+      if (built.segments.length === 0) {
         // A silent stream (e.g. shared tab audio with nobody talking) must
         // not sink the whole meeting — keep whatever the other stream has.
         this.logger.warn(
@@ -1084,28 +1113,15 @@ export class MeetingService {
         );
         continue;
       }
-
-      const label = !multiChannel
-        ? 'Speaker 1'
-        : src.source === 'system'
-          ? 'Participants'
-          : 'Me';
-      speakers[label] ??= {
-        label,
-        displayName: null,
-        userId: null,
-        confidence: null,
-      };
-
-      texts.push(multiChannel ? `${label}:\n${text}` : text);
-      segments.push(
-        ...this.splitIntoSegments(text, {
-          speaker: label,
-          channel: src.source ?? null,
-          startMs: src.startMs ?? 0,
-          durationMs: src.durationMs ?? 0,
-        }),
-      );
+      segments.push(...built.segments);
+      for (const label of built.speakers) {
+        speakers[label] ??= {
+          label,
+          displayName: null,
+          userId: null,
+          confidence: null,
+        };
+      }
     }
 
     if (segments.length === 0) {
@@ -1114,9 +1130,13 @@ export class MeetingService {
       );
     }
 
-    segments.sort((a, b) => Number(a.startMs) - Number(b.startMs));
+    // Interleave mic and system turns on the shared timeline.
+    segments.sort((a, b) => a.startMs - b.startMs);
 
-    const fullText = texts.join('\n\n').slice(0, MAX_TRANSCRIPT_CHARS);
+    const fullText = transcriptToText(segments, speakers).slice(
+      0,
+      MAX_TRANSCRIPT_CHARS,
+    );
     // Mic and system streams cover the same wall-clock span — take the
     // longest, don't add them up.
     const totalMs =
@@ -1130,7 +1150,7 @@ export class MeetingService {
         kind: 'live',
         status: 'transcribed',
         provider: 'mistral',
-        language: null,
+        language,
         segments: JSON.stringify(segments),
         speakers: JSON.stringify(speakers),
         isProvisional: true,
@@ -1147,48 +1167,35 @@ export class MeetingService {
   }
 
   /**
-   * Break one source's transcript into readable paragraph segments (a few
-   * sentences each). The STT call returns no word timings, so start/end are
-   * estimated proportionally to the character offset within the source.
+   * Diarized transcription of one audio file; falls back to the plain
+   * (LLM-corrected, single speaker) path if the diarized request fails.
    */
-  private splitIntoSegments(
-    text: string,
-    src: { speaker: string; channel: string | null; startMs: number; durationMs: number },
-  ): Array<Record<string, unknown>> {
-    const sentences = text
-      .replace(/\s+/g, ' ')
-      .match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)/g)
-      ?.map((x) => x.trim())
-      .filter(Boolean) ?? [text];
-
-    const paragraphs: string[] = [];
-    let current = '';
-    for (const sentence of sentences) {
-      if (current && (current.length + sentence.length > 400)) {
-        paragraphs.push(current);
-        current = sentence;
-      } else {
-        current = current ? `${current} ${sentence}` : sentence;
-      }
-    }
-    if (current) paragraphs.push(current);
-
-    const totalChars = paragraphs.reduce((n, p) => n + p.length, 0) || 1;
-    let offset = 0;
-    return paragraphs.map((para) => {
-      const startMs = src.startMs + Math.round((offset / totalChars) * src.durationMs);
-      offset += para.length;
-      const endMs = src.startMs + Math.round((offset / totalChars) * src.durationMs);
+  private async transcribeSource(
+    meeting: { id: string; workspaceId: string },
+    buffer: Buffer,
+    mime: string,
+  ): Promise<{ text: string; language: string | null; segments: DiarizedSegment[] }> {
+    try {
+      return await this.stt.transcribeDiarized(buffer, mime);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      this.logger.warn(
+        `Meeting ${meeting.id}: diarized transcription failed (${msg}); retrying without speakers`,
+      );
+      const workspaceName = await this.getWorkspaceName(meeting.workspaceId);
+      const result = await this.stt.transcribeAndCorrect(
+        buffer,
+        mime,
+        { kind: 'search' },
+        meeting.workspaceId,
+        workspaceName,
+      );
       return {
-        id: randomUUID(),
-        speaker: src.speaker,
-        channel: src.channel,
-        startMs,
-        endMs,
-        text: para,
-        confidence: null,
+        text: (result.corrected || result.raw || '').trim(),
+        language: null,
+        segments: [],
       };
-    });
+    }
   }
 
   /** Strip a ```markdown fence the model sometimes wraps its answer in. */
@@ -1212,16 +1219,14 @@ export class MeetingService {
     if (!text) {
       const tr = await this.db
         .selectFrom('meetingTranscripts')
-        .select('segments')
+        .select(['segments', 'speakers'])
         .where('meetingId', '=', meetingId)
         .orderBy('version', 'desc')
         .limit(1)
         .executeTakeFirst();
       const segs = this.parseJson<Array<Record<string, unknown>>>(tr?.segments) || [];
-      text = segs
-        .map((s) => String(s.text ?? ''))
-        .join('\n\n')
-        .slice(0, MAX_TRANSCRIPT_CHARS);
+      const spk = this.parseJson<Record<string, TranscriptSpeaker>>(tr?.speakers) || {};
+      text = transcriptToText(segs, spk).slice(0, MAX_TRANSCRIPT_CHARS);
     }
 
     if (!this.ai.isAvailable() || !text.trim()) {
