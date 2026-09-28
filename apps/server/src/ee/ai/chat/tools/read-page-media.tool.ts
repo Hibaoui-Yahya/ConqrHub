@@ -24,7 +24,7 @@ import {
 import { ChatToolRegistry } from './chat-tool.registry';
 import { rasterizeSvgToPng } from './svg-raster.util';
 
-const MAX_IMAGES = 8;
+const MAX_IMAGES = 16;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 @Injectable()

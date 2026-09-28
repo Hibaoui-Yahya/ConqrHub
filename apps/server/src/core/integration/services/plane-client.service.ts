@@ -1,6 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 
+/**
+ * One hit from the work-item search endpoint. Django `.values()` output, so
+ * the field names are the ORM paths rather than the nested objects the
+ * detail/list endpoints return.
+ */
+export interface PlaneWorkItemSearchHit {
+  id: string;
+  name: string;
+  sequence_id?: number | null;
+  project_id?: string;
+  project__identifier?: string | null;
+  workspace__slug?: string;
+  state__name?: string | null;
+  state__group?: string | null;
+  priority?: string | null;
+}
+
 export interface PlaneWorkItem {
   id: string;
   name: string;
@@ -75,6 +92,46 @@ export interface PlaneState {
   group?: string;
   color?: string;
   default?: boolean;
+}
+
+export interface PlaneProject {
+  id: string;
+  name: string;
+  identifier?: string;
+  description?: string | null;
+  network?: number;
+  project_lead?: string | null;
+  archived_at?: string | null;
+  created_at?: string;
+}
+
+export interface PlaneView {
+  id: string;
+  name: string;
+  description?: string | null;
+  filters?: Record<string, unknown>;
+  display_filters?: Record<string, unknown>;
+  access?: number;
+  is_locked?: boolean;
+  owned_by?: string | null;
+  created_at?: string;
+}
+
+export interface PlaneCycle {
+  id: string;
+  name: string;
+  description?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface PlaneModule {
+  id: string;
+  name: string;
+  description?: string | null;
+  status?: string | null;
+  start_date?: string | null;
+  target_date?: string | null;
 }
 
 export interface PlaneComment {
@@ -300,6 +357,38 @@ export class PlaneClientService {
     return { results };
   }
 
+  /**
+   * Text search over work items.
+   *
+   * NOT the same thing as `listWorkItems({ search })`: ConqrPlan's issue LIST
+   * endpoint has no `search` parameter and silently ignores one, so that call
+   * returns the project's first N items whatever you asked for. This hits the
+   * dedicated search endpoint, which matches on name, sequence id and project
+   * identifier, and can span the whole workspace rather than one project.
+   */
+  async searchWorkItems(
+    opts: { query: string; limit?: number; projectId?: string },
+    ctx?: PlaneCallContext,
+  ): Promise<{ results: PlaneWorkItemSearchHit[] }> {
+    const query = (opts.query ?? '').trim();
+    if (!query) return { results: [] };
+
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const params = new URLSearchParams();
+    params.set('search', query);
+    params.set('limit', String(opts.limit ?? 10));
+    // Workspace-wide unless a project is named. The endpoint only honours
+    // project_id when workspace_search is false.
+    params.set('workspace_search', opts.projectId ? 'false' : 'true');
+    if (opts.projectId) params.set('project_id', opts.projectId);
+
+    const res = await this.request<{ issues?: PlaneWorkItemSearchHit[] }>(
+      `/workspaces/${slug}/work-items/search/?${params.toString()}`,
+      readContext(ctx),
+    );
+    return { results: res.issues ?? [] };
+  }
+
   /** List a project's labels (id → name) for label prediction metadata. */
   async listLabels(
     projectId: string,
@@ -501,14 +590,31 @@ export class PlaneClientService {
   async listModules(
     projectId: string,
     ctx?: PlaneCallContext,
-  ): Promise<{ id: string; name: string; status?: string }[]> {
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      status?: string;
+      startDate?: string | null;
+      targetDate?: string | null;
+    }[]
+  > {
     const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
     const res = await this.request<{ results?: any[] } | any[]>(
       `/workspaces/${slug}/projects/${projectId}/modules/`,
       readContext(ctx),
     );
     const results = Array.isArray(res) ? res : (res?.results ?? []);
-    return results.map((m: any) => ({ id: m.id, name: m.name, status: m.status }));
+    // Dates are returned as well as the status: create_module and
+    // update_module can set them, and a field you can write but not read back
+    // is one an agent cannot reason about.
+    return results.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      status: m.status,
+      startDate: m.start_date ?? null,
+      targetDate: m.target_date ?? null,
+    }));
   }
 
   /** Add work items to a cycle. ConqrPlan refuses cycles that already ended. */
@@ -681,5 +787,562 @@ export class PlaneClientService {
       readContext(ctx),
     );
     return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+  // ---------------------------------------------------------------------
+  // CRUD completions. Every method below wraps an endpoint ConqrPlan
+  // already served but nothing in the suite called, which is why the tool
+  // surface could create and read but not update or remove.
+  // ---------------------------------------------------------------------
+
+  /** Delete a work item. Permanent on ConqrPlan's side. */
+  async deleteWorkItem(
+    projectId: string,
+    workItemId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Edit an existing work-item comment. */
+  async updateWorkItemComment(
+    projectId: string,
+    workItemId: string,
+    commentId: string,
+    commentHtml: string,
+    opts?: PlaneCallContext,
+  ): Promise<PlaneComment> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneComment>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/comments/${commentId}/`,
+      {
+        method: 'PATCH',
+        body: { comment_html: commentHtml },
+        delegation: opts?.delegation,
+        correlationId: opts?.correlationId,
+      },
+    );
+  }
+
+  /** Remove a work-item comment. */
+  async deleteWorkItemComment(
+    projectId: string,
+    workItemId: string,
+    commentId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${workItemId}/comments/${commentId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Create a project label. */
+  async createLabel(
+    projectId: string,
+    body: { name: string; color?: string; description?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneLabel> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneLabel>(
+      `/workspaces/${slug}/projects/${projectId}/labels/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Rename or recolour a label. */
+  async updateLabel(
+    projectId: string,
+    labelId: string,
+    body: { name?: string; color?: string; description?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneLabel> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneLabel>(
+      `/workspaces/${slug}/projects/${projectId}/labels/${labelId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a label. Work items survive; they simply lose the label. */
+  async deleteLabel(
+    projectId: string,
+    labelId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/labels/${labelId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Create a workflow state in a project. */
+  async createState(
+    projectId: string,
+    body: { name: string; group: string; color?: string; description?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneState> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneState>(
+      `/workspaces/${slug}/projects/${projectId}/states/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Update a workflow state. */
+  async updateState(
+    projectId: string,
+    stateId: string,
+    body: { name?: string; group?: string; color?: string; description?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneState> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneState>(
+      `/workspaces/${slug}/projects/${projectId}/states/${stateId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a workflow state. ConqrPlan refuses while work items sit in it. */
+  async deleteState(
+    projectId: string,
+    stateId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/states/${stateId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Create a cycle (sprint). */
+  async createCycle(
+    projectId: string,
+    body: { name: string; description?: string; start_date?: string; end_date?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneCycle> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneCycle>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Rename a cycle or move its dates. */
+  async updateCycle(
+    projectId: string,
+    cycleId: string,
+    body: { name?: string; description?: string; start_date?: string; end_date?: string },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneCycle> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneCycle>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a cycle. Its work items survive, unassigned from any cycle. */
+  async deleteCycle(
+    projectId: string,
+    cycleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Create a module (a grouping of work items inside a project). */
+  async createModule(
+    projectId: string,
+    body: {
+      name: string;
+      description?: string;
+      status?: string;
+      start_date?: string;
+      target_date?: string;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneModule> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneModule>(
+      `/workspaces/${slug}/projects/${projectId}/modules/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Update a module. */
+  async updateModule(
+    projectId: string,
+    moduleId: string,
+    body: {
+      name?: string;
+      description?: string;
+      status?: string;
+      start_date?: string;
+      target_date?: string;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneModule> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneModule>(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a module. Its work items survive. */
+  async deleteModule(
+    projectId: string,
+    moduleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /**
+   * Delete a project's estimate system.
+   *
+   * A project holds one system, so replacing it means deleting the old one
+   * first — which create_estimate_system's own error message told callers to
+   * do while nothing here could.
+   */
+  async deleteEstimate(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/estimates/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** List the work items belonging to a module. */
+  async listModuleWorkItems(
+    projectId: string,
+    moduleId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneWorkItem[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneWorkItem[] } | PlaneWorkItem[]>(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/module-issues/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+  // ---------------------------------------------------------------------
+  // Projects. A project is the container everything else lives in, so the
+  // tool surface could fill one but never make one.
+  // ---------------------------------------------------------------------
+
+  /** Create a project. `identifier` is the short key ConqrPlan puts on every work item. */
+  async createProject(
+    body: {
+      name: string;
+      identifier: string;
+      description?: string;
+      network?: number;
+      project_lead?: string;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(`/workspaces/${slug}/projects/`, {
+      method: 'POST',
+      body,
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** One project's full record. */
+  async getProject(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(
+      `/workspaces/${slug}/projects/${projectId}/`,
+      readContext(ctx),
+    );
+  }
+
+  /** Update a project's name, description, visibility or lead. */
+  async updateProject(
+    projectId: string,
+    body: {
+      name?: string;
+      description?: string;
+      network?: number;
+      project_lead?: string | null;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneProject> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneProject>(
+      `/workspaces/${slug}/projects/${projectId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a project and everything inside it. Irreversible. */
+  async deleteProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(`/workspaces/${slug}/projects/${projectId}/`, {
+      method: 'DELETE',
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** Archive a project: hidden from the active list, contents preserved. */
+  async archiveProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Bring an archived project back. */
+  async unarchiveProject(projectId: string, opts?: PlaneCallContext): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** A project's headline counts, in one call. */
+  async getProjectSummary(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<Record<string, unknown>> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<Record<string, unknown>>(
+      `/workspaces/${slug}/projects/${projectId}/summary/`,
+      readContext(ctx),
+    );
+  }
+  // ---------------------------------------------------------------------
+  // Archiving. Note the asymmetry in ConqrPlan's routes: archiving POSTs to
+  // the live object, while restoring DELETEs against an `archived-*` path.
+  // ---------------------------------------------------------------------
+
+  /** Archive a cycle. ConqrPlan refuses unless the cycle has already ended. */
+  async archiveCycle(
+    projectId: string,
+    cycleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Restore an archived cycle. */
+  async unarchiveCycle(
+    projectId: string,
+    cycleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archived-cycles/${cycleId}/unarchive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Cycles that have been archived out of the active list. */
+  async listArchivedCycles(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneCycle[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneCycle[] } | PlaneCycle[]>(
+      `/workspaces/${slug}/projects/${projectId}/archived-cycles/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+
+  /** Archive a module. ConqrPlan refuses unless it is completed or cancelled. */
+  async archiveModule(
+    projectId: string,
+    moduleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/archive/`,
+      { method: 'POST', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Restore an archived module. */
+  async unarchiveModule(
+    projectId: string,
+    moduleId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/archived-modules/${moduleId}/unarchive/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Modules that have been archived out of the active list. */
+  async listArchivedModules(
+    projectId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneModule[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneModule[] } | PlaneModule[]>(
+      `/workspaces/${slug}/projects/${projectId}/archived-modules/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+  // ---------------------------------------------------------------------
+  // Saved views. Named filters over a project's work items — how a team
+  // actually looks at its work, previously reachable only from the
+  // session-authenticated app API.
+  // ---------------------------------------------------------------------
+
+  /** A project's saved views the caller may see. */
+  async listViews(projectId: string, ctx?: PlaneCallContext): Promise<PlaneView[]> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    const res = await this.request<{ results?: PlaneView[] } | PlaneView[]>(
+      `/workspaces/${slug}/projects/${projectId}/views/`,
+      readContext(ctx),
+    );
+    return Array.isArray(res) ? res : (res?.results ?? []);
+  }
+
+  /** One saved view. */
+  async getView(
+    projectId: string,
+    viewId: string,
+    ctx?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = ctx?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      readContext(ctx),
+    );
+  }
+
+  /** Create a saved view. */
+  async createView(
+    projectId: string,
+    body: {
+      name: string;
+      description?: string;
+      filters?: Record<string, unknown>;
+      display_filters?: Record<string, unknown>;
+      access?: number;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/`,
+      { method: 'POST', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Update a saved view. */
+  async updateView(
+    projectId: string,
+    viewId: string,
+    body: {
+      name?: string;
+      description?: string;
+      filters?: Record<string, unknown>;
+      display_filters?: Record<string, unknown>;
+      access?: number;
+      is_locked?: boolean;
+    },
+    opts?: PlaneCallContext,
+  ): Promise<PlaneView> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request<PlaneView>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      { method: 'PATCH', body, delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Delete a saved view. The work items it filtered are untouched. */
+  async deleteView(
+    projectId: string,
+    viewId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/views/${viewId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
+  }
+  // ---------------------------------------------------------------------
+  // Project membership. ConqrPlan stores the role as a number:
+  // 20 admin, 15 member, 5 guest.
+  // ---------------------------------------------------------------------
+
+  /** Add an existing workspace member to a project. */
+  async addProjectMember(
+    projectId: string,
+    body: { member: string; role?: number },
+    opts?: PlaneCallContext,
+  ): Promise<{ id: string; member?: string; role?: number }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(`/workspaces/${slug}/projects/${projectId}/members/`, {
+      method: 'POST',
+      body,
+      delegation: opts?.delegation,
+      correlationId: opts?.correlationId,
+    });
+  }
+
+  /** Change a project member's role. */
+  async updateProjectMemberRole(
+    projectId: string,
+    memberRecordId: string,
+    role: number,
+    opts?: PlaneCallContext,
+  ): Promise<{ id: string; role?: number }> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    return this.request(
+      `/workspaces/${slug}/projects/${projectId}/members/${memberRecordId}/`,
+      { method: 'PATCH', body: { role }, delegation: opts?.delegation,
+        correlationId: opts?.correlationId },
+    );
+  }
+
+  /** Remove someone from a project. Their work items stay. */
+  async removeProjectMember(
+    projectId: string,
+    memberRecordId: string,
+    opts?: PlaneCallContext,
+  ): Promise<void> {
+    const slug = opts?.workspaceSlug || this.environment.getPlaneWorkspaceSlug();
+    await this.request<void>(
+      `/workspaces/${slug}/projects/${projectId}/members/${memberRecordId}/`,
+      { method: 'DELETE', delegation: opts?.delegation, correlationId: opts?.correlationId },
+    );
   }
 }

@@ -3,6 +3,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { spawn } from 'node:child_process';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -21,6 +22,21 @@ export type SttResult = {
   corrected: string;
   model: string;
   durationMs: number;
+};
+
+export type DiarizedSegment = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  /** Provider speaker id (e.g. "speaker_1"); null when not diarized. */
+  speakerId: string | null;
+};
+
+export type DiarizedResult = {
+  text: string;
+  language: string | null;
+  segments: DiarizedSegment[];
+  model: string;
 };
 
 const CORRECTION_SYSTEM = [
@@ -68,20 +84,82 @@ export class SttService {
     return { raw, corrected, model, durationMs: Date.now() - started };
   }
 
+  /**
+   * Meeting transcription with speaker diarization. Returns Voxtral's
+   * timed segments (speaker_id, start/end seconds) untouched by the LLM
+   * correction pass — rewriting text would break the segment timings.
+   */
+  async transcribeDiarized(
+    audio: Buffer,
+    mime: string,
+  ): Promise<DiarizedResult> {
+    const apiKey = this.env.getMistralApiKey();
+    if (!apiKey) {
+      throw new ServiceUnavailableException('Mistral API key not configured');
+    }
+    const model = this.env.getAiSttModel();
+    const data = await this.requestTranscription(audio, mime, model, apiKey, {
+      diarize: 'true',
+      timestamp_granularities: 'segment',
+    });
+
+    const segments: DiarizedSegment[] = (
+      Array.isArray(data.segments) ? data.segments : []
+    )
+      .map((seg: any) => ({
+        text: String(seg?.text ?? '').trim(),
+        startMs: Math.max(0, Math.round(Number(seg?.start ?? 0) * 1000)),
+        endMs: Math.max(0, Math.round(Number(seg?.end ?? 0) * 1000)),
+        speakerId:
+          seg?.speaker_id != null && seg.speaker_id !== ''
+            ? String(seg.speaker_id)
+            : null,
+      }))
+      .filter((seg: DiarizedSegment) => seg.text !== '');
+
+    return {
+      text: String(data.text ?? '').trim(),
+      language: typeof data.language === 'string' ? data.language : null,
+      segments,
+      model,
+    };
+  }
+
   private async transcribe(
     audio: Buffer,
     mime: string,
     model: string,
     apiKey: string,
   ): Promise<string> {
-    const baseMime = (mime || 'audio/webm').split(';')[0].trim();
+    const data = await this.requestTranscription(audio, mime, model, apiKey);
+    return String(data.text ?? '').trim();
+  }
+
+  private async requestTranscription(
+    audio: Buffer,
+    mime: string,
+    model: string,
+    apiKey: string,
+    extraFields: Record<string, string> = {},
+  ): Promise<Record<string, any>> {
+    // MediaRecorder emits containerized streams (webm/ogg/opus) that some
+    // ASR backends decode poorly. Transcode to PCM WAV when ffmpeg is
+    // available; otherwise send the original bytes untouched.
+    const { buffer, mime: outMime } = await this.transcodeToWavIfPossible(
+      audio,
+      mime,
+    );
+    const baseMime = outMime.split(';')[0].trim();
     const ext = baseMime.split('/')[1] || 'webm';
-    const blob = new Blob([new Uint8Array(audio)], { type: baseMime });
+    const blob = new Blob([new Uint8Array(buffer)], { type: baseMime });
 
     const form = new FormData();
     form.append('file', blob, `recording.${ext}`);
     form.append('model', model);
     form.append('response_format', 'json');
+    for (const [key, value] of Object.entries(extraFields)) {
+      form.append(key, value);
+    }
 
     const res = await fetch(
       'https://api.mistral.ai/v1/audio/transcriptions',
@@ -96,12 +174,12 @@ export class SttService {
 
     if (!res.ok) {
       this.logger.error(
-        `Mistral transcription failed: ${res.status} ${raw} model=${model} mime=${baseMime} bytes=${audio.length}`,
+        `Mistral transcription failed: ${res.status} ${raw} model=${model} mime=${baseMime} bytes=${buffer.length}`,
       );
       throw new ServiceUnavailableException('Transcription failed');
     }
 
-    let data: { text?: string } = {};
+    let data: Record<string, any> = {};
     try {
       data = JSON.parse(raw);
     } catch {
@@ -109,13 +187,81 @@ export class SttService {
         `Mistral returned non-JSON body for transcription: ${raw.slice(0, 200)}`,
       );
     }
-    const text = (data.text ?? '').trim();
-    if (!text) {
+    if (!String(data.text ?? '').trim()) {
       this.logger.warn(
-        `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${audio.length} body=${raw.slice(0, 300)}`,
+        `Mistral returned empty transcript model=${model} mime=${baseMime} bytes=${buffer.length} body=${raw.slice(0, 300)}`,
       );
     }
-    return text;
+    return data;
+  }
+
+  /**
+   * Convert containerized recorder output (webm/ogg) to 16kHz mono PCM WAV
+   * using ffmpeg when it is available. Never throws: any failure falls back
+   * to the original bytes so transcription still has a chance to succeed.
+   */
+  private async transcodeToWavIfPossible(
+    audio: Buffer,
+    mime: string,
+  ): Promise<{ buffer: Buffer; mime: string }> {
+    const baseMime = (mime || 'audio/webm').split(';')[0].trim();
+    const needsTranscode = [
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/x-m4a',
+      'video/mp4',
+    ].includes(baseMime);
+
+    if (!needsTranscode) return { buffer: audio, mime: baseMime };
+
+    const binary = this.env.getFfmpegPath() || 'ffmpeg';
+    try {
+      const { buffer } = await this.runFfmpeg(binary, audio);
+      if (buffer.length > 0) {
+        this.logger.debug(
+          `Transcoded ${baseMime} -> audio/wav (${audio.length} -> ${buffer.length} bytes)`,
+        );
+        return { buffer, mime: 'audio/wav' };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      this.logger.warn(
+        `ffmpeg transcode skipped (${msg}); sending original ${baseMime}`,
+      );
+    }
+    return { buffer: audio, mime: baseMime };
+  }
+
+  private runFfmpeg(bin: string, input: Buffer): Promise<{ buffer: Buffer }> {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-i',
+        'pipe:0',
+        '-ar',
+        '16000',
+        '-ac',
+        '1',
+        '-c:a',
+        'pcm_s16le',
+        '-f',
+        'wav',
+        'pipe:1',
+      ];
+      const proc = spawn(bin, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+      const chunks: Buffer[] = [];
+      proc.stdout.on('data', (c: Buffer) => chunks.push(c));
+      proc.on('error', reject);
+      proc.on('close', (code) => {
+        const buffer = Buffer.concat(chunks);
+        if (code === 0 && buffer.length > 0) resolve({ buffer });
+        else reject(new Error(`ffmpeg exited with code ${code}`));
+      });
+      proc.stdin.on('error', () => {
+        /* EPIPE if ffmpeg exits before consuming stdin */
+      });
+      proc.stdin.end(input);
+    });
   }
 
   private async correct(

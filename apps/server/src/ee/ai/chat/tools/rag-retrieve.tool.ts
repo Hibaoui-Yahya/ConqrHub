@@ -99,7 +99,7 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
           sourceId: c.sourceId,
           title: c.title,
           score: c.score,
-          excerpt: c.chunkText.slice(0, 300),
+          excerpt: c.chunkText.slice(0, 2000),
         })),
       };
     } catch {

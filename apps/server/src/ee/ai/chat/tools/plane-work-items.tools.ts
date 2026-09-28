@@ -29,6 +29,25 @@ export function toolError(err: unknown): { error: string } {
   return { error: `ConqrPlan request failed: ${err instanceof Error ? err.message : String(err)}` };
 }
 
+/**
+ * Summary of a hit from the work-item SEARCH endpoint.
+ *
+ * Django `.values()` output, so the fields are ORM paths rather than the
+ * nested objects the list and detail endpoints return — `state__name` here
+ * where `workItemSummary` reads `state_detail.name`. Keeping them apart
+ * avoids a summariser that quietly returns null for whichever shape it was
+ * not written for.
+ */
+export const workItemSearchSummary = (w: any) => ({
+  id: w.id,
+  name: w.name,
+  sequenceId: w.sequence_id ?? null,
+  state: w.state__name ?? null,
+  priority: w.priority ?? null,
+  projectId: w.project_id ?? null,
+  projectIdentifier: w.project__identifier ?? null,
+});
+
 export const workItemSummary = (w: any) => ({
   id: w.id,
   name: w.name,
@@ -70,11 +89,19 @@ export class ListConqrPlanProjectsTool implements ChatTool, OnModuleInit {
 export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
   readonly name = 'search_work_items';
   readonly description =
-    'Search work items in a ConqrPlan project by text. Returns id, name, state, and priority. Cite work items by name and sequenceId.';
+    'Search ConqrPlan work items by text across the whole workspace, or inside one project when projectId is given. Matches on name, sequence id and project identifier. Returns id, name, state, priority and the owning project. Cite work items by name and sequenceId. Omit the query to list a project instead.';
   readonly parameters = z.object({
-    projectId: z.string().describe('ConqrPlan project ID (from list_conqrplan_projects)'),
-    query: z.string().optional().describe('Text to search work item names for'),
-    limit: z.number().int().min(1).max(50).optional().default(20),
+    projectId: z
+      .string()
+      .optional()
+      .describe(
+        'Restrict to one ConqrPlan project (from list_conqrplan_projects). Omit to search every project you belong to.',
+      ),
+    query: z
+      .string()
+      .optional()
+      .describe('Text to search for. Omit to list a project — then projectId is required.'),
+    limit: z.number().int().min(1).max(200).optional().default(50),
   });
   constructor(
     private readonly plane: PlaneClientService,
@@ -84,12 +111,37 @@ export class SearchWorkItemsTool implements ChatTool, OnModuleInit {
   onModuleInit(): void {
     if (this.plane.isEnabled()) this.registry.register(this);
   }
-  async execute(args: { projectId: string; query?: string; limit?: number }, ctx: ChatToolContext) {
+  async execute(
+    args: { projectId?: string; query?: string; limit?: number },
+    ctx: ChatToolContext,
+  ) {
     const call = delegateForPlane(this.delegation, ctx, [DELEGATED_SCOPES.workItemRead]);
+    const limit = args.limit ?? 50;
+    const query = (args.query ?? '').trim();
     try {
+      // A query goes to the search endpoint. The issue LIST endpoint has no
+      // `search` parameter and ignores one, so routing a query through it
+      // returned the project's first N items for every term — matches that
+      // were never matches. Without a query there is nothing to search, so
+      // listing one project is the only sensible reading.
+      if (query) {
+        const { results } = await this.plane.searchWorkItems(
+          { query, limit, projectId: args.projectId },
+          call,
+        );
+        return results.map(workItemSearchSummary);
+      }
+
+      if (!args.projectId) {
+        return toolError(
+          new Error(
+            'Pass a query to search across the workspace, or a projectId to list one project.',
+          ),
+        );
+      }
       const { results } = await this.plane.listWorkItems(
         args.projectId,
-        { search: args.query, perPage: args.limit ?? 20 },
+        { perPage: limit },
         call,
       );
       return results.map(workItemSummary);

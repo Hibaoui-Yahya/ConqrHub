@@ -189,8 +189,9 @@ describe('RagRetrieveTool', () => {
       expect(result.chunks).toHaveLength(0);
     });
 
-    it('truncates excerpt to 300 characters', async () => {
-      const longText = 'X'.repeat(400);
+    it('truncates excerpt to 2000 characters', async () => {
+      // Longer than the cap, or this asserts nothing about truncation.
+      const longText = 'X'.repeat(2500);
       const ctx: RetrievedContext = {
         chunks: [{
           kind: 'page', sourceId: 'p1', chunkText: longText,
@@ -203,7 +204,7 @@ describe('RagRetrieveTool', () => {
 
       const result = await tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX);
 
-      expect(result.chunks[0].excerpt.length).toBe(300);
+      expect(result.chunks[0].excerpt.length).toBe(2000);
     });
   });
 

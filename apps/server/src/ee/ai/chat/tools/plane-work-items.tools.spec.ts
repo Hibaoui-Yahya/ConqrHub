@@ -39,6 +39,7 @@ function makePlaneMock(enabled: boolean) {
     isEnabled: jest.fn().mockReturnValue(enabled),
     listProjects: jest.fn(),
     listWorkItems: jest.fn(),
+    searchWorkItems: jest.fn(),
     getWorkItem: jest.fn(),
     createWorkItem: jest.fn(),
     listCycles: jest.fn(),
@@ -80,17 +81,21 @@ describe('Plane work-item tools', () => {
     expect(PLANE_WORK_ITEM_TOOLS).toHaveLength(5);
   });
 
-  it('search_work_items returns trimmed work items', async () => {
+  it('search_work_items searches rather than listing when given a query', async () => {
+    // The list endpoint has no `search` parameter and ignores one, so routing
+    // a query through it returned the project's first N items as if they were
+    // matches — the same rows for every term.
     const plane = makePlaneMock(true);
-    plane.listWorkItems.mockResolvedValue({
+    plane.searchWorkItems.mockResolvedValue({
       results: [
         {
           id: 'wi-1',
           name: 'Fix login bug',
           sequence_id: 42,
-          state_detail: { name: 'In Progress' },
+          state__name: 'In Progress',
           priority: 'high',
-          updated_at: '2026-07-18T00:00:00Z',
+          project_id: 'proj-1',
+          project__identifier: 'PRJ',
         },
       ],
     });
@@ -99,11 +104,11 @@ describe('Plane work-item tools', () => {
 
     const result = await tool.execute({ projectId: 'proj-1', query: 'login' }, ctx);
 
-    expect(plane.listWorkItems).toHaveBeenCalledWith(
-      'proj-1',
-      { search: 'login', perPage: 20 },
+    expect(plane.searchWorkItems).toHaveBeenCalledWith(
+      { query: 'login', limit: 50, projectId: 'proj-1' },
       { delegation: 'obo-token', correlationId: 'corr-1' },
     );
+    expect(plane.listWorkItems).not.toHaveBeenCalled();
     expect(result).toEqual([
       {
         id: 'wi-1',
@@ -111,10 +116,61 @@ describe('Plane work-item tools', () => {
         sequenceId: 42,
         state: 'In Progress',
         priority: 'high',
-        estimatePointId: null,
-        updatedAt: '2026-07-18T00:00:00Z',
+        projectId: 'proj-1',
+        projectIdentifier: 'PRJ',
       },
     ]);
+  });
+
+  it('search_work_items searches every project when no projectId is given', async () => {
+    const plane = makePlaneMock(true);
+    plane.searchWorkItems.mockResolvedValue({ results: [] });
+    const tool = new SearchWorkItemsTool(
+      plane as any,
+      new ChatToolRegistry(),
+      makeDelegation(),
+    );
+
+    await tool.execute({ query: 'meloche' }, ctx);
+
+    expect(plane.searchWorkItems).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'meloche', projectId: undefined }),
+      expect.anything(),
+    );
+  });
+
+  it('search_work_items lists a project when given no query', async () => {
+    const plane = makePlaneMock(true);
+    plane.listWorkItems.mockResolvedValue({ results: [] });
+    const tool = new SearchWorkItemsTool(
+      plane as any,
+      new ChatToolRegistry(),
+      makeDelegation(),
+    );
+
+    await tool.execute({ projectId: 'proj-1' }, ctx);
+
+    expect(plane.listWorkItems).toHaveBeenCalledWith(
+      'proj-1',
+      { perPage: 50 },
+      { delegation: 'obo-token', correlationId: 'corr-1' },
+    );
+    expect(plane.searchWorkItems).not.toHaveBeenCalled();
+  });
+
+  it('search_work_items asks for a query or a project rather than guessing', async () => {
+    const plane = makePlaneMock(true);
+    const tool = new SearchWorkItemsTool(
+      plane as any,
+      new ChatToolRegistry(),
+      makeDelegation(),
+    );
+
+    const result: any = await tool.execute({}, ctx);
+
+    expect(result.error).toMatch(/query|projectId/);
+    expect(plane.listWorkItems).not.toHaveBeenCalled();
+    expect(plane.searchWorkItems).not.toHaveBeenCalled();
   });
 
   it('create_work_item passes name/description/priority to the client', async () => {
@@ -178,13 +234,13 @@ describe('Plane work-item tools', () => {
 
   it('tools surface PlaneApiError as a structured error object, not a throw-through of internals', async () => {
     const plane = makePlaneMock(true);
-    plane.listWorkItems.mockRejectedValue(
-      new PlaneApiError('Plane API 503 for /issues/', 503, false),
+    plane.searchWorkItems.mockRejectedValue(
+      new PlaneApiError('Plane API 503 for /work-items/search/', 503, false),
     );
     const registry = new ChatToolRegistry();
     const tool = new SearchWorkItemsTool(plane as any, registry, makeDelegation());
 
-    const result = await tool.execute({ projectId: 'proj-1' }, ctx);
+    const result = await tool.execute({ projectId: 'proj-1', query: 'x' }, ctx);
 
     expect(result).toEqual({ error: expect.stringContaining('ConqrPlan') });
   });

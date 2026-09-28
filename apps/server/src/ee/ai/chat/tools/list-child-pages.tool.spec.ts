@@ -5,7 +5,7 @@ jest.mock('../../../../core/page/services/page.service', () => ({
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ListChildPagesTool } from './list-child-pages.tool';
 
-const mockPage = { id: 'p1', spaceId: 'sp-1' };
+const mockPage = { id: 'p1', spaceId: 'sp-1', workspaceId: 'ws-1' };
 const mockAbility = { cannot: jest.fn() };
 const mockItems = {
   items: [

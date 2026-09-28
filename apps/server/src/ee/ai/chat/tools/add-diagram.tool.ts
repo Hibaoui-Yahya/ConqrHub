@@ -81,7 +81,7 @@ export class AddDiagramTool implements ChatTool, OnModuleInit {
     const page = await this.pageService.findById(args.pageId, true);
     if (!page) {
       throw new NotFoundException(
-        `Page not found for id "${args.pageId}". Pass either the page UUID or the short slugId returned by search_pages / list_pages.`,
+        `Page not found for id "${args.pageId}". Pass either the page UUID or the short slugId returned by search_pages / list_space_pages.`,
       );
     }
 

@@ -10,15 +10,29 @@ import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
  * closed - which is the safe direction, but it is still an outage.
  */
 
+/**
+ * Must stay in step with `DELEGATED_SCOPES` in the server's
+ * `core/integration/domain/delegated-token.util.ts`. A scope the server mints
+ * but this package does not know is unclassifiable here, and an unclassified
+ * write reads as a read.
+ */
 export const DELEGATED_SCOPES = {
   workItemRead: 'work-item:read',
   workItemCreate: 'work-item:create',
   workItemUpdate: 'work-item:update',
   workItemBulkCreate: 'work-item:bulk-create',
+  workItemDelete: 'work-item:delete',
+  commentWrite: 'comment:write',
   estimateRead: 'estimate:read',
   estimateConfigure: 'estimate:configure',
   cycleAssign: 'cycle:assign',
   moduleAssign: 'module:assign',
+  projectConfigure: 'project:configure',
+  memberRead: 'member:read',
+  /** Creating a project is not configuring one, so it stands apart. */
+  projectCreate: 'project:create',
+  /** Deleting a project destroys every work item in it. */
+  projectDelete: 'project:delete',
 } as const;
 
 export type DelegatedScope =

@@ -21,7 +21,7 @@ export class ListUnverifiedPagesTool implements ChatTool, OnModuleInit {
       .number()
       .int()
       .min(1)
-      .max(200)
+      .max(500)
       .optional()
       .describe('Max pages to return (default 50).'),
   });

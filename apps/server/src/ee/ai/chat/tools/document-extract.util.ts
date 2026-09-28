@@ -4,8 +4,8 @@ const logger = new Logger('DocumentExtract');
 
 // Bound the work + payload: large PDFs/Docs would otherwise blow up latency and
 // the chat message. First N pages, capped total characters.
-const MAX_PDF_PAGES = 100;
-export const MAX_EXTRACT_CHARS = 30000;
+const MAX_PDF_PAGES = 400;
+export const MAX_EXTRACT_CHARS = 150000;
 
 /**
  * The server tsconfig emits CommonJS, which downlevels `import()` to `require()`

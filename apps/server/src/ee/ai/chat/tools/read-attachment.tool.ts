@@ -24,8 +24,8 @@ import { extractDocumentText } from './document-extract.util';
 
 // Cap the raw bytes we inline into a chat message so a huge file can't blow up
 // the response. ~7 MB of base64 ≈ 5 MB source.
-const MAX_INLINE_BYTES = 5 * 1024 * 1024;
-const MAX_TEXT_CHARS = 20000;
+const MAX_INLINE_BYTES = 20 * 1024 * 1024;
+const MAX_TEXT_CHARS = 100000;
 
 @Injectable()
 export class ReadAttachmentTool implements ChatTool, OnModuleInit {

@@ -76,7 +76,7 @@ export class SearchSuiteTool implements ChatTool, OnModuleInit {
     'Search ConqrHub pages AND ConqrPlan work items in one call. Returns a mixed, interleaved result list where each hit says which product it came from, with a deep link when available. Use this first when you do not know whether the answer lives in the wiki or in project work.';
   readonly parameters = z.object({
     query: z.string().min(1).describe('What to search for'),
-    limit: z.number().int().min(1).max(30).optional().default(10),
+    limit: z.number().int().min(1).max(100).optional().default(30),
     planeProjectId: z
       .string()
       .optional()
@@ -102,7 +102,7 @@ export class SearchSuiteTool implements ChatTool, OnModuleInit {
       });
       return {
         sources,
-        items: items.slice(0, args.limit ?? 10).map((i) => ({
+        items: items.slice(0, args.limit ?? 30).map((i) => ({
           source: i.source === 'hub' ? 'conqrhub' : 'conqrplan',
           type: i.type,
           id: parseUrn(i.urn).id,
@@ -371,9 +371,81 @@ export class GetPageWorkCoverageTool implements ChatTool, OnModuleInit {
   }
 }
 
+/**
+ * The counterpart to link_page_to_work_item. Without it a link, once stated,
+ * could never be retracted from either product, so a page that had moved on
+ * kept reporting work coverage against items it no longer had anything to do
+ * with.
+ */
+@Injectable()
+export class UnlinkPageFromWorkItemTool implements ChatTool, OnModuleInit {
+  readonly name = 'unlink_page_from_work_item';
+  readonly description =
+    'Remove a typed link between a ConqrHub page and a ConqrPlan work item. Pass the relationshipId from get_page_links. Neither the page nor the work item is deleted — only the connection between them, which also removes the item from get_page_work_coverage.';
+  readonly parameters = z.object({
+    pageId: z
+      .string()
+      .describe('ConqrHub page UUID or slugId the link hangs off, for permission checking'),
+    relationshipId: z.string().describe('From get_page_links'),
+  });
+  constructor(
+    private readonly plane: PlaneClientService,
+    private readonly relationships: RelationshipService,
+    private readonly pageService: PageService,
+    private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly registry: ChatToolRegistry,
+  ) {}
+  onModuleInit(): void {
+    if (this.plane.isEnabled()) this.registry.register(this);
+  }
+  async execute(
+    args: { pageId: string; relationshipId: string },
+    ctx: ChatToolContext,
+  ) {
+    // Editing the page is the right bar: a link is an assertion about the
+    // page, so whoever may edit the page may retract it.
+    const page = await loadAuthorizedPage(
+      this.pageService,
+      this.spaceAbility,
+      ctx,
+      args.pageId,
+      SpaceCaslAction.Edit,
+    );
+
+    // Only links that actually belong to this page may be removed through it,
+    // otherwise any relationship id in the workspace would be reachable from
+    // a page the caller happens to be able to edit.
+    const pageUrn = buildUrn('hub', 'page', page.id);
+    const edges = await this.relationships.listForUrn(ctx.workspaceId, pageUrn);
+    const edge = edges.find((e) => e.id === args.relationshipId);
+    if (!edge) {
+      throw new NotFoundException(
+        `No link ${args.relationshipId} on page ${page.id}. List the page's links with get_page_links first.`,
+      );
+    }
+
+    try {
+      await this.relationships.remove(
+        ctx.workspaceId,
+        args.relationshipId,
+        ctx.user.id,
+      );
+      return {
+        success: true,
+        relationshipId: args.relationshipId,
+        page: { id: page.id, title: page.title ?? null },
+        removed: true,
+      };
+    } catch (err) {
+      return toolError(err);
+    }
+  }
+}
+
 export const SUITE_INTEGRATION_TOOLS = [
   SearchSuiteTool,
   LinkPageToWorkItemTool,
+  UnlinkPageFromWorkItemTool,
   GetPageLinksTool,
   CreateWorkItemFromPageTool,
   GetPageWorkCoverageTool,
