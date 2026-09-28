@@ -272,6 +272,31 @@ export class MeetingService {
       .executeTakeFirst();
   }
 
+  // ──────────── update metadata ────────────
+
+  async update(meetingId: string, opts: { title?: string }) {
+    await this.getMeetingOrThrow(meetingId);
+
+    const updates: Record<string, unknown> = {};
+    if (opts.title !== undefined) {
+      const title = opts.title.trim();
+      if (!title) {
+        throw new BadRequestException('Title cannot be empty');
+      }
+      updates.title = title;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.db
+        .updateTable('meetings')
+        .set(updates)
+        .where('id', '=', meetingId)
+        .executeTakeFirst();
+    }
+
+    return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId));
+  }
+
   // ──────────── save AI output ────────────
 
   async saveAiOutput(meetingId: string, key: string, value: string) {

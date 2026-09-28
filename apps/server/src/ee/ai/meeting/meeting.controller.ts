@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -27,6 +28,7 @@ import { StartMeetingDto } from './dto/start-meeting.dto';
 import { ListMeetingsDto } from './dto/list-meetings.dto';
 import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
+import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
@@ -172,6 +174,14 @@ export class MeetingController {
   @Get(':id')
   async get(@Param('id') id: string) {
     return this.meetingService.getDetail(id);
+  }
+
+  // ──────────── PATCH /:id (editable metadata) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
+    return this.meetingService.update(id, { title: dto.title });
   }
 
   // ──────────── DELETE /:id ────────────
