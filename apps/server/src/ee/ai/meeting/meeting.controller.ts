@@ -29,6 +29,7 @@ import { ListMeetingsDto } from './dto/list-meetings.dto';
 import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
+import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
@@ -251,6 +252,7 @@ export class MeetingController {
       renames: dto.renames,
       merges: dto.merges,
       userLinks: dto.userLinks,
+      reassign: dto.reassign,
       confirm: dto.confirm,
     });
   }
@@ -294,10 +296,12 @@ export class MeetingController {
     @Param('id') id: string,
     @Param('pid') pid: string,
     @Body() dto: ApproveProposalDto,
+    @AuthUser() user: User,
   ) {
     return this.meetingService.approveProposal(id, pid, {
       payload: dto.payload,
       confirmRisk: dto.confirmRisk,
+      actorId: user.id,
     });
   }
 
@@ -310,6 +314,18 @@ export class MeetingController {
     @Param('pid') pid: string,
   ) {
     await this.meetingService.rejectProposal(id, pid);
+  }
+
+  // ──────────── POST /:id/review (close / reopen the review stage) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/review')
+  async reviewMeeting(
+    @Param('id') id: string,
+    @Body() dto: ReviewMeetingDto,
+    @AuthUser() user: User,
+  ) {
+    return this.meetingService.reviewMeeting(id, dto.action, user.id);
   }
 
   // ──────────── POST /:id/proposals/approve-safe ────────────

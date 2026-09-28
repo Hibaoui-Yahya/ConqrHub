@@ -3,9 +3,10 @@ import { MeetingController } from './meeting.controller';
 import { MeetingService } from './meeting.service';
 import { AiProviderModule } from '../providers/ai-provider.module';
 import { SttModule } from '../stt/stt.module';
+import { IntegrationModule } from '../../../core/integration/integration.module';
 
 @Module({
-  imports: [AiProviderModule, SttModule],
+  imports: [AiProviderModule, SttModule, IntegrationModule],
   controllers: [MeetingController],
   providers: [MeetingService],
   exports: [MeetingService],
