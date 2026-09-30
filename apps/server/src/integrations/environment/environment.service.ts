@@ -578,6 +578,11 @@ export class EnvironmentService {
   }
 
   /** Callback URL registered with the IdP; defaults to APP_URL + standard path. */
+  /** Raw `SUITE_IDP_CLIENTS` registry string; parsed and validated once by SuiteIdpService. */
+  getSuiteIdpClientsRaw(): string {
+    return this.configService.get<string>('SUITE_IDP_CLIENTS', '') ?? '';
+  }
+
   getOidcRedirectUri(): string {
     return (
       this.configService.get<string>('OIDC_REDIRECT_URI') ||
