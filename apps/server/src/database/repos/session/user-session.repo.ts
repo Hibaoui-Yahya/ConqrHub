@@ -57,34 +57,40 @@ export class UserSessionRepo {
       .execute();
   }
 
+  /** Returns the ids actually revoked (empty when already revoked or not owned). */
   async revokeById(
     id: string,
     userId: string,
     workspaceId: string,
-  ): Promise<void> {
-    await this.db
+  ): Promise<string[]> {
+    const rows = await this.db
       .updateTable('userSessions')
       .set({ revokedAt: new Date() })
       .where('id', '=', id)
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)
       .where('revokedAt', 'is', null)
+      .returning('id')
       .execute();
+    return rows.map((r) => r.id);
   }
 
+  /** Returns the ids actually revoked. */
   async revokeAllExceptCurrent(
     currentSessionId: string,
     userId: string,
     workspaceId: string,
-  ): Promise<void> {
-    await this.db
+  ): Promise<string[]> {
+    const rows = await this.db
       .updateTable('userSessions')
       .set({ revokedAt: new Date() })
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)
       .where('id', '!=', currentSessionId)
       .where('revokedAt', 'is', null)
+      .returning('id')
       .execute();
+    return rows.map((r) => r.id);
   }
 
   async revokeByUserId(
@@ -102,30 +108,36 @@ export class UserSessionRepo {
       .execute();
   }
 
+  /** Returns the ids of the deleted sessions. */
   async deleteByUserId(
     userId: string,
     workspaceId: string,
     trx?: KyselyTransaction,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const db = dbOrTx(this.db, trx);
-    await db
+    const rows = await db
       .deleteFrom('userSessions')
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)
+      .returning('id')
       .execute();
+    return rows.map((r) => r.id);
   }
 
+  /** Returns the ids of the deleted sessions. */
   async deleteAllExceptCurrent(
     currentSessionId: string,
     userId: string,
     workspaceId: string,
-  ): Promise<void> {
-    await this.db
+  ): Promise<string[]> {
+    const rows = await this.db
       .deleteFrom('userSessions')
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)
       .where('id', '!=', currentSessionId)
+      .returning('id')
       .execute();
+    return rows.map((r) => r.id);
   }
 
   async deleteStale(retentionDays: number): Promise<void> {
