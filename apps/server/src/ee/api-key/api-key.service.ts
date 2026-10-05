@@ -6,6 +6,7 @@ import { ApiKey } from '@docmost/db/types/entity.types';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { isUserDisabled } from '../../common/helpers';
+import { GRANT_TYPE_MCP_OAUTH } from '../ai/mcp/oauth/oauth.constants';
 
 @Injectable()
 export class ApiKeyService {
@@ -79,6 +80,8 @@ export class ApiKeyService {
     sub: string;
     workspaceId: string;
     apiKeyId: string;
+    aud?: string | string[];
+    scope?: string;
   }): Promise<{ user: any; workspace: any }> {
     const apiKey = await this.repo.findById(
       payload.apiKeyId,
@@ -91,6 +94,17 @@ export class ApiKeyService {
 
     if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
       throw new UnauthorizedException('API key has expired');
+    }
+
+    // F27: the token kind must match the grant row. An audience-bound token
+    // (OAuth-issued MCP access token) must map to an `mcp_oauth` grant, and a
+    // manual key token must not be able to use an MCP grant row. Legacy rows
+    // predating the `type` column are manual keys.
+    const audienceBound = payload.aud !== undefined;
+    const rowIsOauthGrant =
+      (apiKey.type ?? 'default') === GRANT_TYPE_MCP_OAUTH;
+    if (audienceBound !== rowIsOauthGrant) {
+      throw new UnauthorizedException('API key grant type mismatch');
     }
 
     // Update last_used_at

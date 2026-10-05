@@ -76,6 +76,13 @@ The MCP endpoint (`/mcp`, `Feature.MCP` Enterprise) uses API keys for authentica
 
 The client can then call any of the 20 MCP tools — see [`../reference/mcp-tools.md`](../reference/mcp-tools.md).
 
+## Token audience (MCP connectors)
+
+Access tokens issued to MCP connectors through OAuth are bound to the `/mcp` resource. They are
+accepted **only** on the MCP endpoint and are rejected everywhere else on the API, even though
+they are technically API-key tokens. Use a manual API key for REST access. See
+`docs/superpowers/specs/2026-07-01-mcp-oauth-design.md`, "Audience enforcement".
+
 ## Best practices
 
 - **Name keys explicitly:** `prod-deploy-bot`, not `key-1`.
