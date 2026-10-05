@@ -1,0 +1,2 @@
+# Files in this directory run inside Linux containers; keep LF regardless of core.autocrlf.
+* text eol=lf
