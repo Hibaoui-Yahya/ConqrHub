@@ -225,6 +225,13 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   OIDC_REDIRECT_URI: string;
+
+  // --- ConqrHub as suite IdP: statically registered first-party clients ---
+  // Format `clientId|clientSecret|redirectUri;…`. Entries are validated at startup by
+  // SuiteIdpService (F28); validation messages never include the secret.
+  @IsOptional()
+  @IsString()
+  SUITE_IDP_CLIENTS: string;
 }
 
 export function validate(config: Record<string, any>) {
