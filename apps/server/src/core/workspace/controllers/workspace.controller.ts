@@ -32,6 +32,10 @@ import {
 } from '../../casl/interfaces/workspace-ability.type';
 import { FastifyReply } from 'fastify';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import {
+  clearAuthTokenCookie,
+  setAuthTokenCookie,
+} from '../../auth/auth-cookie.util';
 import { LicenseCheckService } from '../../../integrations/environment/license-check.service';
 import { CheckHostnameDto } from '../dto/check-hostname.dto';
 import { RemoveWorkspaceUserDto } from '../dto/remove-workspace-user.dto';
@@ -104,8 +108,8 @@ export class WorkspaceController {
       dto.hostname === updatedWorkspace.hostname &&
       workspace.hostname !== updatedWorkspace.hostname
     ) {
-      // log user out of old hostname
-      res.clearCookie('authToken');
+      // log user out of old hostname (F29: same attributes as the set)
+      clearAuthTokenCookie(res, this.environmentService);
     }
 
     return updatedWorkspace;
@@ -308,13 +312,7 @@ export class WorkspaceController {
       };
     }
 
-    res.setCookie('authToken', result.authToken, {
-      httpOnly: true,
-      sameSite: this.environmentService.getAuthCookieSameSite(),
-      path: '/',
-      expires: this.environmentService.getCookieExpiresIn(),
-      secure: this.environmentService.isHttps(),
-    });
+    setAuthTokenCookie(res, result.authToken, this.environmentService);
 
     return {
       requiresLogin: false,
