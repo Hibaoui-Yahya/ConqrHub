@@ -502,6 +502,47 @@ describe('what a delegated read returns', () => {
     );
   });
 
+  it('lists the children of a parent named by its slug id', async () => {
+    // Fabric execution 9eed105b: `parent_page_id` was a slug_id, handed raw
+    // to a query on a uuid column, and the listing answered 500.
+    const { service, pages } = build({
+      pages: {
+        findById: jest.fn(async () => ({
+          id: '01a11dcf-5671-72e9-b05a-b24e3c573691',
+          slugId: '2dCfu96alG',
+          spaceId: 'space-1',
+          workspaceId: WORKSPACE,
+        })),
+      },
+    });
+    await service.listPages(ctx(), 'space-1', '2dCfu96alG');
+    expect(pages.findById).toHaveBeenCalledWith('2dCfu96alG', false);
+    expect(pages.getSidebarPages).toHaveBeenCalledWith(
+      'space-1',
+      expect.anything(),
+      '01a11dcf-5671-72e9-b05a-b24e3c573691',
+      'user-1',
+      true,
+    );
+  });
+
+  it('does not list a parent from another space or workspace', async () => {
+    for (const elsewhere of [
+      { spaceId: 'space-2', workspaceId: WORKSPACE },
+      { spaceId: 'space-1', workspaceId: OTHER_WORKSPACE },
+    ]) {
+      const { service, pages } = build({
+        pages: {
+          findById: jest.fn(async () => ({ id: 'page-9', ...elsewhere })),
+        },
+      });
+      await expect(
+        service.listPages(ctx(), 'space-1', 'page-9'),
+      ).rejects.toThrow(NotFoundException);
+      expect(pages.getSidebarPages).not.toHaveBeenCalled();
+    }
+  });
+
   it('exposes business fields rather than database rows', async () => {
     // The consumer is another product, so the shape is a contract. Leaking
     // Hub's column names into it is how a rename becomes a breaking change in

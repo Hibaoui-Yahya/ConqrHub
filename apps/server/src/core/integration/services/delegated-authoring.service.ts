@@ -123,10 +123,23 @@ export class DelegatedAuthoringService {
     const ability = await this.spaceAbility.createForUser(ctx.user, space.id);
     if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page))
       throw new ForbiddenException();
+    // The parent is resolved, never passed through. `getSidebarPages` compares
+    // it against the uuid `parent_page_id` column, so a page's `slug_id` --
+    // which every other delegated route accepts, and which Fabric's agents are
+    // told to prefer -- reached Postgres as an invalid uuid and answered 500.
+    // Fabric execution 9eed105b failed that way four times on one listing,
+    // after the parent page it named had just been created by slug.
+    let parent: { id: string } | undefined;
+    if (parentPageId) {
+      const found = await this.requirePage(ctx, parentPageId);
+      if (found.spaceId !== space.id)
+        throw new NotFoundException('Resource not found');
+      parent = found;
+    }
     const { items } = await this.pages.getSidebarPages(
       space.id,
       { limit } as any,
-      parentPageId,
+      parent?.id,
       ctx.user.id,
       ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page),
     );
