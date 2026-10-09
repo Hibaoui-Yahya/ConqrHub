@@ -448,6 +448,64 @@ describe('what a delegated read returns', () => {
     expect(page.content_truncated).toBe(true);
   });
 
+  it('keeps the cell boundaries of a table it flattens', async () => {
+    // Every text node used to be joined with a space, so a table row read
+    // back as one run of words: which word was the owner, and which cell was
+    // empty, was gone. Fabric's Scrum workflow reads its task board back from
+    // the page it wrote, so that table is the plan's own state.
+    const cell = (text: string, type = 'tableCell') => ({
+      type,
+      content: text
+        ? [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+        : [{ type: 'paragraph' }],
+    });
+    const row = (cells: object[]) => ({ type: 'tableRow', content: cells });
+    const { service } = build({
+      pages: {
+        findById: jest.fn(async () => ({
+          id: 'page-1',
+          slugId: 'slug-1',
+          spaceId: 'space-1',
+          workspaceId: WORKSPACE,
+          updatedAt: new Date('2026-02-02T00:00:00.000Z'),
+          content: {
+            type: 'doc',
+            content: [
+              {
+                type: 'heading',
+                content: [{ type: 'text', text: 'Current task board' }],
+              },
+              {
+                type: 'table',
+                content: [
+                  row([
+                    cell('ID', 'tableHeader'),
+                    cell('Title', 'tableHeader'),
+                    cell('Owner', 'tableHeader'),
+                    cell('Due', 'tableHeader'),
+                  ]),
+                  row([
+                    cell('T-1'),
+                    cell('Ship login'),
+                    cell('Khalid'),
+                    cell(''),
+                  ]),
+                ],
+              },
+            ],
+          },
+        })),
+      },
+    });
+
+    const page = (await service.readPage(ctx(), 'page-1')) as {
+      content: string;
+    };
+    expect(page.content).toBe(
+      'Current task board | ID | Title | Owner | Due | | T-1 | Ship login | Khalid | |',
+    );
+  });
+
   it('applies the requested content operation rather than always replacing', async () => {
     const { service, pages } = build();
     await service.updatePage(ctx(), {

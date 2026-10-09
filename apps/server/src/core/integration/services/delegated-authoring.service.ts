@@ -24,13 +24,19 @@ import type { DelegationContext } from './suite-delegation-verifier.service';
 
 const MAX_PAGE_CONTENT_CHARS = 8000;
 
+// A table row keeps its cell boundaries: `| a | b |`. Joining a row's cells with spaces like
+// any other node turned "T-1 | Ship login | Khalid" into "T-1 Ship login Khalid", and a
+// reader -- Fabric's Scrum workflow reads its own task board back from the page -- can no
+// longer tell where a title ends and an owner begins, or that a cell was empty.
 function documentText(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
-  const node = value as { text?: unknown; content?: unknown };
+  const node = value as { type?: unknown; text?: unknown; content?: unknown };
   const own = typeof node.text === 'string' ? node.text : '';
-  const children = Array.isArray(node.content)
-    ? node.content.map(documentText).join(' ')
-    : '';
+  const parts = Array.isArray(node.content)
+    ? node.content.map(documentText)
+    : [];
+  const children =
+    node.type === 'tableRow' ? `| ${parts.join(' | ')} |` : parts.join(' ');
   return [own, children].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 
