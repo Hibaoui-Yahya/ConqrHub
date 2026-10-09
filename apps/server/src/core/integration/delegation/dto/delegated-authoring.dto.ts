@@ -44,6 +44,16 @@ export class PageIdDto {
   page_id: string;
 }
 
+export class PageReadDto extends PageIdDto {
+  // Only the first N sections of the page (see `readPage`); absent means the whole page.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  sections?: number;
+}
+
 export class SpaceListDto extends Limit50Dto {}
 export class SpaceReadDto extends SpaceIdDto {}
 

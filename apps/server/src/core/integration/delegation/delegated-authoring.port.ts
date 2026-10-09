@@ -19,7 +19,11 @@ export interface DelegatedAuthoringPort {
     limit?: number,
   ): Promise<unknown>;
   recentPages(ctx: DelegationContext, limit?: number): Promise<unknown>;
-  readPage(ctx: DelegationContext, id: string): Promise<unknown>;
+  readPage(
+    ctx: DelegationContext,
+    id: string,
+    sections?: number,
+  ): Promise<unknown>;
   breadcrumbs(ctx: DelegationContext, id: string): Promise<unknown>;
   history(ctx: DelegationContext, id: string, limit?: number): Promise<unknown>;
   createPage(ctx: DelegationContext, dto: unknown): Promise<unknown>;

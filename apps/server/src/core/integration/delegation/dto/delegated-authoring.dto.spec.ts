@@ -7,6 +7,7 @@ import {
   PageHistoryDto,
   PageIdDto,
   PageListDto,
+  PageReadDto,
   PageRecentDto,
   PageSearchDto,
   PageUpdateDto,
@@ -152,6 +153,23 @@ describe('bounds and enums are the adapter contract, in both repositories', () =
     // what a sensible page size is for that query. A DTO default would make
     // two of them.
     await expect(parse(SpaceListDto, {})).resolves.toEqual({});
+  });
+});
+
+describe('a page read may ask for its leading sections only', () => {
+  it('accepts a section count and reads the whole page without one', async () => {
+    await expect(
+      parse(PageReadDto, { page_id: 'page-1', sections: '1' }),
+    ).resolves.toEqual({ page_id: 'page-1', sections: 1 });
+    await expect(parse(PageReadDto, { page_id: 'page-1' })).resolves.toEqual({
+      page_id: 'page-1',
+    });
+  });
+
+  it('refuses a count outside 1..50', async () => {
+    await rejects(PageReadDto, { page_id: 'page-1', sections: 0 });
+    await rejects(PageReadDto, { page_id: 'page-1', sections: 51 });
+    await rejects(PageReadDto, { page_id: 'page-1', sections: 1.5 });
   });
 });
 

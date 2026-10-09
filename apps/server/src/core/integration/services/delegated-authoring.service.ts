@@ -40,6 +40,38 @@ function documentText(value: unknown): string {
   return [own, children].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 
+// The first `count` sections of a document, and how many it left out. A section starts at a
+// top-level heading no deeper than the document's first one, so its sub-headings stay inside
+// it; text before the first heading stays with the first section. A page kept newest-first
+// -- Fabric's Scrum workflow prepends one dated section per meeting -- is then read at the
+// cost of its newest entry rather than of its whole history: the full read grew with every
+// meeting recorded, and its cost with it.
+function leadingSections(
+  doc: unknown,
+  count: number,
+): { doc: unknown; omitted: number } {
+  const node = doc as { content?: unknown };
+  if (!doc || typeof doc !== 'object' || !Array.isArray(node.content)) {
+    return { doc, omitted: 0 };
+  }
+  const level = (child: any): number | null =>
+    child?.type === 'heading' ? Number(child.attrs?.level ?? 1) : null;
+  const top = node.content.map(level).find((l) => l !== null);
+  if (top === undefined || top === null) return { doc, omitted: 0 };
+  let seen = 0;
+  let cut = node.content.length;
+  for (let i = 0; i < node.content.length; i += 1) {
+    const l = level(node.content[i]);
+    if (l === null || l > top) continue;
+    seen += 1;
+    if (seen === count + 1) cut = i;
+  }
+  return {
+    doc: { ...node, content: node.content.slice(0, cut) },
+    omitted: Math.max(0, seen - count),
+  };
+}
+
 @Injectable()
 export class DelegatedAuthoringService {
   constructor(
@@ -171,19 +203,30 @@ export class DelegatedAuthoringService {
     };
   }
 
-  async readPage(ctx: DelegationContext, pageId: string) {
+  async readPage(ctx: DelegationContext, pageId: string, sections?: number) {
     const page = await this.requirePage(ctx, pageId, true);
     await this.pageAccess.validateCanView(page, ctx.user);
     let content = '';
+    let omitted = 0;
     try {
-      content = page.content ? documentText(page.content) : '';
+      if (page.content) {
+        const read = sections
+          ? leadingSections(page.content, sections)
+          : { doc: page.content, omitted: 0 };
+        content = documentText(read.doc);
+        omitted = read.omitted;
+      }
     } catch {
       content = '';
     }
+    // `content_truncated` keeps meaning the character cap and nothing else: a reader that
+    // asked for one section and was told its page was truncated would take that section
+    // for incomplete.
     return {
       ...this.pageSummary(page),
       content: content.slice(0, MAX_PAGE_CONTENT_CHARS),
       content_truncated: content.length > MAX_PAGE_CONTENT_CHARS,
+      sections_omitted: omitted,
     };
   }
 

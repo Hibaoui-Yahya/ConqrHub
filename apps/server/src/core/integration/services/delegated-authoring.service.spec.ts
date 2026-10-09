@@ -506,6 +506,94 @@ describe('what a delegated read returns', () => {
     );
   });
 
+  it('reads only the sections asked for, and says how many it left out', async () => {
+    // Fabric's Scrum workflow prepends one dated section per meeting and reads
+    // only the newest back. A whole-page read grew with every meeting recorded,
+    // so every run cost more than the one before it.
+    const text = (t: string) => [{ type: 'text', text: t }];
+    const heading = (level: number, t: string) => ({
+      type: 'heading',
+      attrs: { level },
+      content: text(t),
+    });
+    const para = (t: string) => ({ type: 'paragraph', content: text(t) });
+    const { service } = build({
+      pages: {
+        findById: jest.fn(async () => ({
+          id: 'page-1',
+          slugId: 'slug-1',
+          spaceId: 'space-1',
+          workspaceId: WORKSPACE,
+          updatedAt: new Date('2026-02-02T00:00:00.000Z'),
+          content: {
+            type: 'doc',
+            content: [
+              para('Pinned note.'),
+              heading(2, 'Daily Scrum 2026-10-08'),
+              para('Meeting ID: CSM-2026-10-08'),
+              heading(3, 'Current task board'),
+              para('T-1 open'),
+              heading(2, 'Daily Scrum 2026-10-07'),
+              para('Meeting ID: CSM-2026-10-07'),
+              heading(2, 'Daily Scrum 2026-10-06'),
+              para('Meeting ID: CSM-2026-10-06'),
+            ],
+          },
+        })),
+      },
+    });
+
+    const first = (await service.readPage(ctx(), 'page-1', 1)) as {
+      content: string;
+      content_truncated: boolean;
+      sections_omitted: number;
+    };
+    expect(first.content).toBe(
+      'Pinned note. Daily Scrum 2026-10-08 Meeting ID: CSM-2026-10-08 Current task board T-1 open',
+    );
+    expect(first.sections_omitted).toBe(2);
+    expect(first.content_truncated).toBe(false);
+
+    const whole = (await service.readPage(ctx(), 'page-1')) as {
+      content: string;
+      sections_omitted: number;
+    };
+    expect(whole.content).toContain('CSM-2026-10-06');
+    expect(whole.sections_omitted).toBe(0);
+
+    const more = (await service.readPage(ctx(), 'page-1', 5)) as {
+      sections_omitted: number;
+    };
+    expect(more.sections_omitted).toBe(0);
+  });
+
+  it('reads a page with no heading whole, whatever sections asked for', async () => {
+    const { service } = build({
+      pages: {
+        findById: jest.fn(async () => ({
+          id: 'page-1',
+          slugId: 'slug-1',
+          spaceId: 'space-1',
+          workspaceId: WORKSPACE,
+          updatedAt: new Date('2026-02-02T00:00:00.000Z'),
+          content: {
+            type: 'doc',
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: 'One.' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'Two.' }] },
+            ],
+          },
+        })),
+      },
+    });
+    const page = (await service.readPage(ctx(), 'page-1', 1)) as {
+      content: string;
+      sections_omitted: number;
+    };
+    expect(page.content).toBe('One. Two.');
+    expect(page.sections_omitted).toBe(0);
+  });
+
   it('applies the requested content operation rather than always replacing', async () => {
     const { service, pages } = build();
     await service.updatePage(ctx(), {

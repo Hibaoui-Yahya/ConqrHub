@@ -27,6 +27,7 @@ import {
   PageHistoryDto,
   PageIdDto,
   PageListDto,
+  PageReadDto,
   PageRecentDto,
   PageSearchDto,
   PageUpdateDto,
@@ -161,8 +162,8 @@ export class SuiteDelegationController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(SuiteDelegationGuard)
   @RequiresDelegationScope(SUITE_DELEGATED_SCOPES.pageRead)
-  readPage(@Delegation() ctx: DelegationContext, @Body() dto: PageIdDto) {
-    return this.authoring.readPage(ctx, dto.page_id);
+  readPage(@Delegation() ctx: DelegationContext, @Body() dto: PageReadDto) {
+    return this.authoring.readPage(ctx, dto.page_id, dto.sections);
   }
 
   @Post('pages/breadcrumbs')
