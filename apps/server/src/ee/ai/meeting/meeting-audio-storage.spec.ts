@@ -3,6 +3,7 @@ import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { randomUUID } from 'node:crypto';
 import { MeetingService } from './meeting.service';
+import { mixMeetingPlayback } from './meeting-audio.util';
 
 // Unused document/provider constructors are injected below. Keep their ESM
 // editor/SDK dependencies outside this audio + PostgreSQL integration test.
@@ -14,7 +15,9 @@ jest.mock('../providers/ai-provider.service', () => ({
   AiProviderService: class {},
 }));
 // Actual encoding is separately checked with FFmpeg and known frequencies.
-jest.mock('./meeting-audio.util', () => ({ mixMeetingPlayback: jest.fn(async () => Buffer.from('combined playback')) }));
+jest.mock('./meeting-audio.util', () => ({
+  mixMeetingPlayback: jest.fn(async () => Buffer.from('combined playback')),
+}));
 
 // This integration spec runs against a disposable local PostgreSQL container.
 const suite = process.env.MEETING_TEST_DATABASE_URL ? describe : describe.skip;
@@ -35,7 +38,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   beforeAll(async () => {
     db = new Kysely({
       dialect: new PostgresJSDialect({
-        postgres: postgres(process.env.MEETING_TEST_DATABASE_URL, {max: 5}),
+        postgres: postgres(process.env.MEETING_TEST_DATABASE_URL, { max: 5 }),
       }),
       plugins: [new CamelCasePlugin()],
     });
@@ -103,6 +106,9 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       {} as any,
       {} as any,
     );
+    jest
+      .spyOn(service as any, 'getWorkspaceName')
+      .mockResolvedValue('La Tête Chercheuse');
   });
   const meeting = () =>
     db
@@ -193,35 +199,199 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     expect(
       result.segments.map((s: any) => [s.channel, s.speaker, s.text]),
     ).toEqual([
-      ['mic', 'Me', 'mic'],
-      ['system', 'Participant 1', 'remote'],
+      ['mic', 'Speaker 1', 'mic'],
+      ['system', 'Speaker 2', 'remote'],
     ]);
-    expect(result.text).toContain('Me: mic');
-    expect(result.text).toContain('Participant 1: remote');
+    expect(result.text).toContain('Speaker 1: mic');
+    expect(result.text).toContain('Speaker 2: remote');
     expect((await meeting()).durationMs).toBe(3000);
   });
 
   it('persists combined playback as an object while retaining both inputs with the production Postgres.js driver', async () => {
-    await Promise.all([service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system'))]);
+    await Promise.all([
+      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+    ]);
     const row = await meeting();
     const sources = await (service as any).resolveAudioSources(row);
     await (service as any).prepareCombinedPlayback(row, sources);
     const manifest = (await meeting()).audioManifest;
-    expect(typeof manifest).toBe('object'); expect(Array.isArray(manifest)).toBe(false);
-    expect(manifest.chunks).toHaveLength(2); expect(manifest.retained).toBe(true);
-    expect(files.get(manifest.playbackPath)?.toString()).toBe('combined playback');
-    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({filePath:manifest.playbackPath,mime:'audio/mp4'});
+    expect(typeof manifest).toBe('object');
+    expect(Array.isArray(manifest)).toBe(false);
+    expect(manifest.chunks).toHaveLength(2);
+    expect(manifest.retained).toBe(true);
+    expect(files.get(manifest.playbackPath)?.toString()).toBe(
+      'combined playback',
+    );
+    expect(
+      await (service as any).resolveAudioFile(meetingId, 'original'),
+    ).toEqual({ filePath: manifest.playbackPath, mime: 'audio/mp4' });
+  });
+
+  it('retains three acoustic voices and repeated remote identity on the shared timeline', async () => {
+    await Promise.all([
+      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic', 9000)),
+      service.ingestChunk(
+        meetingId,
+        Buffer.from('remote'),
+        meta('system', 9000),
+      ),
+    ]);
+    (service as any).stt.transcribeDiarized.mockImplementation(
+      async (audio: Buffer) => ({
+        text: '',
+        language: 'fr',
+        segments:
+          audio.toString() === 'mic'
+            ? [{ text: 'Alice parle.', startMs: 0, endMs: 800, speakerId: 'a' }]
+            : [
+                {
+                  text: 'Julie parle.',
+                  startMs: 1200,
+                  endMs: 2000,
+                  speakerId: 'a',
+                },
+                {
+                  text: 'Paul répond.',
+                  startMs: 3000,
+                  endMs: 4000,
+                  speakerId: 'b',
+                },
+                {
+                  text: 'Julie revient.',
+                  startMs: 7000,
+                  endMs: 8000,
+                  speakerId: 'a',
+                },
+              ],
+      }),
+    );
+    const result = await (service as any).transcribeMeeting(
+      meetingId,
+      await (service as any).resolveAudioSources(await meeting()),
+    );
+    expect(result.segments.map((s: any) => s.speaker)).toEqual([
+      'Speaker 1',
+      'Speaker 2',
+      'Speaker 3',
+      'Speaker 2',
+    ]);
+    expect(
+      result.segments.every(
+        (s: any) => s.attribution === 'acoustic' && s.rawText === s.text,
+      ),
+    ).toBe(true);
+  });
+
+  it('stores the entire long transcript beyond the analysis prompt limit', async () => {
+    const speech = 'détail important '.repeat(3000) + 'FIN DU TRANSCRIPT';
+    await service.ingestChunk(
+      meetingId,
+      Buffer.from(speech),
+      meta('mic', 120000),
+    );
+    await (service as any).transcribeMeeting(
+      meetingId,
+      await (service as any).resolveAudioSources(await meeting()),
+    );
+    expect((await meeting()).transcript).toBe('Speaker 1: ' + speech);
+  });
+
+  it('transcribes multiple files of the same channel together to keep voice ids stable', async () => {
+    await service.ingestChunk(
+      meetingId,
+      Buffer.from('part one'),
+      meta('system', 3000),
+    );
+    await service.ingestChunk(meetingId, Buffer.from('part two'), {
+      ...meta('system', 3000),
+      sequence: 1,
+      startMs: 6000,
+    });
+    (service as any).stt.transcribeDiarized.mockResolvedValue({
+      text: 'One. Two.',
+      language: 'en',
+      segments: [
+        { text: 'One.', startMs: 0, endMs: 1000, speakerId: 'voice' },
+        { text: 'Two.', startMs: 6000, endMs: 7000, speakerId: 'voice' },
+      ],
+    });
+    const result = await (service as any).transcribeMeeting(
+      meetingId,
+      await (service as any).resolveAudioSources(await meeting()),
+    );
+    expect((service as any).stt.transcribeDiarized).toHaveBeenCalledTimes(1);
+    expect(mixMeetingPlayback).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        { audio: Buffer.from('part one'), startMs: 0 },
+        { audio: Buffer.from('part two'), startMs: 6000 },
+      ]),
+    );
+    expect(result.segments.map((s: any) => s.speaker)).toEqual([
+      'Speaker 1',
+      'Speaker 1',
+    ]);
+    expect(result.segments[1].startMs).toBe(6000);
+  });
+
+  it('keeps words and acoustic identity when punctuation AI tries to rewrite speech', async () => {
+    const segments = [
+      {
+        id: 'one',
+        speaker: 'Speaker 1',
+        channel: 'mic',
+        text: 'oui oui pas 5000',
+        rawText: 'oui oui pas 5000',
+        startMs: 1,
+        endMs: 900,
+        confidence: null,
+        attribution: 'acoustic',
+      },
+      {
+        id: 'two',
+        speaker: 'Speaker 2',
+        channel: 'system',
+        text: 'je confirme jeudi',
+        rawText: 'je confirme jeudi',
+        startMs: 1000,
+        endMs: 2000,
+        confidence: null,
+        attribution: 'acoustic',
+      },
+    ];
+    (service as any).ai.isAvailable = () => true;
+    (service as any).ai.generate = jest.fn(async () => ({
+      text: JSON.stringify({ one: 'Oui, 5000.', two: 'Je confirme jeudi.' }),
+    }));
+    await (service as any).correctMeetingText(segments);
+    expect(segments[0].text).toBe('oui oui pas 5000');
+    expect(segments[1].text).toBe('Je confirme jeudi.');
+    expect(segments[1].rawText).toBe('je confirme jeudi');
+    expect(segments.map((s) => [s.speaker, s.startMs, s.endMs])).toEqual([
+      ['Speaker 1', 1, 900],
+      ['Speaker 2', 1000, 2000],
+    ]);
   });
 
   it('reads legacy double-encoded manifest/playback fragments without losing the source files', async () => {
     files.set('combined.m4a', Buffer.from('combined playback'));
-    const base = { chunks: [{ source:'mic',sequence:0,path:'mic.webm' },{ source:'system',sequence:0,path:'system.webm' }] };
-    await db.updateTable('meetings').set({
-      audioManifest: sql`${JSON.stringify([JSON.stringify(base), {playbackPath:'combined.m4a'}])}::text::jsonb`,
-    }).where('id','=',meetingId).execute();
+    const base = {
+      chunks: [
+        { source: 'mic', sequence: 0, path: 'mic.webm' },
+        { source: 'system', sequence: 0, path: 'system.webm' },
+      ],
+    };
+    await db
+      .updateTable('meetings')
+      .set({
+        audioManifest: sql`${JSON.stringify([JSON.stringify(base), { playbackPath: 'combined.m4a' }])}::text::jsonb`,
+      })
+      .where('id', '=', meetingId)
+      .execute();
     const sources = await (service as any).resolveAudioSources(await meeting());
-    expect(sources.map((s:any)=>s.source)).toEqual(['mic','system']);
-    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({filePath:'combined.m4a',mime:'audio/mp4'});
+    expect(sources.map((s: any) => s.source)).toEqual(['mic', 'system']);
+    expect(
+      await (service as any).resolveAudioFile(meetingId, 'original'),
+    ).toEqual({ filePath: 'combined.m4a', mime: 'audio/mp4' });
   });
 });

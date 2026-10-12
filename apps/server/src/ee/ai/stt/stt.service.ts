@@ -30,6 +30,7 @@ export type DiarizedSegment = {
   endMs: number;
   /** Provider speaker id (e.g. "speaker_1"); null when not diarized. */
   speakerId: string | null;
+  timing?: 'measured' | 'estimated';
 };
 
 export type DiarizedResult = {
@@ -79,7 +80,12 @@ export class SttService {
       return { raw, corrected: raw, model, durationMs: Date.now() - started };
     }
 
-    const corrected = await this.correct(raw, context, workspaceId, workspaceName);
+    const corrected = await this.correct(
+      raw,
+      context,
+      workspaceId,
+      workspaceName,
+    );
 
     return { raw, corrected, model, durationMs: Date.now() - started };
   }
@@ -92,6 +98,7 @@ export class SttService {
   async transcribeDiarized(
     audio: Buffer,
     mime: string,
+    contextBias: string[] = [],
   ): Promise<DiarizedResult> {
     const apiKey = this.env.getMistralApiKey();
     if (!apiKey) {
@@ -100,7 +107,14 @@ export class SttService {
     const model = this.env.getAiSttModel();
     const data = await this.requestTranscription(audio, mime, model, apiKey, {
       diarize: 'true',
-      timestamp_granularities: 'segment',
+      // The provider requires segment granularity when diarization is enabled.
+      timestamp_granularities: ['segment'],
+      // Multipart context bias uses comma-separated vocabulary tokens.
+      context_bias: [
+        ...new Set(
+          contextBias.flatMap((s) => s.split(/[\s,]+/)).filter(Boolean),
+        ),
+      ].slice(0, 100),
     });
 
     const segments: DiarizedSegment[] = (
@@ -115,7 +129,25 @@ export class SttService {
             ? String(seg.speaker_id)
             : null,
       }))
-      .filter((seg: DiarizedSegment) => seg.text !== '');
+      .filter((seg: DiarizedSegment) => seg.text !== '')
+      .map((seg) => {
+        if (!Number.isFinite(seg.startMs) || !Number.isFinite(seg.endMs)) {
+          // Do not discard spoken words because their provider timing is bad.
+          return {
+            ...seg,
+            startMs: 0,
+            endMs: 0,
+            speakerId: null,
+            timing: 'estimated' as const,
+          };
+        }
+        return {
+          ...seg,
+          endMs: Math.max(seg.startMs, seg.endMs),
+          timing: 'measured' as const,
+        };
+      })
+      .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
 
     return {
       text: String(data.text ?? '').trim(),
@@ -140,7 +172,7 @@ export class SttService {
     mime: string,
     model: string,
     apiKey: string,
-    extraFields: Record<string, string> = {},
+    extraFields: Record<string, string | string[]> = {},
   ): Promise<Record<string, any>> {
     // MediaRecorder emits containerized streams (webm/ogg/opus) that some
     // ASR backends decode poorly. Transcode to PCM WAV when ffmpeg is
@@ -158,17 +190,15 @@ export class SttService {
     form.append('model', model);
     form.append('response_format', 'json');
     for (const [key, value] of Object.entries(extraFields)) {
-      form.append(key, value);
+      if (Array.isArray(value) && value.length === 0) continue;
+      form.append(key, Array.isArray(value) ? value.join(',') : value);
     }
 
-    const res = await fetch(
-      'https://api.mistral.ai/v1/audio/transcriptions',
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form as any,
-      },
-    );
+    const res = await fetch('https://api.mistral.ai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form as any,
+    });
 
     const raw = await res.text();
 
@@ -300,9 +330,7 @@ export class SttService {
 
     const properNouns = [workspaceName, pageTitle].filter(Boolean).join(', ');
     const prompt = [
-      properNouns
-        ? `Proper nouns to preserve verbatim: ${properNouns}.`
-        : '',
+      properNouns ? `Proper nouns to preserve verbatim: ${properNouns}.` : '',
       excerpt ? `Nearby text: "${excerpt}"` : '',
       `Raw transcript: "${raw}"`,
       '',
