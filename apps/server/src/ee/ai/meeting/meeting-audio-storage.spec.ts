@@ -1,5 +1,6 @@
-import { Kysely, PostgresDialect, CamelCasePlugin, sql } from 'kysely';
-import { Pool } from 'pg';
+import { Kysely, CamelCasePlugin, sql } from 'kysely';
+import { PostgresJSDialect } from 'kysely-postgres-js';
+import * as postgres from 'postgres';
 import { randomUUID } from 'node:crypto';
 import { MeetingService } from './meeting.service';
 
@@ -12,6 +13,8 @@ jest.mock('../stt/stt.service', () => ({ SttService: class {} }));
 jest.mock('../providers/ai-provider.service', () => ({
   AiProviderService: class {},
 }));
+// Actual encoding is separately checked with FFmpeg and known frequencies.
+jest.mock('./meeting-audio.util', () => ({ mixMeetingPlayback: jest.fn(async () => Buffer.from('combined playback')) }));
 
 // This integration spec runs against a disposable local PostgreSQL container.
 const suite = process.env.MEETING_TEST_DATABASE_URL ? describe : describe.skip;
@@ -31,10 +34,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
 
   beforeAll(async () => {
     db = new Kysely({
-      dialect: new PostgresDialect({
-        pool: new Pool({
-          connectionString: process.env.MEETING_TEST_DATABASE_URL,
-        }),
+      dialect: new PostgresJSDialect({
+        postgres: postgres(process.env.MEETING_TEST_DATABASE_URL, {max: 5}),
       }),
       plugins: [new CamelCasePlugin()],
     });
@@ -73,6 +74,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
         files.set(path, audio);
       }),
       read: jest.fn(async (path: string) => files.get(path)),
+      exists: jest.fn(async (path: string) => files.has(path)),
       delete: jest.fn(async (path: string) => {
         files.delete(path);
       }),
@@ -197,5 +199,29 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     expect(result.text).toContain('Me: mic');
     expect(result.text).toContain('Participant 1: remote');
     expect((await meeting()).durationMs).toBe(3000);
+  });
+
+  it('persists combined playback as an object while retaining both inputs with the production Postgres.js driver', async () => {
+    await Promise.all([service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system'))]);
+    const row = await meeting();
+    const sources = await (service as any).resolveAudioSources(row);
+    await (service as any).prepareCombinedPlayback(row, sources);
+    const manifest = (await meeting()).audioManifest;
+    expect(typeof manifest).toBe('object'); expect(Array.isArray(manifest)).toBe(false);
+    expect(manifest.chunks).toHaveLength(2); expect(manifest.retained).toBe(true);
+    expect(files.get(manifest.playbackPath)?.toString()).toBe('combined playback');
+    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({filePath:manifest.playbackPath,mime:'audio/mp4'});
+  });
+
+  it('reads legacy double-encoded manifest/playback fragments without losing the source files', async () => {
+    files.set('combined.m4a', Buffer.from('combined playback'));
+    const base = { chunks: [{ source:'mic',sequence:0,path:'mic.webm' },{ source:'system',sequence:0,path:'system.webm' }] };
+    await db.updateTable('meetings').set({
+      audioManifest: sql`${JSON.stringify([JSON.stringify(base), {playbackPath:'combined.m4a'}])}::text::jsonb`,
+    }).where('id','=',meetingId).execute();
+    const sources = await (service as any).resolveAudioSources(await meeting());
+    expect(sources.map((s:any)=>s.source)).toEqual(['mic','system']);
+    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({filePath:'combined.m4a',mime:'audio/mp4'});
   });
 });

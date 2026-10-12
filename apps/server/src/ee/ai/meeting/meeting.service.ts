@@ -178,7 +178,7 @@ export class MeetingService {
         await this.storage.upload(chunkPath, file);
         uploadedPath = chunkPath;
         const manifest =
-          this.parseJson<Record<string, any>>(meeting.audioManifest) || {};
+          this.parseAudioManifest(meeting.audioManifest);
         const previous = (manifest.chunks || []) as Array<Record<string, any>>;
         replacedPath =
           previous.find(
@@ -198,7 +198,7 @@ export class MeetingService {
         await trx
           .updateTable('meetings')
           .set({
-            audioManifest: JSON.stringify({ ...manifest, chunks }),
+            audioManifest: sql`${JSON.stringify({ ...manifest, chunks })}::text::jsonb`,
             durationMs: Math.max(
               meeting.durationMs ?? 0,
               meta.startMs + meta.durationMs,
@@ -524,7 +524,7 @@ export class MeetingService {
     // Check if audio is available (S3/B2 driver or local with file)
     let audioAvailable = false;
     try {
-      const manifest = this.parseJson(meeting.audioManifest) || {};
+      const manifest = this.parseAudioManifest(meeting.audioManifest);
       const prefix = meeting.audioStoragePrefix;
       if (
         meeting.captureKind === 'live' &&
@@ -1269,8 +1269,7 @@ export class MeetingService {
     target: string,
   ): Promise<{ filePath: string; mime: string }> {
     const meeting = await this.getMeetingOrThrow(meetingId);
-    const manifest =
-      this.parseJson<Record<string, any>>(meeting.audioManifest) || {};
+    const manifest = this.parseAudioManifest(meeting.audioManifest);
 
     let filePath: string | null = null;
     let mime: string | null = null;
@@ -1380,23 +1379,7 @@ export class MeetingService {
       }
 
       if (meeting.captureKind === 'live' && audio.length > 1) {
-        const playback = await mixMeetingPlayback(
-          await Promise.all(
-            audio.map(async (source) => ({
-              audio: await this.storage.read(source.path),
-              startMs: source.startMs,
-            })),
-          ),
-        );
-        const playbackPath = `${meeting.audioStoragePrefix || `meetings/${meetingId}`}/playback.m4a`;
-        await this.storage.upload(playbackPath, playback);
-        await this.db
-          .updateTable('meetings')
-          .set({
-            audioManifest: sql`COALESCE(audio_manifest, '{}'::jsonb) || ${JSON.stringify({ playbackPath })}::jsonb`,
-          })
-          .where('id', '=', meetingId)
-          .execute();
+        await this.prepareCombinedPlayback(meeting, audio);
       }
 
       const { segments, text } = await this.transcribeMeeting(meetingId, audio);
@@ -1468,13 +1451,28 @@ export class MeetingService {
     }
   }
 
+  private async prepareCombinedPlayback(
+    meeting: {id: string; audioStoragePrefix: string | null; audioManifest: unknown},
+    audio: AudioSource[],
+  ) {
+    const playback = await mixMeetingPlayback(await Promise.all(audio.map(async source => ({
+      audio: await this.storage.read(source.path), startMs: source.startMs,
+    }))));
+    const playbackPath = `${meeting.audioStoragePrefix || `meetings/${meeting.id}`}/playback.m4a`;
+    await this.storage.upload(playbackPath, playback);
+    await this.db.updateTable('meetings').set({
+      // Postgres.js serializes inferred jsonb parameters. Bind text explicitly
+      // so a JSON object cannot become a double-encoded string literal.
+      audioManifest: sql`${JSON.stringify({ ...this.parseAudioManifest(meeting.audioManifest), playbackPath })}::text::jsonb`,
+    }).where('id', '=', meeting.id).execute();
+  }
+
   /** Find the audio file(s) backing this meeting. */
   private async resolveAudioSources(meeting: {
     captureKind: string | null;
     audioManifest: unknown;
   }): Promise<AudioSource[]> {
-    const manifest =
-      this.parseJson<Record<string, any>>(meeting.audioManifest) || {};
+    const manifest = this.parseAudioManifest(meeting.audioManifest);
 
     if (meeting.captureKind !== 'live' && manifest.originalPath) {
       return [
@@ -2419,6 +2417,17 @@ export class MeetingService {
         detail: detail ? JSON.stringify(detail) : '{}',
       })
       .executeTakeFirst();
+  }
+
+  private parseAudioManifest(value: unknown): Record<string, any> {
+    const parsed = this.parseJson(value);
+    // Older jsonb string values concatenated with playback metadata can become
+    // a JSON array. Normalize those fragments without changing transcript arrays.
+    if (Array.isArray(parsed)) {
+      return Object.assign({}, ...parsed.map(part => this.parseJson(part))
+        .filter(part => part && typeof part === 'object' && !Array.isArray(part)));
+    }
+    return parsed && typeof parsed === 'object' ? parsed : {};
   }
 
   private parseJson<T = any>(value: unknown): T | null {

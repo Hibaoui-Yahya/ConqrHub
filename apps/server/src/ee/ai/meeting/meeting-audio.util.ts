@@ -41,6 +41,8 @@ export function playbackArguments(
     'aac',
     '-b:a',
     '128k',
+    '-movflags',
+    '+faststart',
     output,
   ];
 }
