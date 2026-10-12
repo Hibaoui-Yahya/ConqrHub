@@ -126,13 +126,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   return apps.filter((app) => !app.external || Boolean(app.href));
 }
 
-function AppTile({
-  app,
-  onNavigate,
-}: {
-  app: SuiteApp;
-  onNavigate: () => void;
-}) {
+function AppTile({ app }: { app: SuiteApp }) {
   const inner = (
     <>
       <Box className={classes.tileIcon} style={{ background: app.color }}>
@@ -151,29 +145,31 @@ function AppTile({
     </>
   );
 
-  const cls = `${classes.tile} ${app.current ? classes.tileCurrent : ""}`;
+  const cls = `${classes.menuItemReset} ${classes.tile} ${app.current ? classes.tileCurrent : ""}`;
 
   if (app.external) {
     return (
-      <UnstyledButton
+      <Menu.Item
         component="a"
         href={app.href}
         className={cls}
-        onClick={onNavigate}
+        styles={{
+          itemLabel: { display: "flex", alignItems: "center", gap: 12 },
+        }}
       >
         {inner}
-      </UnstyledButton>
+      </Menu.Item>
     );
   }
   return (
-    <UnstyledButton
+    <Menu.Item
       component={Link}
       to={app.href}
       className={cls}
-      onClick={onNavigate}
+      styles={{ itemLabel: { display: "flex", alignItems: "center", gap: 12 } }}
     >
       {inner}
-    </UnstyledButton>
+    </Menu.Item>
   );
 }
 
@@ -202,13 +198,7 @@ export default function AppSwitcher() {
       <Menu.Dropdown className={classes.dropdown}>
         <Text className={classes.dropdownLabel}>{t("Conqr suite")}</Text>
         {suiteApps.map((app) => (
-          <Menu.Item
-            key={app.key}
-            component="div"
-            className={classes.menuItemReset}
-          >
-            <AppTile app={app} onNavigate={() => {}} />
-          </Menu.Item>
+          <AppTile key={app.key} app={app} />
         ))}
       </Menu.Dropdown>
     </Menu>
