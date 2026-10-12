@@ -185,6 +185,9 @@ export default function SettingsSidebar() {
   };
 
   const menuItems = groupedData.map((group) => {
+    if (group.heading === "Conqr suite" && !process.env.PLANE_APP_URL && !import.meta.env.DEV) {
+      return null;
+    }
     return (
       <div key={group.heading}>
         <Text c="dimmed" className={classes.linkHeader}>

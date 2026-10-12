@@ -21,7 +21,7 @@ import { federatedSearch } from "@/features/integration/services/integration-ser
 const PLANE_URL =
   process.env.PLANE_APP_URL ||
   (import.meta as any)?.env?.VITE_PLANE_URL ||
-  "http://localhost";
+  (import.meta.env.DEV ? "http://localhost" : "");
 import { SearchSpotlightFilters } from "./search-spotlight-filters.tsx";
 import { useUnifiedSearch } from "../hooks/use-unified-search.ts";
 import { useAiSearch } from "../../../ee/ai/hooks/use-ai-search.ts";
@@ -75,7 +75,7 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
   const { data: federatedItems } = useQuery({
     queryKey: ["palette-federated-search", debouncedSearchQuery],
     queryFn: () => federatedSearch(debouncedSearchQuery),
-    enabled: !isAiMode && debouncedSearchQuery.trim().length >= 2,
+    enabled: Boolean(PLANE_URL) && !isAiMode && debouncedSearchQuery.trim().length >= 2,
     retry: false,
     staleTime: 15_000,
   });
@@ -226,7 +226,7 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
               {query.length === 0 && resultItems.length === 0 && (
                 <>
                   <Spotlight.Empty>{t("Start typing to search...")}</Spotlight.Empty>
-                  <Spotlight.ActionsGroup label={t("Actions")}>
+                  {PLANE_URL && <Spotlight.ActionsGroup label={t("Actions")}>
                     <Spotlight.Action
                       leftSection={<IconExternalLink size={18} stroke={1.5} />}
                       label={t("Open Plane")}
@@ -239,7 +239,7 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
                       description={t("Project ↔ space mappings")}
                       onClick={() => navigate("/settings/integrations")}
                     />
-                  </Spotlight.ActionsGroup>
+                  </Spotlight.ActionsGroup>}
                 </>
               )}
 

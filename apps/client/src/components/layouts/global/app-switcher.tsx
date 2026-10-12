@@ -31,13 +31,13 @@ import { getSpacePlaneTarget } from "@/features/integration/services/integration
 const PLANE_URL =
   process.env.PLANE_APP_URL ||
   (import.meta as any)?.env?.VITE_PLANE_URL ||
-  "http://localhost";
+  (import.meta.env.DEV ? "http://localhost" : "");
 
 /** ConqrMeet base URL (build-time), then legacy Vite var, then dev default. */
 const MEET_URL =
   process.env.MEET_APP_URL ||
   (import.meta as any)?.env?.VITE_MEET_URL ||
-  "http://localhost:5273";
+  (import.meta.env.DEV ? "http://localhost:5273" : "");
 
 /**
  * ConqrService base URL (build-time), then legacy Vite var, then dev default.
@@ -45,7 +45,7 @@ const MEET_URL =
 const SERVICE_URL =
   process.env.SERVICE_APP_URL ||
   (import.meta as any)?.env?.VITE_SERVICE_URL ||
-  "http://localhost:5175";
+  (import.meta.env.DEV ? "http://localhost:5175" : "");
 
 type SuiteApp = {
   key: string;
@@ -71,7 +71,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   const { data: target } = useQuery({
     queryKey: ["space-plane-target", space?.id],
     queryFn: () => getSpacePlaneTarget(space!.id),
-    enabled: Boolean(space?.id),
+    enabled: Boolean(space?.id && PLANE_URL),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -121,7 +121,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       color: "var(--extended-color-orange-500, #e8590c)",
   });
 
-  return apps;
+  return apps.filter((app) => !app.external || Boolean(app.href));
 }
 
 function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void }) {
