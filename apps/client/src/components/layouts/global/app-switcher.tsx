@@ -104,7 +104,9 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       key: "meet",
       name: t("ConqrMeet"),
       desc: t("Meeting intelligence"),
-      href: MEET_URL,
+      href: MEET_URL
+        ? `${MEET_URL.replace(/\/+$/, "")}/auth/login?returnTo=%2F`
+        : "",
       external: true,
       icon: IconMicrophone,
       color: "var(--extended-color-teal-500, #12b886)",
@@ -112,19 +114,25 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   ];
 
   apps.push({
-      key: "service",
-      name: t("ConqrService"),
-      desc: t("Service management"),
-      href: SERVICE_URL,
-      external: true,
-      icon: IconClipboardList,
-      color: "var(--extended-color-orange-500, #e8590c)",
+    key: "service",
+    name: t("ConqrService"),
+    desc: t("Service management"),
+    href: SERVICE_URL,
+    external: true,
+    icon: IconClipboardList,
+    color: "var(--extended-color-orange-500, #e8590c)",
   });
 
   return apps.filter((app) => !app.external || Boolean(app.href));
 }
 
-function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void }) {
+function AppTile({
+  app,
+  onNavigate,
+}: {
+  app: SuiteApp;
+  onNavigate: () => void;
+}) {
   const inner = (
     <>
       <Box className={classes.tileIcon} style={{ background: app.color }}>
@@ -183,7 +191,10 @@ export default function AppSwitcher() {
     >
       <Menu.Target>
         <Tooltip label={t("Switch apps")} openDelay={300} withArrow>
-          <UnstyledButton className={classes.trigger} aria-label={t("Switch apps")}>
+          <UnstyledButton
+            className={classes.trigger}
+            aria-label={t("Switch apps")}
+          >
             <IconLayoutGrid size={19} stroke={2} />
           </UnstyledButton>
         </Tooltip>
@@ -191,7 +202,11 @@ export default function AppSwitcher() {
       <Menu.Dropdown className={classes.dropdown}>
         <Text className={classes.dropdownLabel}>{t("Conqr suite")}</Text>
         {suiteApps.map((app) => (
-          <Menu.Item key={app.key} component="div" className={classes.menuItemReset}>
+          <Menu.Item
+            key={app.key}
+            component="div"
+            className={classes.menuItemReset}
+          >
             <AppTile app={app} onNavigate={() => {}} />
           </Menu.Item>
         ))}

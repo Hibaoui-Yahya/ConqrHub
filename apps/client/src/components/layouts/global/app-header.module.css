@@ -1,40 +1,62 @@
 .header {
-    height: 100%;
-    margin-bottom: rem(120px);
-    /* Plane's top nav floats on the flat canvas — no surface, no border. */
-    background-color: var(--bg-canvas);
-    border-bottom: none;
-    padding-left: var(--mantine-spacing-md);
-    padding-right: var(--mantine-spacing-md);
+  height: 100%;
+  margin-bottom: rem(120px);
+  /* Plane's top nav floats on the flat canvas — no surface, no border. */
+  background-color: var(--bg-canvas);
+  border-bottom: none;
+  padding-left: var(--mantine-spacing-md);
+  padding-right: var(--mantine-spacing-md);
 }
 
 .brand {
-    display: flex;
-    align-items: center;
-    text-decoration: none;
-    color: inherit;
-    cursor: pointer;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.suiteHeader {
+  padding-inline: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 364px minmax(0, 1fr);
+  column-gap: 12px;
+}
+
+.headerEnd {
+  justify-self: end;
+}
+
+@media (max-width: 767px) {
+  .suiteHeader {
+    padding-inline: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 42vw) auto;
+    column-gap: 8px;
+  }
 }
 
 .brandIcon {
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 }
 
 .link {
-    display: block;
-    line-height: 1;
-    padding: rem(8px) rem(12px);
-    border-radius: var(--mantine-radius-sm);
-    text-decoration: none;
-    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
-    font-size: var(--mantine-font-size-sm);
-    font-weight: 500;
-    user-select: none;
-    white-space: nowrap;
-    flex-shrink: 0;
+  display: block;
+  line-height: 1;
+  padding: rem(8px) rem(12px);
+  border-radius: var(--mantine-radius-sm);
+  text-decoration: none;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 
-    @mixin hover {
-        background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
-    }
+  @mixin hover {
+    background-color: light-dark(
+      var(--mantine-color-gray-0),
+      var(--mantine-color-dark-6)
+    );
+  }
 }

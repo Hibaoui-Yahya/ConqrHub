@@ -26,12 +26,18 @@ import useAuth from "@/features/auth/hooks/use-auth.ts";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { useTranslation } from "react-i18next";
 import { AvatarIconType } from "@/features/attachments/types/attachment.types.ts";
+import { useConqrTheme } from "@/features/user/theme/use-conqr-theme.ts";
 
 export default function TopMenu() {
   const { t } = useTranslation();
   const [currentUser] = useAtom(currentUserAtom);
   const { logout } = useAuth();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const [, setPreference] = useConqrTheme();
+  const chooseScheme = (scheme: "light" | "dark" | "auto") => {
+    setColorScheme(scheme);
+    setPreference({ theme: scheme === "auto" ? "system" : scheme });
+  };
 
   const user = currentUser?.user;
   const workspace = currentUser?.workspace;
@@ -119,7 +125,7 @@ export default function TopMenu() {
 
           <Menu.Sub.Dropdown>
             <Menu.Item
-              onClick={() => setColorScheme("light")}
+              onClick={() => chooseScheme("light")}
               leftSection={<IconSun size={16} />}
               rightSection={
                 colorScheme === "light" ? <IconCheck size={16} /> : null
@@ -128,7 +134,7 @@ export default function TopMenu() {
               {t("Light")}
             </Menu.Item>
             <Menu.Item
-              onClick={() => setColorScheme("dark")}
+              onClick={() => chooseScheme("dark")}
               leftSection={<IconMoon size={16} />}
               rightSection={
                 colorScheme === "dark" ? <IconCheck size={16} /> : null
@@ -137,7 +143,7 @@ export default function TopMenu() {
               {t("Dark")}
             </Menu.Item>
             <Menu.Item
-              onClick={() => setColorScheme("auto")}
+              onClick={() => chooseScheme("auto")}
               leftSection={<IconDeviceDesktop size={16} />}
               rightSection={
                 colorScheme === "auto" ? <IconCheck size={16} /> : null

@@ -52,7 +52,7 @@ export function AppHeader() {
 
   return (
     <>
-      <Group h="100%" px="md" justify="space-between" wrap={"nowrap"}>
+      <Group h="100%" className={classes.suiteHeader} wrap={"nowrap"}>
         <Group wrap="nowrap">
           {/* Mobile keeps its hamburger here; the desktop toggle lives in the
               sidebar's top row (Plane parity). */}
@@ -97,7 +97,7 @@ export function AppHeader() {
           </Group>
         </div>
 
-        <Group px={"xl"} wrap="nowrap">
+        <Group className={classes.headerEnd} gap={8} wrap="nowrap">
           <UnstyledButton
             component={Link}
             to="/ai"
@@ -113,7 +113,10 @@ export function AppHeader() {
               }
             }}
           >
-            <IconSparkles size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
+            <IconSparkles
+              size={16}
+              style={{ marginRight: 4, verticalAlign: "middle" }}
+            />
             {t("AI Chat")}
           </UnstyledButton>
           <Tooltip label={t("AI Chat")} openDelay={250} withArrow>
@@ -141,7 +144,11 @@ export function AppHeader() {
           {/* ConqrService — the suite's help & requests entry point. Same
               button, same panel, same place in all four apps. */}
           {resolveConqrServiceUrl() && (
-            <Tooltip label={CONQR_SERVICE_TRIGGER_TITLE} openDelay={250} withArrow>
+            <Tooltip
+              label={CONQR_SERVICE_TRIGGER_TITLE}
+              openDelay={250}
+              withArrow
+            >
               <ActionIcon
                 variant="subtle"
                 color="dark"
