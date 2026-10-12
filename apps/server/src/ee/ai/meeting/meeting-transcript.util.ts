@@ -161,6 +161,31 @@ export function preservesSpokenWords(raw: string, corrected: string): boolean {
   );
 }
 
+/** Provisional display names from explicit self-introductions by this voice.
+ * Conflicting introductions are left unresolved; this never links an account.
+ */
+export function explicitSpeakerNames(
+  segments: TranscriptSegment[],
+): Record<string, string> {
+  const candidates = new Map<string, Set<string>>();
+  for (const segment of segments) {
+    const introduction =
+      /(?:[Jj]e m['’]appelle|[Mm]on nom est|[Mm]y name is)\s+([\p{Lu}][\p{L}\p{M}'’\-]*(?:\s+[\p{Lu}][\p{L}\p{M}'’\-]*){0,3})/gu;
+    for (const match of segment.text.matchAll(introduction)) {
+      const name = match[1].trim();
+      if (segment.attribution !== 'acoustic' || name.length > 60) continue;
+      const names = candidates.get(segment.speaker) ?? new Set<string>();
+      names.add(name);
+      candidates.set(segment.speaker, names);
+    }
+  }
+  return Object.fromEntries(
+    [...candidates]
+      .filter(([, names]) => names.size === 1)
+      .map(([label, names]) => [label, [...names][0]]),
+  );
+}
+
 const SENTENCE_RE = /[^.!?…]+(?:[.!?…]+["')\]]*|$)/g;
 
 /**

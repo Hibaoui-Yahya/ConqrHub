@@ -2,6 +2,7 @@ import {
   buildSourceSegments,
   numberMeetingSpeakers,
   preservesSpokenWords,
+  explicitSpeakerNames,
   splitIntoSegments,
   transcriptToText,
 } from './meeting-transcript.util';
@@ -114,6 +115,37 @@ describe('buildSourceSegments', () => {
 });
 
 describe('acoustic speaker numbering and transcript fidelity', () => {
+  it('uses only self-introductions by that voice and leaves conflicting names unresolved', () => {
+    const segments = [
+      {
+        speaker: 'Speaker 1',
+        text: "Bonjour Alice, je m'appelle Julie. Le budget est fixé.",
+      },
+      {
+        speaker: 'Speaker 2',
+        text: 'My name is Paul Chenel and I will send the notes.',
+      },
+      { speaker: 'Speaker 3', text: "Je m'appelle Alice." },
+      { speaker: 'Speaker 3', text: "Je m'appelle Sara." },
+      {
+        speaker: 'Speaker 4',
+        text: "Je m'appelle Fiction.",
+        attribution: 'unresolved',
+      },
+    ].map((s) => ({
+      ...s,
+      id: 'x',
+      startMs: 0,
+      endMs: 1,
+      channel: 'system',
+      confidence: null,
+      attribution: s.attribution ?? 'acoustic',
+    })) as any;
+    expect(explicitSpeakerNames(segments)).toEqual({
+      'Speaker 1': 'Julie',
+      'Speaker 2': 'Paul Chenel',
+    });
+  });
   it('numbers three voices across mic and remote audio by chronological appearance', () => {
     const source = (speakerId: string, startMs: number, channel: string) =>
       buildSourceSegments(

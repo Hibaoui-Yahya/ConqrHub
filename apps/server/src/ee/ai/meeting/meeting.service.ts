@@ -23,6 +23,7 @@ import {
   buildSourceSegments,
   numberMeetingSpeakers,
   preservesSpokenWords,
+  explicitSpeakerNames,
   splitSegmentsIntoSentences,
   TranscriptSegment,
   TranscriptSpeaker,
@@ -1519,7 +1520,14 @@ export class MeetingService {
     const speakers: Record<string, TranscriptSpeaker> = {};
     const multiChannel =
       new Set(sources.map((s) => s.source ?? 'mic')).size > 1;
-    let language: string | null = null;
+    const requestedLanguage = this.parseJson<{ language?: string }>(
+      meeting.languageConfig,
+    )?.language;
+    let language: string | null =
+      typeof requestedLanguage === 'string' &&
+      /^[a-z]{2}(?:-[A-Z]{2})?$/.test(requestedLanguage)
+        ? requestedLanguage
+        : null;
 
     // One acoustic request per channel keeps speaker ids consistent across
     // multiple uploaded files. Assemble their measured offsets before ASR.
@@ -1991,9 +1999,20 @@ export class MeetingService {
       this.parseJson<Record<string, TranscriptSpeaker>>(tr?.speakers) || {};
     const labels = Object.keys(speakers);
     const total = labels.length;
+    for (const [label, name] of Object.entries(
+      explicitSpeakerNames(segments),
+    )) {
+      if (speakers[label] && !speakers[label].displayName) {
+        speakers[label] = {
+          ...speakers[label],
+          displayName: name,
+          confidence: 1,
+        };
+      }
+    }
     if (!tr) return { total, unresolved: total, needsReview: true };
     // Missing acoustic labels require review even for a single source.
-    if (total < 2) {
+    if (total < 2 && !Object.values(speakers).some((s) => s.displayName)) {
       const uncertain = segments.some((s) => s.attribution === 'unresolved');
       return {
         total,
@@ -2002,8 +2021,10 @@ export class MeetingService {
       };
     }
 
-    let unresolved = total;
-    if (this.ai.isAvailable()) {
+    let unresolved = labels.filter(
+      (label) => !speakers[label].displayName,
+    ).length;
+    if (this.ai.isAvailable() && unresolved > 0) {
       try {
         const excerpt = transcriptToText(segments, {}).slice(0, 12_000);
         const result = await this.ai.generate({
@@ -2012,7 +2033,7 @@ export class MeetingService {
           prompt:
             `Speaker labels: ${labels.join(', ')}\n\nTranscript:\n"""\n${excerpt}\n"""\n\n` +
             "For each label, infer the person's name ONLY from explicit evidence in the transcript (self-introductions, being addressed by name, signatures). If there is no evidence, use null. Never guess from tone or role.\n" +
-            'Return a JSON object keyed by label: {"<label>": {"name": string|null, "confidence": number 0-1, "evidence": string}}',
+            'Return a JSON object keyed by label: {"<label>": {"name": string|null, "confidence": number 0-1, "evidence": string}}. Evidence MUST be an exact contiguous quotation from the supplied transcript containing that name, not an explanation.',
           temperature: 0,
           maxOutputTokens: 600,
         });
@@ -2024,6 +2045,7 @@ export class MeetingService {
         >;
         unresolved = 0;
         for (const label of labels) {
+          if (speakers[label].displayName) continue;
           const guess = parsed?.[label];
           const name =
             typeof guess?.name === 'string'
@@ -2049,7 +2071,7 @@ export class MeetingService {
           speakers[label] = {
             ...speakers[label],
             displayName: usable ? name : (speakers[label].displayName ?? null),
-            confidence: usable ? confidence : confidence > 0 ? confidence : 0,
+            confidence: usable ? confidence : 0,
           };
           if (!usable) unresolved += 1;
         }
@@ -2058,7 +2080,9 @@ export class MeetingService {
         this.logger.warn(
           `Meeting ${meetingId}: speaker identification failed: ${msg}`,
         );
-        unresolved = total;
+        unresolved = labels.filter(
+          (label) => !speakers[label].displayName,
+        ).length;
       }
     }
 

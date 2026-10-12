@@ -373,6 +373,65 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     ]);
   });
 
+  it('proposes names from each acoustic self-introduction and still requires review', async () => {
+    await service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic', 9000));
+    (service as any).stt.transcribeDiarized.mockResolvedValue({
+      text: '',
+      language: null,
+      segments: [
+        {
+          text: "Bonjour, je m'appelle Alice.",
+          startMs: 0,
+          endMs: 1000,
+          speakerId: 'one',
+        },
+        {
+          text: "Bonjour Alice, je m'appelle Julie.",
+          startMs: 3000,
+          endMs: 4000,
+          speakerId: 'two',
+        },
+        {
+          text: "Je m'appelle Paul.",
+          startMs: 6000,
+          endMs: 7000,
+          speakerId: 'three',
+        },
+      ],
+    });
+    (service as any).ai.isAvailable = () => true;
+    (service as any).ai.generate = jest.fn(async () => ({ text: '{}' }));
+    const { segments } = await (service as any).transcribeMeeting(
+      meetingId,
+      await (service as any).resolveAudioSources(await meeting()),
+    );
+    (service as any).ai.generate.mockClear();
+    const result = await (service as any).identifySpeakers(meetingId, segments);
+    expect(result).toMatchObject({
+      total: 3,
+      unresolved: 0,
+      needsReview: true,
+    });
+    const record = await db
+      .selectFrom('meetingTranscripts')
+      .select('speakers')
+      .where('meetingId', '=', meetingId)
+      .executeTakeFirstOrThrow();
+    const names =
+      typeof record.speakers === 'string'
+        ? JSON.parse(record.speakers)
+        : record.speakers;
+    expect(Object.values(names).map((s: any) => s.displayName)).toEqual([
+      'Alice',
+      'Julie',
+      'Paul',
+    ]);
+    expect(Object.values(names).every((s: any) => s.userId === null)).toBe(
+      true,
+    );
+    expect((service as any).ai.generate).not.toHaveBeenCalled();
+  });
+
   it('reads legacy double-encoded manifest/playback fragments without losing the source files', async () => {
     files.set('combined.m4a', Buffer.from('combined playback'));
     const base = {
