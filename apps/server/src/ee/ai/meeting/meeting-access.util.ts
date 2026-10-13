@@ -5,6 +5,8 @@
  * - members of the Hub space it belongs to (its space, or the space it was
  *   published into) — the mandate team;
  * - workspace owners and admins (oversight, retention, deletion).
+ * Changing a meeting (review, evaluation, publication, deletion) is
+ * narrower: only its author and workspace owners/admins (canWriteMeeting).
  * Pure; unit-tested in meeting-access.util.spec.ts.
  */
 export interface MeetingAccessSubject {
@@ -44,6 +46,20 @@ export function canReadMeeting(
   if (isWorkspaceManager(viewer.role)) return true;
   const spaces = new Set(viewerSpaceIds);
   return meetingSpaceIds(meeting).some((id) => spaces.has(id));
+}
+
+/** Review, evaluate, publish, rename, delete: the author or a manager. */
+export function canWriteMeeting(
+  meeting: Pick<MeetingAccessSubject, 'userId' | 'workspaceId'>,
+  viewer: MeetingAccessViewer,
+): boolean {
+  if (meeting.workspaceId !== viewer.workspaceId) return false;
+  return meeting.userId === viewer.id || isWorkspaceManager(viewer.role);
+}
+
+/** Methods that change a meeting. */
+export function isWriteMethod(method: string | undefined): boolean {
+  return !!method && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
 }
 
 function safeParse(s: string): unknown {

@@ -1265,5 +1265,7 @@
   "{{pct}} % verified — to watch": "{{pct}} % vérifié — à surveiller",
   "{{todo}} to handle": "{{todo}} à traiter",
   "{{todo}} to handle · {{news}} new in your spaces": "{{todo}} à traiter · {{news}} nouveautés dans vos espaces",
-  "Notifications ({{count}} unread)": "Notifications ({{count}} non lues)"
+  "Notifications ({{count}} unread)": "Notifications ({{count}} non lues)",
+  "In ConqrMeet · names suggested by the AI": "Dans ConqrMeet · noms proposés par l’IA",
+  "Your pages, spaces and meetings.": "Vos pages, espaces et réunions."
 }

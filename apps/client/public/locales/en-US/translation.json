@@ -1263,5 +1263,7 @@
   "{{pct}} % verified — to watch": "{{pct}} % verified — to watch",
   "{{todo}} to handle": "{{todo}} to handle",
   "{{todo}} to handle · {{news}} new in your spaces": "{{todo}} to handle · {{news}} new in your spaces",
-  "Notifications ({{count}} unread)": "Notifications ({{count}} unread)"
+  "Notifications ({{count}} unread)": "Notifications ({{count}} unread)",
+  "In ConqrMeet · names suggested by the AI": "In ConqrMeet · names suggested by the AI",
+  "Your pages, spaces and meetings.": "Your pages, spaces and meetings."
 }

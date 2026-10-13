@@ -18,7 +18,7 @@ export default function Home() {
           {t("Home")} - {getAppName()}
         </title>
       </Helmet>
-      <Container size={1000} pt="xl" pb="xl">
+      <Container size={1100} pt="xl" pb="xl">
         <HomeWorkspace />
       </Container>
     </>
