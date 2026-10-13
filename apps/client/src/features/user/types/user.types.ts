@@ -1,3 +1,4 @@
+import type { NotificationSoundPrefs } from "@/features/notification/notification-sounds";
 import { IWorkspace } from "@/features/workspace/types/workspace.types";
 import type {
   ConqrCustomTheme,
@@ -33,6 +34,7 @@ export interface IUser {
   theme?: ConqrThemeKey; // used for update
   themeCustom?: ConqrCustomTheme; // used for update
   meetingDefaults?: IMeetingDefaults; // used for update
+  notificationSounds?: Partial<NotificationSoundPrefs>; // used for update
   hasGeneratedPassword?: boolean;
 }
 
@@ -58,6 +60,7 @@ export interface IUserSettings {
     /* ConqrPlan-style theme, mirrored from the local `conqr-theme-pref` */
     theme?: ConqrThemePreference;
     meetings?: IMeetingDefaults;
+    notificationSounds?: Partial<NotificationSoundPrefs>;
   };
   notifications?: {
     "page.updated"?: boolean;

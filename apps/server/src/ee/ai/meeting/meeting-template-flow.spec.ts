@@ -53,7 +53,7 @@ describe('MeetingService with templates', () => {
     };
     const ai = { isAvailable: () => true, generate: jest.fn(async () => ({ text: aiAnswer })) };
     const templates = { resolveForMeeting: jest.fn(async () => resolved) };
-    const service = new MeetingService(db, {} as any, {} as any, ai as any, {} as any, {} as any, {} as any, {} as any, {} as any, templates as any);
+    const service = new MeetingService(db, {} as any, {} as any, ai as any, {} as any, {} as any, {} as any, {} as any, {} as any, templates as any, { onTransition: async () => undefined, onPublished: async () => undefined } as any);
     jest.spyOn(service as any, 'logTransition').mockResolvedValue(undefined);
     return { service, inserts, updates, deletes, ai, templates };
   }

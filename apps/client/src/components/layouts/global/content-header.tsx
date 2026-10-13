@@ -29,6 +29,7 @@ const SETTINGS_SECTIONS: [string, string][] = [
   ["/settings/account/api-keys", "API keys"],
   ["/settings/account/profile", "Profile"],
   ["/settings/account/meetings", "My meetings"],
+  ["/settings/account/notifications", "Notifications"],
   ["/settings/verifications", "Verified pages"],
   ["/settings/integrations", "Integrations"],
   ["/settings/knowledge-base", "AI knowledge base"],

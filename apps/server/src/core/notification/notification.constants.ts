@@ -12,6 +12,11 @@ export const NotificationType = {
   PAGE_APPROVAL_REQUESTED: 'page.approval_requested',
   PAGE_APPROVAL_REJECTED: 'page.approval_rejected',
   DOC_HEALTH_DROPPED: 'doc_health.dropped',
+  // ConqrMeet pipeline (one bell for the whole suite)
+  MEETING_READY: 'meeting.ready',
+  MEETING_FAILED: 'meeting.failed',
+  MEETING_REVIEW_NEEDED: 'meeting.review_needed',
+  MEETING_PUBLISHED: 'meeting.published',
 } as const;
 
 export type NotificationType =
@@ -43,6 +48,10 @@ export const DIRECT_NOTIFICATION_TYPES: NotificationType[] = [
   NotificationType.PAGE_USER_MENTION,
   NotificationType.PAGE_PERMISSION_GRANTED,
   NotificationType.DOC_HEALTH_DROPPED,
+  NotificationType.MEETING_READY,
+  NotificationType.MEETING_FAILED,
+  NotificationType.MEETING_REVIEW_NEEDED,
+  NotificationType.MEETING_PUBLISHED,
 ];
 
 export const UPDATES_NOTIFICATION_TYPES: NotificationType[] = [

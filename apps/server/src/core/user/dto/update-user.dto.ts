@@ -2,6 +2,9 @@ import { OmitType, PartialType } from '@nestjs/mapped-types';
 import {
   IsBoolean,
   IsIn,
+  IsInt,
+  Max,
+  Min,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -59,9 +62,45 @@ export class MeetingDefaultsDto {
   autoProcess?: boolean;
 }
 
+export const NOTIFICATION_SOUNDS = [
+  'clair',
+  'doux',
+  'alerte',
+  'discret',
+  'aucun',
+] as const;
+
+/** Sound per notification category (Paramètres › Mon compte › Notifications). */
+export class NotificationSoundCategoriesDto {
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) ready?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) problem?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) review?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) mention?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) verification?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) updates?: string;
+}
+
+export class NotificationSoundsDto {
+  @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(100) volume?: number;
+  @IsOptional() @IsBoolean() backgroundOnly?: boolean;
+  @IsOptional() @IsBoolean() muteWhileRecording?: boolean;
+  @IsOptional() @IsBoolean() doNotDisturb?: boolean;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationSoundCategoriesDto)
+  categories?: NotificationSoundCategoriesDto;
+}
+
 export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
+  /** Stored as settings.preferences.notificationSounds (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationSoundsDto)
+  notificationSounds: NotificationSoundsDto;
+
   /** Stored as settings.preferences.meetings (merged key by key). */
   @IsOptional()
   @ValidateNested()

@@ -10,6 +10,7 @@ import WorkspaceMembers from "@/pages/settings/workspace/workspace-members";
 import WorkspaceSettings from "@/pages/settings/workspace/workspace-settings";
 import GroupInfo from "./pages/settings/group/group-info";
 import AccountMeetings from "@/pages/settings/account/account-meetings.tsx";
+import AccountNotifications from "@/pages/settings/account/account-notifications.tsx";
 import HubAppSettings from "@/pages/settings/apps/hub-app-settings.tsx";
 import MeetAppSettings from "@/pages/settings/apps/meet-app-settings.tsx";
 import Connections from "@/pages/settings/connections/connections.tsx";
@@ -126,6 +127,10 @@ export default function App() {
               element={<AccountPreferences />}
             />
             <Route path={"account/meetings"} element={<AccountMeetings />} />
+            <Route
+              path={"account/notifications"}
+              element={<AccountNotifications />}
+            />
             <Route path={"account/api-keys"} element={<UserApiKeys />} />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />

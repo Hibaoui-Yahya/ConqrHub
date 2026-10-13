@@ -1,3 +1,4 @@
+import { MeetingNotificationService } from '../../../core/notification/services/meeting.notification';
 import {
   BadRequestException,
   ForbiddenException,
@@ -132,6 +133,7 @@ export class MeetingService {
     private readonly pages: PageService,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly templates: MeetingTemplateService,
+    private readonly meetingNotifications: MeetingNotificationService,
   ) {}
 
   /** The template snapshot a meeting was started with, if any. */
@@ -970,6 +972,7 @@ export class MeetingService {
       .set({ status: 'published', publishedAt: new Date() })
       .where('id', '=', meetingId)
       .executeTakeFirst();
+    await this.meetingNotifications.onPublished(meetingId, page.id, opts.spaceId);
 
     return {
       pageId: page.id,
@@ -1254,6 +1257,14 @@ export class MeetingService {
       })
       .where('id', '=', meetingId)
       .executeTakeFirst();
+    if (!previous) {
+      // First publication only; re-publishing a sync is not news.
+      await this.meetingNotifications.onPublished(
+        meetingId,
+        meetingPage.pageId,
+        spaceId,
+      );
+    }
 
     return {
       meetingPageId: meetingPage.pageId,
@@ -2994,6 +3005,14 @@ export class MeetingService {
         detail: detail ? JSON.stringify(detail) : '{}',
       })
       .executeTakeFirst();
+
+    // Tell the owner when there is something to do (never blocks the pipeline).
+    await this.meetingNotifications.onTransition(
+      meetingId,
+      fromStatus,
+      toStatus,
+      detail,
+    );
   }
 
   private parseAudioManifest(value: unknown): Record<string, any> {

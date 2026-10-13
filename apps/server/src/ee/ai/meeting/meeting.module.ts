@@ -7,9 +7,16 @@ import { AiProviderModule } from '../providers/ai-provider.module';
 import { SttModule } from '../stt/stt.module';
 import { IntegrationModule } from '../../../core/integration/integration.module';
 import { PageModule } from '../../../core/page/page.module';
+import { NotificationModule } from '../../../core/notification/notification.module';
 
 @Module({
-  imports: [AiProviderModule, SttModule, IntegrationModule, PageModule],
+  imports: [
+    AiProviderModule,
+    SttModule,
+    IntegrationModule,
+    PageModule,
+    NotificationModule,
+  ],
   controllers: [MeetingController, MeetingTemplateController],
   providers: [MeetingService, MeetingTemplateService],
   exports: [MeetingService, MeetingTemplateService],

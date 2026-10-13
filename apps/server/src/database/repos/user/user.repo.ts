@@ -265,6 +265,29 @@ export class UserRepo {
       .executeTakeFirst();
   }
 
+  /**
+   * settings.preferences.<key> for the closed set of object preferences,
+   * merged key by key.
+   */
+  setPreferenceObject(
+    userId: string,
+    key: 'notificationSounds',
+    value: Record<string, unknown>,
+  ) {
+    return this.db
+      .updateTable('users')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(key)}, COALESCE(settings->'preferences'->${sql.lit(key)}, '{}'::jsonb)
+                || ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', userId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
   async updateNotificationSetting(
     userId: string,
     settingKey: NotificationSettingKey,

@@ -11,6 +11,7 @@ import {
 import {
   IconActivityHeartbeat,
   IconArrowLeft,
+  IconBell,
   IconBook,
   IconBuilding,
   IconCoin,
@@ -94,6 +95,12 @@ const groupedData: DataGroup[] = [
         icon: IconSettings,
         path: "/settings/account/preferences",
         keywords: "theme appearance dark light language notifications",
+      },
+      {
+        label: "Notifications",
+        icon: IconBell,
+        path: "/settings/account/notifications",
+        keywords: "sound sounds bell alerts email do not disturb volume",
       },
       {
         label: "My meetings",

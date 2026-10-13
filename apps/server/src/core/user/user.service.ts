@@ -62,6 +62,34 @@ export class UserService {
       );
     }
 
+    if (typeof updateUserDto.notificationSounds !== 'undefined') {
+      const incoming = updateUserDto.notificationSounds ?? {};
+      const value: Record<string, unknown> = {};
+      for (const key of [
+        'enabled',
+        'volume',
+        'backgroundOnly',
+        'muteWhileRecording',
+        'doNotDisturb',
+      ] as const) {
+        if (typeof incoming[key] !== 'undefined') value[key] = incoming[key];
+      }
+      if (incoming.categories) {
+        const current =
+          (user.settings as any)?.preferences?.notificationSounds?.categories ??
+          {};
+        value.categories = { ...current };
+        for (const [k, v] of Object.entries(incoming.categories)) {
+          if (typeof v === 'string') (value.categories as any)[k] = v;
+        }
+      }
+      return this.userRepo.setPreferenceObject(
+        userId,
+        'notificationSounds',
+        value,
+      );
+    }
+
     if (typeof updateUserDto.meetingDefaults !== 'undefined') {
       const incoming = updateUserDto.meetingDefaults ?? {};
       const value: Record<string, unknown> = {};
