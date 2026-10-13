@@ -31,6 +31,7 @@ import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { SaveMarkersDto } from './dto/save-markers.dto';
 import { PublishBundleDto } from './dto/publish-bundle.dto';
+import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
@@ -330,6 +331,29 @@ export class MeetingController {
       },
       user,
     );
+  }
+
+  // ──────────── competency evaluation (recruitment interviews) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/evaluation/generate')
+  async generateEvaluation(
+    @Param('id') id: string,
+    @Body() dto: GenerateEvaluationDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.generateEvaluation(workspace.id, id, dto.criteria);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/evaluation')
+  async saveEvaluation(
+    @Param('id') id: string,
+    @Body() dto: SaveEvaluationDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveEvaluation(workspace.id, id, dto, user.id);
   }
 
   // ──────────── GET /:id/proposals ────────────

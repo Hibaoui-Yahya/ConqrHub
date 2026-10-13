@@ -78,6 +78,8 @@ export function buildMeetingPageMarkdown(input: {
   durationMs: number | null;
   summary?: string | null;
   nextSteps?: string | null;
+  /** Validated competency evaluation, already rendered as Markdown. */
+  evaluationMarkdown?: string | null;
 }): string {
   const lines: string[] = [];
   const date = input.startedAt ? new Date(input.startedAt) : null;
@@ -90,6 +92,7 @@ export function buildMeetingPageMarkdown(input: {
   if (meta) lines.push(`_Réunion du ${meta} · publiée depuis ConqrMeet._`, '');
   if (input.summary?.trim()) lines.push('## Résumé', '', input.summary.trim(), '');
   if (input.nextSteps?.trim()) lines.push('## Prochaines étapes', '', input.nextSteps.trim(), '');
+  if (input.evaluationMarkdown?.trim()) lines.push(input.evaluationMarkdown.trim(), '');
   lines.push('Le rapport et la transcription sont dans les pages ci-dessous.');
   return lines.join('\n') + '\n';
 }

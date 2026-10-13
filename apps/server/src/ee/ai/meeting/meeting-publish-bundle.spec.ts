@@ -132,6 +132,25 @@ describe('MeetingService.publishBundle', () => {
     expect(bundle.syncedAt).not.toBe(T0);
   });
 
+  it('puts a validated evaluation on the meeting page, never a draft', async () => {
+    const evaluation = (status: string) => ({
+      status,
+      criteria: [{ id: 'experience', label: 'Expérience pertinente' }],
+      items: [{ criterionId: 'experience', level: 4, rationale: 'Chiffré.', citations: [{ segmentId: 's1', atMs: 65_000, speaker: 'S1', quote: 'douze jours à cinq' }], comment: '' }],
+      overall: { recommendation: 'advance', summary: 'Solide.' },
+      generatedAt: T0, transcriptVersion: 1, validatedAt: null, validatedById: null,
+    });
+    const draft = setup({ settings: { evaluation: evaluation('draft') } });
+    await draft.service.publishBundle('w1', 'm1', { spaceId: 'space-1', includeTranscript: false }, user);
+    expect((draft.pages.create.mock.calls[0] as any[])[2].content).not.toContain('Évaluation des compétences');
+    const ok = setup({ settings: { evaluation: evaluation('validated') } });
+    await ok.service.publishBundle('w1', 'm1', { spaceId: 'space-1', includeTranscript: false }, user);
+    const content = (ok.pages.create.mock.calls[0] as any[])[2].content as string;
+    expect(content).toContain('## Évaluation des compétences');
+    expect(content).toContain('| Expérience pertinente | 4/4 · Excellent |');
+    expect(content).toContain('— Marie, 01:05');
+  });
+
   it('re-sync recreates a meeting page deleted in Hub', async () => {
     const { service, pages } = setup({
       settings: { publishedBundle: { meetingPageId: 'p-meet', transcriptPageId: null, spaceId: 'space-1', publishedAt: T0 } },

@@ -34,6 +34,15 @@ import { AiProviderService } from '../providers/ai-provider.service';
 import { mixMeetingPlayback } from './meeting-audio.util';
 import { normalizeMarkers } from './meeting-markers.util';
 import {
+  applyEvaluationEdit,
+  buildEvaluationMarkdown,
+  buildEvaluationPrompt,
+  normalizeCriteria,
+  parseEvaluation,
+  readEvaluation,
+  transcriptForEvaluation,
+} from './meeting-evaluation.util';
+import {
   buildMeetingPageMarkdown,
   buildTranscriptMarkdown,
   syncDecision,
@@ -929,6 +938,110 @@ export class MeetingService {
    * in the meeting's workspace and the caller can create pages in it (the
    * same rule as creating a page in Hub).
    */
+  // ──────────── competency evaluation (recruitment interviews) ────────────
+
+  /**
+   * Evaluate the interview against a grid, with citations verified against
+   * the transcript. Stored in settings.evaluation as a draft the recruiter
+   * edits and validates; a validated evaluation is never regenerated over.
+   */
+  async generateEvaluation(
+    workspaceId: string,
+    meetingId: string,
+    rawCriteria: unknown,
+  ) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.workspaceId !== workspaceId) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const settings =
+      (this.parseJson(meeting.settings) as Record<string, any>) ?? {};
+    const current = readEvaluation(settings);
+    if (current?.status === 'validated') {
+      throw new BadRequestException(
+        'This evaluation is validated. Reopen it before generating it again.',
+      );
+    }
+    if (!this.ai.isAvailable()) {
+      throw new BadRequestException('AI is not available in this workspace.');
+    }
+    const transcript = await this.getTranscript(meetingId).catch(() => null);
+    const segments = ((transcript?.segments ?? []) as any[])
+      .map((seg) => ({
+        id: String(seg.id ?? ''),
+        speaker: String(seg.speaker ?? ''),
+        startMs: Number(seg.startMs) || 0,
+        text: String(seg.text ?? ''),
+      }))
+      .filter((seg) => seg.id && seg.text.trim());
+    if (segments.length === 0) {
+      throw new BadRequestException('There is no transcript to evaluate yet.');
+    }
+    const speakers = (transcript!.speakers ?? {}) as Record<
+      string,
+      { displayName?: string | null }
+    >;
+    const criteria = normalizeCriteria(rawCriteria);
+    const { system, prompt } = buildEvaluationPrompt({
+      title: meeting.title || 'Entrevue',
+      criteria,
+      transcript: transcriptForEvaluation(segments, speakers, MAX_TRANSCRIPT_CHARS),
+    });
+    const result = await this.ai.generate({
+      system,
+      prompt,
+      temperature: 0.2,
+      maxOutputTokens: 3000,
+    });
+    const evaluation = parseEvaluation(
+      this.stripCodeFence(result.text ?? ''),
+      criteria,
+      segments,
+      { transcriptVersion: transcript!.version ?? null },
+    );
+    // The recruiter's comments survive a regeneration on the same grid.
+    if (current) {
+      for (const item of evaluation.items) {
+        const before = current.items.find((i) => i.criterionId === item.criterionId);
+        if (before?.comment) item.comment = before.comment;
+      }
+    }
+    settings.evaluation = evaluation;
+    await this.db
+      .updateTable('meetings')
+      .set({ settings: JSON.stringify(settings) })
+      .where('id', '=', meetingId)
+      .executeTakeFirst();
+    return evaluation;
+  }
+
+  /** The recruiter's levels, comments, recommendation and validation. */
+  async saveEvaluation(
+    workspaceId: string,
+    meetingId: string,
+    edit: unknown,
+    userId: string,
+  ) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.workspaceId !== workspaceId) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const settings =
+      (this.parseJson(meeting.settings) as Record<string, any>) ?? {};
+    const current = readEvaluation(settings);
+    if (!current) {
+      throw new BadRequestException('Generate the evaluation first.');
+    }
+    const evaluation = applyEvaluationEdit(current, edit, { userId });
+    settings.evaluation = evaluation;
+    await this.db
+      .updateTable('meetings')
+      .set({ settings: JSON.stringify(settings) })
+      .where('id', '=', meetingId)
+      .executeTakeFirst();
+    return evaluation;
+  }
+
   async assertMeetingInWorkspace(meetingId: string, workspaceId: string) {
     const meeting = await this.getMeetingOrThrow(meetingId);
     if (meeting.workspaceId !== workspaceId) {
@@ -994,11 +1107,21 @@ export class MeetingService {
 
     const lastSyncedAt = previous?.syncedAt ?? previous?.publishedAt ?? null;
     const outputs = (this.parseJson(meeting.aiOutputs) as Record<string, string>) ?? {};
+    // Only a validated evaluation leaves Meet.
+    const evaluation = readEvaluation(settings);
+    const transcriptForPages = await this.getTranscript(meetingId).catch(() => null);
     const meetingMarkdown = buildMeetingPageMarkdown({
       startedAt: meeting.startedAt,
       durationMs: meeting.durationMs,
       summary: outputs.summary,
       nextSteps: outputs.next_steps,
+      evaluationMarkdown:
+        evaluation?.status === 'validated'
+          ? buildEvaluationMarkdown(
+              evaluation,
+              (transcriptForPages?.speakers ?? {}) as Record<string, { displayName?: string | null }>,
+            )
+          : null,
     });
 
     /** Create, refresh or keep one page this meeting owns in Hub. */
@@ -1050,7 +1173,7 @@ export class MeetingService {
       ? true
       : opts.includeTranscript !== false;
     if (wantTranscript) {
-      const transcript = await this.getTranscript(meetingId).catch(() => null);
+      const transcript = transcriptForPages;
       if (transcript && transcript.segments.length > 0) {
         transcriptPage = await syncPage(
           previous?.transcriptPageId,
