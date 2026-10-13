@@ -11,6 +11,7 @@ import { sql } from 'kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { isStorageObjectNotFound } from '../../../integrations/storage/storage.errors';
 import { StorageService } from '../../../integrations/storage/storage.service';
 import { DiarizedSegment, SttService } from '../stt/stt.service';
 import {
@@ -1744,8 +1745,16 @@ export class MeetingService {
       };
     }
 
-    const url = await this.storage.getSignedUrl(resolved.filePath, 3600);
-    return { url, expiresIn: 3600 };
+    try {
+      const url = await this.storage.getSignedUrl(resolved.filePath, 3600);
+      return { url, expiresIn: 3600 };
+    } catch (error) {
+      if (!isStorageObjectNotFound(error)) throw error;
+      // A cutover file may still reside on the retained volume. The stream
+      // endpoint rechecks access and lets the storage fallback read its bytes.
+      const query = target === 'original' ? '' : `?target=${encodeURIComponent(target)}`;
+      return { url: `/hubapi/ai/meeting/${meetingId}/audio/file${query}`, expiresIn: 3600 };
+    }
   }
 
   /** Binary stream backing the auth-protected /audio/file endpoint. */

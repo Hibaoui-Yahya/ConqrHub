@@ -10,17 +10,27 @@ import {
   StorageDriver,
   StorageOption,
 } from '../interfaces';
-import { LocalDriver, S3Driver } from '../drivers';
+import { LocalDriver, LocalReadFallbackDriver, S3Driver } from '../drivers';
+import { Logger } from '@nestjs/common';
 import * as process from 'node:process';
 import { LOCAL_STORAGE_PATH } from '../../../common/helpers';
 import path from 'path';
 
-function createStorageDriver(disk: StorageConfig): StorageDriver {
+export function createStorageDriver(disk: StorageConfig): StorageDriver {
   switch (disk.driver) {
     case StorageOption.LOCAL:
       return new LocalDriver(disk.config as LocalStorageConfig);
-    case StorageOption.S3:
-      return new S3Driver(disk.config as S3StorageConfig);
+    case StorageOption.S3: {
+      const s3 = new S3Driver(disk.config as S3StorageConfig);
+      if (!disk.localReadFallback) return s3;
+      new Logger('StorageProvider').warn(
+        `STORAGE_LOCAL_READ_FALLBACK is ON: objects missing in S3 are read from ${disk.localReadFallback.storagePath}. Disable it once the cutover reconciliation is complete.`,
+      );
+      return new LocalReadFallbackDriver(
+        s3,
+        new LocalDriver(disk.localReadFallback),
+      );
+    }
     default:
       throw new Error(`Unknown storage driver`);
   }
@@ -43,6 +53,13 @@ export const storageDriverConfigProvider = {
       case StorageOption.S3:
         { const s3Config = {
           driver,
+          localReadFallback: environmentService.getStorageLocalReadFallback()
+            ? {
+                storagePath:
+                  environmentService.getStorageLocalReadFallbackPath() ||
+                  LOCAL_STORAGE_PATH,
+              }
+            : undefined,
           config: {
             region: environmentService.getAwsS3Region(),
             endpoint: environmentService.getAwsS3Endpoint(),
