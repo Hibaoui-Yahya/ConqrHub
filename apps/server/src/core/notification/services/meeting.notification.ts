@@ -73,14 +73,16 @@ export class MeetingNotificationService {
         actorId: null,
         pageId: target.pageId ?? null,
         spaceId: target.spaceId ?? null,
-        data: JSON.stringify({
+        // an object: the jsonb column must hold a JSON object, not a string
+        data: {
           meetingId: meeting.id,
           meetingTitle: meeting.title,
+          ...extra,
+          // after extra: an absent error falls back to the stored reason
           ...(type === NotificationType.MEETING_FAILED
             ? { reason: extra.reason ?? meeting.failureReason ?? null }
             : {}),
-          ...extra,
-        }) as any,
+        } as any,
       });
     } catch (error) {
       // A notification must never break the meeting pipeline.

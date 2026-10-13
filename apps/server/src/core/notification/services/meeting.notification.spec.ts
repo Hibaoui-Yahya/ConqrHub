@@ -35,17 +35,29 @@ describe('MeetingNotificationService', () => {
     expect(created).toHaveLength(1);
     expect(created[0].type).toBe(NotificationType.MEETING_READY);
     expect(created[0].userId).toBe('u1');
-    expect(JSON.parse(created[0].data)).toMatchObject({
+    expect(created[0].data).toMatchObject({
       meetingId: 'm1',
       meetingTitle: 'Entrevue — Julie Martin',
     });
+  });
+
+  it('stores data as an object, not a JSON string', async () => {
+    const { service, created } = makeService(meeting);
+    await service.onTransition('m1', 'analyzing', 'awaiting_review');
+    expect(typeof created[0].data).toBe('object');
   });
 
   it('reports failures with the reason', async () => {
     const { service, created } = makeService(meeting);
     await service.onTransition('m1', 'transcribed', 'failed', { error: 'STT timeout' });
     expect(created[0].type).toBe(NotificationType.MEETING_FAILED);
-    expect(JSON.parse(created[0].data).reason).toBe('STT timeout');
+    expect(created[0].data.reason).toBe('STT timeout');
+  });
+
+  it('falls back to the stored failure reason', async () => {
+    const { service, created } = makeService(meeting);
+    await service.onTransition('m1', 'transcribed', 'failed');
+    expect(created[0].data.reason).toBe('audio unreadable');
   });
 
   it('asks for speaker review', async () => {
