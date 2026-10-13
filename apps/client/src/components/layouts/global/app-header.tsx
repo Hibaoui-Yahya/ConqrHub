@@ -3,7 +3,6 @@ import {
   Badge,
   Box,
   Group,
-  Text,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
@@ -77,14 +76,19 @@ export function AppHeader() {
                 height={22}
               />
             </Box>
-            <Text
-              size="lg"
-              fw={700}
-              style={{ userSelect: "none", letterSpacing: "-0.02em" }}
-              visibleFrom="sm"
-            >
-              Conqr<span style={{ color: "var(--brand-default)" }}>Hub</span>
-            </Text>
+            <Box visibleFrom="sm">
+              <img
+                className="conqr-wordmark conqr-wordmark--light"
+                src="/branding/conqrhub-wordmark-light.png"
+                alt="ConqrHub"
+              />
+              <img
+                className="conqr-wordmark conqr-wordmark--dark"
+                src="/branding/conqrhub-wordmark-dark.png"
+                alt=""
+                aria-hidden="true"
+              />
+            </Box>
           </Link>
         </Group>
 
