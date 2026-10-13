@@ -31,6 +31,9 @@ import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { SaveMarkersDto } from './dto/save-markers.dto';
 import { PublishBundleDto } from './dto/publish-bundle.dto';
+import { MeetingAccessGuard } from './meeting-access.guard';
+import { isWorkspaceManager } from './meeting-access.util';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
@@ -41,13 +44,18 @@ import { ApproveProposalDto } from './dto/approve-proposal.dto';
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
 
-@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+// MeetingAccessGuard: every /:id route answers 404 unless the caller may
+// read that meeting (author, member of its space, workspace manager).
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
 @RequireAiFeature('stt')
 @Controller('ai/meeting')
 export class MeetingController {
   private readonly logger = new Logger(MeetingController.name);
 
-  constructor(private readonly meetingService: MeetingService) {}
+  constructor(
+    private readonly meetingService: MeetingService,
+    private readonly spaceMembers: SpaceMemberRepo,
+  ) {}
 
   // ──────────── POST /start ────────────
 
@@ -167,12 +175,20 @@ export class MeetingController {
   @Get()
   async list(
     @Query() query: ListMeetingsDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    const isManager = isWorkspaceManager(user.role);
     return this.meetingService.list(workspace.id, {
       limit: query.limit,
       offset: query.offset,
       q: query.q,
+      mine: query.scope === 'mine',
+      viewer: {
+        id: user.id,
+        isManager,
+        spaceIds: isManager ? [] : await this.spaceMembers.getUserSpaceIds(user.id),
+      },
     });
   }
 

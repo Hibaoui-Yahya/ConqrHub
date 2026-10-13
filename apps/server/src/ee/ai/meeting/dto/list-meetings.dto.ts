@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListMeetingsDto {
@@ -20,4 +20,9 @@ export class ListMeetingsDto {
   @IsString()
   @MaxLength(200)
   q?: string;
+
+  /** "mine": only the caller's own meetings. */
+  @IsOptional()
+  @IsIn(['mine', 'all'])
+  scope?: 'mine' | 'all';
 }

@@ -319,7 +319,15 @@ export class MeetingService {
 
   async list(
     workspaceId: string,
-    opts: { limit?: number; offset?: number; q?: string },
+    opts: {
+      limit?: number;
+      offset?: number;
+      q?: string;
+      /** Who is asking: non-managers only see meetings they may read. */
+      viewer?: { id: string; isManager: boolean; spaceIds: string[] };
+      /** Only the caller's own meetings (the Home "À traiter" list). */
+      mine?: boolean;
+    },
   ) {
     const limit = Math.min(opts.limit ?? 50, 100);
     const offset = opts.offset ?? 0;
@@ -332,6 +340,23 @@ export class MeetingService {
         .selectFrom('meetings')
         .where('workspaceId', '=', workspaceId)
         .where('deletedAt', 'is', null);
+      const viewer = opts.viewer;
+      if (viewer && opts.mine) {
+        query = query.where('userId', '=', viewer.id);
+      } else if (viewer && !viewer.isManager) {
+        // Same rule as canReadMeeting(): author, or a member of the
+        // meeting's space or of the space it was published into.
+        query = query.where((eb) => {
+          const ors = [eb('userId', '=', viewer.id)];
+          if (viewer.spaceIds.length) {
+            ors.push(eb('spaceId', 'in', viewer.spaceIds));
+            ors.push(
+              eb(sql<string>`settings->'publishedBundle'->>'spaceId'`, 'in', viewer.spaceIds),
+            );
+          }
+          return eb.or(ors);
+        });
+      }
       if (pattern) {
         query = query.where((eb) =>
           eb.or([
