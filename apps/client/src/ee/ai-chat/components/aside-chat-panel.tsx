@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ActionIcon, Popover, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconPlus,
@@ -19,7 +19,8 @@ import { extractPageSlugId } from "@/lib";
 import { useChatStream } from "../hooks/use-chat-stream";
 import { useChatInfoQuery } from "../queries/ai-chat-query";
 import ChatMessageList from "./chat-message-list";
-import ChatInput from "./chat-input";
+import ChatInput, { type ChatInputHandle } from "./chat-input";
+import { ChatActionsContext, lastTurnIds } from "./chat-actions-context";
 import ChatStreamError from "./chat-stream-error";
 import AsideChatHistory from "./aside-chat-history";
 import type {
@@ -55,6 +56,8 @@ export default function AsideChatPanel() {
     error,
     sendMessage,
     retryLast,
+    regenerate,
+    sendFollowUp,
     canRetry,
     setMessageFeedback,
     stopGeneration,
@@ -155,6 +158,18 @@ export default function AsideChatPanel() {
   const hasMessages = messages.length > 0 || isStreaming;
 
   // The prompt is sent in the UI language so the assistant answers in it.
+  const asideInputRef = useRef<ChatInputHandle>(null);
+  const asideActions = useMemo(
+    () => ({
+      ...lastTurnIds(messages),
+      busy: isStreaming,
+      onFollowUp: sendFollowUp,
+      onRegenerate: regenerate,
+      onEditQuestion: (text: string) => asideInputRef.current?.setText(text),
+    }),
+    [messages, isStreaming, sendFollowUp, regenerate],
+  );
+
   const quickActions: QuickAction[] = [
     { icon: <IconFileText size={16} />, key: "Summarize this page" },
     { icon: <IconLanguage size={16} />, key: "Translate this page" },
@@ -162,6 +177,7 @@ export default function AsideChatPanel() {
   ];
 
   return (
+    <ChatActionsContext.Provider value={asideActions}>
     <div className={classes.panel}>
       <div className={classes.toolbar}>
         <Popover
@@ -259,6 +275,7 @@ export default function AsideChatPanel() {
 
       <div className={classes.inputArea}>
         <ChatInput
+          ref={asideInputRef}
           isStreaming={isStreaming}
           onSend={handleSend}
           onStop={stopGeneration}
@@ -271,5 +288,6 @@ export default function AsideChatPanel() {
         />
       </div>
     </div>
+    </ChatActionsContext.Provider>
   );
 }

@@ -70,7 +70,11 @@ export type SendMessageOptions = {
   contextPageId?: string;
   /** Restrict retrieval to a single space. */
   spaceId?: string;
+  /** "deep" lets the assistant read more pages before answering. */
+  mode?: AiChatMode;
 };
+
+export type AiChatMode = 'fast' | 'deep';
 
 export type AiChatStreamEvent =
   | { type: 'chat_created'; chatId: string }
@@ -84,6 +88,8 @@ export type AiChatStreamEvent =
       confidence?: number | null;
       groundedSourceCount?: number;
       sources?: AiChatSource[];
+      /** Short follow-up questions the user can send in one click. */
+      followUps?: string[];
     }
   | { type: 'error'; message: string; code?: string; retryable?: boolean };
 

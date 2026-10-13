@@ -524,3 +524,76 @@
 .feedbackActive {
   color: var(--brand-default, light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-4)));
 }
+
+/* Edit the last question */
+.userMessage {
+  align-items: center;
+  gap: 6px;
+}
+
+.editQuestion {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.userMessage:hover .editQuestion,
+.editQuestion:focus-visible {
+  opacity: 1;
+}
+
+/* Follow-up questions under the last answer */
+.followUps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.followUpsLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}
+
+.followUp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+  background: transparent;
+  color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-dark-0));
+  font-size: var(--mantine-font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.followUp:hover:not(:disabled) {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  border-color: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+}
+
+.followUp:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.followUpIcon {
+  flex-shrink: 0;
+  color: light-dark(#006b94, #00c2ff);
+}
+
+.followUpText {
+  flex: 1;
+  min-width: 0;
+}
+
+.followUpArrow {
+  flex-shrink: 0;
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+}

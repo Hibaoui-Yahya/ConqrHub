@@ -1,7 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import DOMPurify from "dompurify";
-import { IconFile, IconLoader2, IconPhoto } from "@tabler/icons-react";
+import { ActionIcon, Tooltip } from "@mantine/core";
+import {
+  IconArrowRight,
+  IconCornerDownRight,
+  IconFile,
+  IconLoader2,
+  IconPencil,
+  IconPhoto,
+  IconRefresh,
+} from "@tabler/icons-react";
+import { useChatActions } from "./chat-actions-context";
 import { markdownToHtml } from "@docmost/editor-ext";
 import { useTranslation } from "react-i18next";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
@@ -73,6 +83,7 @@ export default function ChatMessage({
 }: Props) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const actions = useChatActions();
   const sourcesRef = useRef<HTMLDivElement>(null);
   const [expandRequest, setExpandRequest] = useState(0);
   const [highlightLabel, setHighlightLabel] = useState<string | null>(null);
@@ -137,6 +148,12 @@ export default function ChatMessage({
 
   if (message.role === "tool") return null;
 
+  const isLastUser = message.id === actions.lastUserMessageId;
+  const isLastAssistant = message.id === actions.lastAssistantMessageId;
+  const followUps = (
+    (message.metadata?.followUps as string[] | undefined) ?? []
+  ).filter((q) => typeof q === "string" && q.trim());
+
   const isUser = message.role === "user";
   const toolCalls = isStreaming ? streamingToolCalls : message.toolCalls;
 
@@ -154,6 +171,20 @@ export default function ChatMessage({
 
     return (
       <div className={classes.userMessage}>
+        {isLastUser && !actions.busy && actions.onEditQuestion && displayContent && (
+          <Tooltip label={t("Edit the question")} openDelay={300}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              className={classes.editQuestion}
+              aria-label={t("Edit the question")}
+              onClick={() => actions.onEditQuestion?.(displayContent)}
+            >
+              <IconPencil size={14} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <div className={classes.userBubble}>
           {attachments.length > 0 && (
             <div className={classes.messageAttachments}>
@@ -222,6 +253,20 @@ export default function ChatMessage({
       {!isStreaming && message.content && (
         <div className={classes.messageActions}>
           <CopyTextButton text={message?.content} />
+          {isLastAssistant && actions.onRegenerate && (
+            <Tooltip label={t("Ask again")} openDelay={300}>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label={t("Ask again")}
+                disabled={actions.busy}
+                onClick={() => actions.onRegenerate?.()}
+              >
+                <IconRefresh size={15} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           {canGiveFeedback && (
             <ChatFeedback
               messageId={message.id}
@@ -229,6 +274,24 @@ export default function ChatMessage({
               onChange={onFeedback}
             />
           )}
+        </div>
+      )}
+      {!isStreaming && isLastAssistant && followUps.length > 0 && actions.onFollowUp && (
+        <div className={classes.followUps}>
+          <div className={classes.followUpsLabel}>{t("Follow-up questions")}</div>
+          {followUps.slice(0, 3).map((q) => (
+            <button
+              key={q}
+              type="button"
+              className={classes.followUp}
+              disabled={actions.busy}
+              onClick={() => actions.onFollowUp?.(q)}
+            >
+              <IconCornerDownRight size={14} className={classes.followUpIcon} />
+              <span className={classes.followUpText}>{q}</span>
+              <IconArrowRight size={14} className={classes.followUpArrow} />
+            </button>
+          ))}
         </div>
       )}
     </div>

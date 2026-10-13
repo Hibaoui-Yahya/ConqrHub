@@ -76,6 +76,7 @@ export function sendChatMessage(
     attachmentIds?: string[];
     /** Restrict the assistant to one space (uuid). */
     spaceId?: string;
+    mode?: "fast" | "deep";
   },
   onEvent: (event: AiChatStreamEvent) => void,
   onError?: (error: string) => void,

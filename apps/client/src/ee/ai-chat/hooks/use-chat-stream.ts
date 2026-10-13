@@ -72,6 +72,8 @@ export function useChatStream(
   }, []);
 
   const lastPayloadRef = useRef<LastPayload | null>(null);
+  const messagesRef = useRef<AiChatMessage[]>([]);
+  messagesRef.current = messages;
 
   const sendMessage = useCallback(
     (
@@ -84,6 +86,7 @@ export function useChatStream(
 
       const contextPageId = sendOptions?.contextPageId;
       const spaceId = sendOptions?.spaceId;
+      const mode = sendOptions?.mode;
 
       setError(null);
       setErrorCode(null);
@@ -137,6 +140,7 @@ export function useChatStream(
           ...(contextPageId && { contextPageId }),
           ...(attachmentIds.length && { attachmentIds }),
           ...(spaceId && { spaceId }),
+          ...(mode === "deep" && { mode }),
         },
         (event: AiChatStreamEvent) => {
           if (event.type !== "error") {
@@ -201,6 +205,9 @@ export function useChatStream(
                       ...(doneEvent.sources?.length
                         ? { sources: doneEvent.sources }
                         : {}),
+                      ...(doneEvent.followUps?.length
+                        ? { followUps: doneEvent.followUps }
+                        : {}),
                     },
                     createdAt: new Date().toISOString(),
                   };
@@ -264,6 +271,28 @@ export function useChatStream(
     }, 0);
   }, []);
 
+  /**
+   * Ask again: re-sends the latest user question (same scope and mode) so a
+   * new answer is produced. The previous answer stays in the thread.
+   */
+  const regenerate = useCallback(() => {
+    const lastUser = [...messagesRef.current]
+      .reverse()
+      .find((m) => m.role === "user" && m.content);
+    if (!lastUser?.content) return;
+    sendMessageRef.current(
+      lastUser.content,
+      [],
+      [],
+      lastPayloadRef.current?.options,
+    );
+  }, []);
+
+  /** Send a follow-up question with the same scope and mode as the last one. */
+  const sendFollowUp = useCallback((question: string) => {
+    sendMessageRef.current(question, [], [], lastPayloadRef.current?.options);
+  }, []);
+
   // A `forbidden` error (e.g. scope set to a space the user cannot read) is
   // never retryable: the same payload would fail again.
   const canRetry =
@@ -325,6 +354,8 @@ export function useChatStream(
     isRetryable,
     sendMessage,
     retryLast,
+    regenerate,
+    sendFollowUp,
     canRetry,
     setMessageFeedback,
     stopGeneration,

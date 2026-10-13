@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -40,4 +41,12 @@ export class SendMessageDto {
   @IsUUID()
   @IsString()
   spaceId?: string;
+
+  /**
+   * Answer mode. "deep" gives the agent more steps and asks it to read and
+   * compare several pages before answering; "fast" (default) is unchanged.
+   */
+  @IsOptional()
+  @IsIn(['fast', 'deep'])
+  mode?: 'fast' | 'deep';
 }

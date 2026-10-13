@@ -268,3 +268,35 @@
 .scopeSection {
   color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
 }
+
+/* Fast / Deep answer mode */
+.modeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.modeOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.modeOption[data-active] {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-4));
+  color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-white));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.modeOption[data-active] svg {
+  color: var(--conqr-brand, #00c2ff);
+}

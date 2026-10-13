@@ -1,5 +1,8 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
+import { useAtomValue } from "jotai";
+import { Button } from "@mantine/core";
+import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
 import {
   IconSparkles,
   IconSearch,
@@ -10,6 +13,7 @@ import {
   IconClockEdit,
   IconArrowBigRightLines,
   IconDatabase,
+  IconDatabaseExclamation,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import ChatInput, { type ChatInputHandle } from "./chat-input";
@@ -23,6 +27,8 @@ import classes from "../styles/ai-chat.module.css";
 
 type Suggestion = {
   icon: React.ReactNode;
+  /** Short category shown above the prompt. */
+  tag: string;
   /** i18n key; the English text doubles as the prompt sent/inserted. */
   key: string;
 };
@@ -33,26 +39,32 @@ type Suggestion = {
 const SUGGESTIONS: Suggestion[] = [
   {
     icon: <IconSearch size={18} />,
+    tag: "Search",
     key: "What do our interview guides say about …",
   },
   {
     icon: <IconFileText size={18} />,
+    tag: "Reading",
     key: "Summarize the page @",
   },
   {
     icon: <IconShieldCheck size={18} />,
+    tag: "Knowledge base",
     key: "Which pages are not verified yet?",
   },
   {
     icon: <IconReport size={18} />,
+    tag: "Writing",
     key: "Write a report from @",
   },
   {
     icon: <IconArrowsLeftRight size={18} />,
+    tag: "Analysis",
     key: "Compare @ and @",
   },
   {
     icon: <IconClockEdit size={18} />,
+    tag: "Activity",
     key: "Show the pages modified this week",
   },
 ];
@@ -77,6 +89,8 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
   const { t } = useTranslation();
   const inputRef = useRef<ChatInputHandle>(null);
   const overviewQuery = useVerificationOverviewQuery();
+  const user = useAtomValue(userAtom);
+  const firstName = (user?.name ?? "").trim().split(/\s+/)[0];
 
   const handleSuggestionClick = (key: string) => {
     const prompt = t(key);
@@ -95,6 +109,10 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
 
   const overview = overviewQuery.data;
   const showKbStatus = !overviewQuery.isError && !!overview;
+  // Nothing verified yet: the assistant can only quote raw pages, so say so
+  // up front and offer the one action that fixes it.
+  const knowledgeBaseEmpty =
+    showKbStatus && (overview.verified ?? 0) + (overview.expiring ?? 0) === 0;
 
   return (
     <div className={classes.emptyState}>
@@ -102,14 +120,19 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
         <div className={classes.emptyStateIconWrapper}>
           <IconSparkles size={32} stroke={1.5} className={classes.emptyStateIcon} />
         </div>
-        <div className={classes.emptyStateBrand}>{t("ConqrAI")}</div>
+        <div className={classes.emptyStateBrand} aria-label="ConqrAI">
+          <span>Conqr</span>
+          <span className={classes.emptyStateBrandAccent}>AI</span>
+        </div>
         <div className={classes.emptyStateTitle}>
-          {t("How can I help you today?")}
+          {firstName
+            ? t("Hello {{name}}, what are you looking for?", { name: firstName })
+            : t("How can I help you today?")}
         </div>
         <div className={classes.emptyStateSubtitle}>
-          {t("Search pages, create content, or get insights — all in one place.")}
+          {t("I answer from the verified pages of your spaces and cite every source.")}
         </div>
-        {showKbStatus && (
+        {showKbStatus && !knowledgeBaseEmpty && (
           <Link to="/settings/knowledge-base" className={classes.kbStatus}>
             <IconDatabase size={13} />
             <span>
@@ -124,6 +147,33 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
           </Link>
         )}
       </div>
+
+      {knowledgeBaseEmpty && (
+        <div className={classes.kbAlert} role="status">
+          <span className={classes.kbAlertIcon}>
+            <IconDatabaseExclamation size={18} />
+          </span>
+          <div className={classes.kbAlertText}>
+            <div className={classes.kbAlertTitle}>
+              {t("The knowledge base is empty")}
+            </div>
+            <div className={classes.kbAlertBody}>
+              {t(
+                "{{unverified}} pages to verify. Until pages are verified, I read raw pages and mark every answer as unverified.",
+                { unverified: overview.unverified ?? 0 },
+              )}
+            </div>
+          </div>
+          <Button
+            component={Link}
+            to="/settings/knowledge-base"
+            size="xs"
+            className={classes.kbAlertButton}
+          >
+            {t("Verify pages")}
+          </Button>
+        </div>
+      )}
 
       <div className={classes.emptyStateInput}>
         <ChatInput
@@ -148,7 +198,10 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
               onClick={() => handleSuggestionClick(s.key)}
             >
               <span className={classes.suggestionIcon}>{s.icon}</span>
-              <span className={classes.suggestionText}>{t(s.key)}</span>
+              <span className={classes.suggestionBody}>
+                <span className={classes.suggestionTag}>{t(s.tag)}</span>
+                <span className={classes.suggestionText}>{t(s.key)}</span>
+              </span>
               <IconArrowBigRightLines size={14} className={classes.suggestionArrow} />
             </button>
           ))}
@@ -156,7 +209,7 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
       </div>
 
       <div className={classes.emptyStateFooter}>
-        <kbd className={classes.kbd}>Shift + Enter</kbd>
+        <kbd className={classes.kbd}>{t("Shift + Enter")}</kbd>
         <span className={classes.footerText}>{t("for new line")}</span>
       </div>
     </div>

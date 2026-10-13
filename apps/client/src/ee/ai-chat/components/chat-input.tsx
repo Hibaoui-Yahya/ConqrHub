@@ -21,6 +21,7 @@ import {
 import { Popover } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import ChatScopeSelect, { SCOPE_ALL } from "./chat-scope-select";
+import ChatModeToggle, { readStoredMode, storeMode } from "./chat-mode-toggle";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { CharacterCount } from "@tiptap/extensions";
@@ -34,6 +35,7 @@ import type {
   ChatAttachment,
   PageMention,
   SendMessageOptions,
+  AiChatMode,
 } from "../types/ai-chat.types";
 import classes from "../styles/chat-input.module.css";
 import { MicButton } from "@/ee/voice-input/mic-button";
@@ -48,6 +50,8 @@ const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 export type ChatInputHandle = {
   /** Insert text at the end of the composer and focus it (used by prompt suggestions). */
   insertText: (text: string) => void;
+  /** Replace the composer content (used by "edit the question"). */
+  setText: (text: string) => void;
   focus: () => void;
 };
 
@@ -155,6 +159,17 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
   onSendRef.current = onSend;
 
   const scopeEnabled = showScope && variant === "card";
+  const [mode, setMode] = useState<AiChatMode>(readStoredMode);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const changeMode = useCallback((next: AiChatMode) => {
+    setMode(next);
+    storeMode(next);
+  }, []);
+  // The placeholder is read lazily so it follows the language once the
+  // translations finish loading (the editor is created only once).
+  const placeholderRef = useRef("");
+  placeholderRef.current = placeholder || t("Ask anything... Use @ to mention pages");
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
@@ -258,8 +273,10 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
 
     const mentions = extractMentions(json);
     const scope = scopeSpaceIdRef.current;
-    const options: SendMessageOptions | undefined =
-      scopeEnabled && scope && scope !== SCOPE_ALL ? { spaceId: scope } : undefined;
+    const options: SendMessageOptions = {
+      ...(scopeEnabled && scope && scope !== SCOPE_ALL ? { spaceId: scope } : {}),
+      ...(scopeEnabled && modeRef.current === "deep" ? { mode: "deep" as const } : {}),
+    };
     onSendRef.current(text, mentions, readyAttachments, options);
     editor.commands.clearContent();
     editor.commands.focus();
@@ -277,7 +294,7 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         link: false,
       }),
       Placeholder.configure({
-        placeholder: placeholder || t("Ask anything... Use @ to mention pages"),
+        placeholder: () => placeholderRef.current,
       }),
       CharacterCount.configure({
         limit: 50000,
@@ -347,6 +364,17 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         if (!editor) return;
         editor.commands.focus("end");
         editor.commands.insertContent(text);
+        editor.commands.focus("end");
+        setIsEmpty(!editor.getText().trim());
+      },
+      setText: (text: string) => {
+        if (!editor) return;
+        editor.commands.setContent(
+          text
+            .split("\n")
+            .map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`)
+            .join(""),
+        );
         editor.commands.focus("end");
         setIsEmpty(!editor.getText().trim());
       },
@@ -484,6 +512,8 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         {scopeEnabled && (
           <ChatScopeSelect value={scopeSpaceId} onChange={setScopeSpaceId} />
         )}
+
+        {scopeEnabled && <ChatModeToggle value={mode} onChange={changeMode} />}
 
         <div style={{ flex: 1 }} />
 
