@@ -24,11 +24,16 @@ export type AiChatMessage = {
   createdAt: string;
 };
 
+export type AiChatSourceKind = 'page' | 'expert_insight';
+
 export type AiChatSource = {
+  /** First citation label pointing to this source (e.g. "P1"). */
   label: string;
+  /** All citation labels pointing to this source (e.g. ["P1", "P3"]). */
+  labels?: string[];
   title: string | null;
   sourceId: string;
-  kind: string;
+  kind: AiChatSourceKind | string;
   score: number;
   slugId?: string;
   spaceSlug?: string;
@@ -37,6 +42,34 @@ export type AiChatSource = {
   updatedAt?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  /** Short excerpt of the grounding chunk (<= 240 chars). */
+  excerpt?: string;
+  /** Whether the page is currently verified (in the AI knowledge base). */
+  verified?: boolean;
+  verificationStatus?:
+    | 'none'
+    | 'draft'
+    | 'in_approval'
+    | 'approved'
+    | 'verified'
+    | 'expiring'
+    | 'obsolete'
+    | string;
+  verificationExpiresAt?: string | null;
+};
+
+export type AiChatFeedbackRating = 'up' | 'down';
+
+export type AiChatFeedback = {
+  rating: AiChatFeedbackRating;
+  comment?: string;
+};
+
+export type SendMessageOptions = {
+  /** Page the aside panel is opened on; used as implicit context. */
+  contextPageId?: string;
+  /** Restrict retrieval to a single space. */
+  spaceId?: string;
 };
 
 export type AiChatStreamEvent =

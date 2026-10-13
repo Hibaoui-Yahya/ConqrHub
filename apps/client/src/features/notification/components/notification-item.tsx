@@ -63,6 +63,8 @@ export function NotificationItem({
         return "Page verification expires soon";
       case "page.verification_expired":
         return "Page verification has expired";
+      case "page.verification_invalidated":
+        return "<bold>{{name}}</bold> edited “{{page}}”: the page leaves the knowledge base until it is verified again";
       default:
         return "";
     }
@@ -124,7 +126,10 @@ export function NotificationItem({
           <Text size="sm" lineClamp={2}>
             <Trans
               i18nKey={getNotificationMessageKey()}
-              values={{ name: notification.actor?.name }}
+              values={{
+                name: notification.actor?.name,
+                page: notification.page?.title || t("Untitled"),
+              }}
               components={{ bold: <Text span fw={600} /> }}
             />
           </Text>

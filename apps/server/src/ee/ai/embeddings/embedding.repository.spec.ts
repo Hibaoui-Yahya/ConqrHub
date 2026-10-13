@@ -1,4 +1,28 @@
-import { EmbeddingRepository } from './embedding.repository';
+import {
+  CamelCasePlugin,
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+} from 'kysely';
+import {
+  EmbeddingRepository,
+  extractLexicalTerms,
+} from './embedding.repository';
+
+/** A Kysely instance that compiles SQL but never connects. */
+function makeCompilingDb(): Kysely<any> {
+  return new Kysely<any>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createDriver: () => new DummyDriver(),
+      createIntrospector: (db) => new PostgresIntrospector(db),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+    plugins: [new CamelCasePlugin()],
+  });
+}
 
 /**
  * Build a minimal Kysely-shaped fluent chain. Every method returns the
@@ -80,7 +104,12 @@ describe('EmbeddingRepository', () => {
         makeDb({ selectRow: { contentHash: 'old-hash' } }),
       );
       expect(
-        await repo.isContentUnchanged('page', 'p1', 'mistral-embed', 'new-hash'),
+        await repo.isContentUnchanged(
+          'page',
+          'p1',
+          'mistral-embed',
+          'new-hash',
+        ),
       ).toBe(false);
     });
   });
@@ -204,7 +233,9 @@ describe('EmbeddingRepository', () => {
         model: 'mistral-embed',
         dim: 1024,
         contentHash: 'hash',
-        chunks: [{ chunkIndex: 0, chunkText: 'Hi', embedding: [0.1], metadata: meta }],
+        chunks: [
+          { chunkIndex: 0, chunkText: 'Hi', embedding: [0.1], metadata: meta },
+        ],
       });
       expect(inserts[0].metadata).toBe(JSON.stringify(meta));
     });
@@ -245,6 +276,158 @@ describe('EmbeddingRepository', () => {
       });
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('extractLexicalTerms()', () => {
+    it('drops French and English function words and keeps content words in order', () => {
+      expect(
+        extractLexicalTerms('Quel est le nom du candidat chez Acme ?'),
+      ).toEqual(['nom', 'candidat', 'acme']);
+      expect(
+        extractLexicalTerms('What is the SLA for the Dupont contract?'),
+      ).toEqual(['sla', 'dupont', 'contract']);
+    });
+
+    it('keeps accents (SQL unaccents both sides), dedupes, and ignores 1-char tokens', () => {
+      expect(
+        extractLexicalTerms("L'équipe équipe a 1 réunion, réunion"),
+      ).toEqual(['équipe', 'réunion']);
+    });
+
+    it('returns [] for a question made only of stop words or punctuation', () => {
+      expect(extractLexicalTerms('est-ce que ?')).toEqual([]);
+      expect(extractLexicalTerms('')).toEqual([]);
+    });
+  });
+
+  describe('lexicalSearch()', () => {
+    it('returns [] without querying when spaceIds is an empty allow-list', async () => {
+      const db: any = {
+        selectFrom: () => {
+          throw new Error('DB must not be queried for an empty allow-list');
+        },
+      };
+      const repo = new EmbeddingRepository(db);
+
+      expect(
+        await repo.lexicalSearch({
+          workspaceId: 'ws',
+          query: 'Dupont',
+          spaceIds: [],
+        }),
+      ).toEqual([]);
+    });
+
+    it('returns [] without querying when the question has no searchable term', async () => {
+      const db: any = {
+        selectFrom: () => {
+          throw new Error('DB must not be queried without terms');
+        },
+      };
+      const repo = new EmbeddingRepository(db);
+
+      expect(
+        await repo.lexicalSearch({
+          workspaceId: 'ws',
+          query: 'est-ce que ?',
+          spaceIds: ['sp-1'],
+        }),
+      ).toEqual([]);
+    });
+
+    it('compiles to a websearch_to_tsquery / ts_rank_cd query with the permission filters', () => {
+      const repo = new EmbeddingRepository(makeCompilingDb() as any);
+
+      const { sql, parameters } = repo
+        .buildLexicalQuery({
+          workspaceId: 'ws-1',
+          query: 'Qui est Dupont chez Acme ?',
+          spaceIds: ['sp-1', 'sp-2'],
+          sourceId: 'page-9',
+          topK: 20,
+        })
+        .compile();
+
+      expect(sql).toContain('from "ai_embeddings"');
+      expect(sql).toContain(
+        "ts_rank_cd(tsv, websearch_to_tsquery('simple', f_unaccent($1)))",
+      );
+      expect(sql).toContain('"workspace_id" = $2');
+      expect(sql).toContain('"space_id" in ($3, $4)');
+      expect(sql).toContain('"source_id" = $5');
+      expect(sql).toContain(
+        "tsv @@ websearch_to_tsquery('simple', f_unaccent($6))",
+      );
+      expect(sql).toMatch(
+        /order by ts_rank_cd\(tsv, websearch_to_tsquery\('simple', f_unaccent\(\$7\)\)\) desc/,
+      );
+      expect(sql).toContain('limit $8');
+      expect(parameters).toEqual([
+        'dupont or acme',
+        'ws-1',
+        'sp-1',
+        'sp-2',
+        'page-9',
+        'dupont or acme',
+        'dupont or acme',
+        20,
+      ]);
+    });
+
+    it('filters on spaceId when given and omits the IN clause otherwise', () => {
+      const repo = new EmbeddingRepository(makeCompilingDb() as any);
+
+      const { sql, parameters } = repo
+        .buildLexicalQuery({
+          workspaceId: 'ws-1',
+          query: 'Dupont',
+          spaceId: 'sp-7',
+        })
+        .compile();
+
+      expect(sql).toContain('"space_id" = $3');
+      expect(sql).not.toContain('"space_id" in');
+      expect(parameters).toContain('sp-7');
+      expect(parameters[parameters.length - 1]).toBe(8);
+    });
+
+    it('maps rows to SimilarityResult with a numeric score', async () => {
+      const rows = [
+        {
+          sourceKind: 'page',
+          sourceId: 'p1',
+          chunkIndex: 2,
+          chunkText: 'Dupont',
+          metadata: { title: 'T' },
+          score: '0.25',
+        },
+      ];
+      const chain: any = {
+        select: () => chain,
+        where: () => chain,
+        $if: (c: boolean, cb: any) => (c ? cb(chain) : chain),
+        orderBy: () => chain,
+        limit: () => chain,
+        execute: jest.fn().mockResolvedValue(rows),
+      };
+      const repo = new EmbeddingRepository({ selectFrom: () => chain } as any);
+
+      const result = await repo.lexicalSearch({
+        workspaceId: 'ws',
+        query: 'Dupont',
+      });
+
+      expect(result).toEqual([
+        {
+          sourceKind: 'page',
+          sourceId: 'p1',
+          chunkIndex: 2,
+          chunkText: 'Dupont',
+          metadata: { title: 'T' },
+          score: 0.25,
+        },
+      ]);
     });
   });
 });

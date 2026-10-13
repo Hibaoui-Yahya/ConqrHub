@@ -15,6 +15,7 @@ import { useAtom } from "jotai";
 import { userAtom } from "@/features/user/atoms/current-user-atom.ts";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { PageVerificationBadge } from "@/ee/page-verification";
+import { VerificationStaleBanner } from "@/ee/page-verification/components/verification-stale-banner";
 import { useTranslation } from "react-i18next";
 import { IContributor } from "@/features/page/types/page.types.ts";
 
@@ -71,6 +72,7 @@ export function FullEditor({
         contributors={contributors}
         readOnly={!editable}
       />
+      <VerificationStaleBanner pageId={pageId} />
       <MemoizedPageEditor
         pageId={pageId}
         editable={editable}

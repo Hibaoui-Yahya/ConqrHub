@@ -240,3 +240,31 @@
     background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
   }
 }
+
+/* Space-scope chip (full-page composer only) */
+.scopeRoot {
+  width: auto;
+  min-width: 150px;
+  max-width: 220px;
+}
+
+.scopeInput {
+  height: 26px;
+  min-height: 26px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  padding-right: 24px;
+  border-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+  cursor: pointer;
+
+  &:focus,
+  &:focus-within {
+    border-color: var(--brand-default, light-dark(var(--mantine-color-blue-6), var(--mantine-color-blue-4)));
+  }
+}
+
+.scopeSection {
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+}

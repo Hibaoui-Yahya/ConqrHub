@@ -3,15 +3,28 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../services/ai-chat-service";
 import type {
+  AiChatFeedback,
   AiChatMessage,
   AiChatStreamEvent,
   AiChatToolCall,
   ChatAttachment,
   PageMention,
+  SendMessageOptions,
 } from "../types/ai-chat.types";
 
 type ChatStreamOptions = {
   onChatCreated?: (chatId: string) => void;
+};
+
+type LastPayload = {
+  content: string;
+  mentions: PageMention[];
+  attachments: ChatAttachment[];
+  options?: SendMessageOptions;
+  /** Id of the optimistic user message appended for this send. */
+  tempUserMessageId: string;
+  /** True once the stream produced `chat_created` or any content/tool event. */
+  progressed: boolean;
 };
 
 export function useChatStream(
@@ -58,9 +71,19 @@ export function useChatStream(
     setMessages(msgs);
   }, []);
 
+  const lastPayloadRef = useRef<LastPayload | null>(null);
+
   const sendMessage = useCallback(
-    (content: string, mentions: PageMention[] = [], attachments: ChatAttachment[] = [], contextPageId?: string) => {
+    (
+      content: string,
+      mentions: PageMention[] = [],
+      attachments: ChatAttachment[] = [],
+      sendOptions?: SendMessageOptions,
+    ) => {
       if (isStreaming || (!content.trim() && attachments.length === 0)) return;
+
+      const contextPageId = sendOptions?.contextPageId;
+      const spaceId = sendOptions?.spaceId;
 
       setError(null);
       setErrorCode(null);
@@ -81,8 +104,9 @@ export function useChatStream(
         }));
       }
 
+      const tempUserMessageId = `temp-${Date.now()}`;
       const userMessage: AiChatMessage = {
-        id: `temp-${Date.now()}`,
+        id: tempUserMessageId,
         chatId: currentChatIdRef.current || "",
         role: "user",
         content,
@@ -93,6 +117,16 @@ export function useChatStream(
 
       setMessages((prev) => [...prev, userMessage]);
 
+      const payload: LastPayload = {
+        content,
+        mentions,
+        attachments,
+        options: sendOptions,
+        tempUserMessageId,
+        progressed: false,
+      };
+      lastPayloadRef.current = payload;
+
       const attachmentIds = attachments.map((a) => a.id);
 
       const abortController = sendChatMessage(
@@ -102,8 +136,12 @@ export function useChatStream(
           mentionedPageIds: mentions.map((m) => m.id),
           ...(contextPageId && { contextPageId }),
           ...(attachmentIds.length && { attachmentIds }),
+          ...(spaceId && { spaceId }),
         },
         (event: AiChatStreamEvent) => {
+          if (event.type !== "error") {
+            payload.progressed = true;
+          }
           switch (event.type) {
             case "chat_created":
               currentChatIdRef.current = event.chatId;
@@ -200,6 +238,57 @@ export function useChatStream(
     [isStreaming, navigate, queryClient],
   );
 
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+
+  // Resend the last user message after a failure. If the failed attempt never
+  // got past the request (no chat_created / content / tool event), its
+  // optimistic user bubble is removed first so the retry does not duplicate it.
+  const retryLast = useCallback(() => {
+    const last = lastPayloadRef.current;
+    if (!last) return;
+    if (!last.progressed) {
+      setMessages((prev) => prev.filter((m) => m.id !== last.tempUserMessageId));
+    }
+    setError(null);
+    setErrorCode(null);
+    setIsRetryable(false);
+    // Let the state flush before re-sending so `isStreaming` is observed false.
+    setTimeout(() => {
+      sendMessageRef.current(
+        last.content,
+        last.mentions,
+        last.attachments,
+        last.options,
+      );
+    }, 0);
+  }, []);
+
+  // A `forbidden` error (e.g. scope set to a space the user cannot read) is
+  // never retryable: the same payload would fail again.
+  const canRetry =
+    !!error &&
+    !isStreaming &&
+    !!lastPayloadRef.current &&
+    errorCode !== "forbidden";
+
+  // Optimistic local feedback state on an assistant message.
+  const setMessageFeedback = useCallback(
+    (messageId: string, feedback: AiChatFeedback | null) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                metadata: { ...(m.metadata ?? {}), feedback: feedback ?? undefined },
+              }
+            : m,
+        ),
+      );
+    },
+    [],
+  );
+
   const stopGeneration = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -235,6 +324,9 @@ export function useChatStream(
     errorCode,
     isRetryable,
     sendMessage,
+    retryLast,
+    canRetry,
+    setMessageFeedback,
     stopGeneration,
     hydrateFromServer,
   };

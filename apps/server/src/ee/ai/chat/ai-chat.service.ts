@@ -9,6 +9,7 @@ import { AiChatMessageRepo } from '@docmost/db/repos/ai-chat/ai-chat-message.rep
 import { ListChatsDto } from './dto/list-chats.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { SearchChatsDto } from './dto/search-chats.dto';
+import { FeedbackRating } from './dto/message-feedback.dto';
 
 @Injectable()
 export class AiChatService {
@@ -71,6 +72,36 @@ export class AiChatService {
       chatIds.map((id) => this.chatRepo.findById(id, user.workspaceId)),
     );
     return chats.filter((c): c is AiChat => c != null);
+  }
+
+  /**
+   * Records a thumbs up/down on an assistant message. The message must be in
+   * the caller's workspace and in a chat they created (404 otherwise, so
+   * existence is not leaked). Stored under metadata.feedback; a second call
+   * overwrites the previous rating.
+   */
+  async setMessageFeedback(
+    messageId: string,
+    user: User,
+    rating: FeedbackRating,
+    comment?: string,
+  ): Promise<{ ok: true }> {
+    const message = await this.messageRepo.findById(
+      messageId,
+      user.workspaceId,
+    );
+    if (!message) throw new NotFoundException('Message not found');
+    await this.requireOwnedChat(message.chatId, user);
+
+    await this.messageRepo.updateMetadata(messageId, user.workspaceId, {
+      feedback: {
+        rating,
+        comment: comment?.trim() || null,
+        userId: user.id,
+        at: new Date().toISOString(),
+      },
+    });
+    return { ok: true };
   }
 
   async requireOwnedChat(chatId: string, user: User): Promise<AiChat> {

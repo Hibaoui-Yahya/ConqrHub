@@ -239,7 +239,13 @@ describe('hallucination guardrails | AiAnswersController.answers', () => {
   function setup(ctx: RetrievedContext) {
     const ai = makeAiProvider();
     const retrieval = makeRetrieval(ctx);
-    const controller = new AiAnswersController(retrieval as any, ai as any);
+    const controller = new AiAnswersController(
+      retrieval as any,
+      ai as any,
+      makeSpaceAbility(true) as any,
+      { getUserSpaceIds: jest.fn().mockResolvedValue(['sp-1']) } as any,
+      { enrichPageSources: jest.fn().mockImplementation(async (s) => s) } as any,
+    );
     return { ai, controller };
   }
 

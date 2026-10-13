@@ -2,7 +2,11 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { IconArrowDown, IconAlertTriangle } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import type { AiChatMessage, AiChatToolCall } from "../types/ai-chat.types";
+import type {
+  AiChatFeedback,
+  AiChatMessage,
+  AiChatToolCall,
+} from "../types/ai-chat.types";
 import ChatMessage from "./chat-message";
 import classes from "../styles/ai-chat.module.css";
 
@@ -21,6 +25,7 @@ type Props = {
   isStreaming: boolean;
   streamingContent: string;
   streamingToolCalls: AiChatToolCall[];
+  onFeedback?: (messageId: string, feedback: AiChatFeedback | null) => void;
 };
 
 const BOTTOM_THRESHOLD_PX = 32;
@@ -32,7 +37,9 @@ export default function ChatMessageList({
   isStreaming,
   streamingContent,
   streamingToolCalls,
+  onFeedback,
 }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -133,7 +140,7 @@ export default function ChatMessageList({
             key={msg.id}
             fallback={<ChatMessageErrorFallback />}
           >
-            <ChatMessage message={msg} />
+            <ChatMessage message={msg} onFeedback={onFeedback} />
           </ErrorBoundary>
         ))}
         {isStreaming && (
@@ -162,7 +169,7 @@ export default function ChatMessageList({
       {showScrollButton && (
         <button
           type="button"
-          aria-label="Scroll to bottom"
+          aria-label={t("Scroll to bottom")}
           className={classes.scrollToBottomButton}
           onClick={() => scrollToBottom("smooth")}
         >

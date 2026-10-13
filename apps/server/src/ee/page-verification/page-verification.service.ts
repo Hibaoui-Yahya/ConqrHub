@@ -31,15 +31,108 @@ import {
   AuditEvent,
   AuditResource,
 } from '../../common/events/audit-events';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import {
+  BulkVerifyDto,
   CreateVerificationDto,
+  UnverifiedPagesDto,
   UpdateVerificationDto,
   VerificationInfoDto,
+  VerificationOverviewDto,
   VerificationsListDto,
 } from './dto/page-verification.dto';
 
 const EXPIRING_WINDOW_DAYS = 7;
 const MAX_VERIFIERS = 5;
+const UNVERIFIED_DEFAULT_LIMIT = 50;
+
+/** Effective verification states as counted by the overview endpoint. */
+type EffectiveStatus =
+  | 'verified'
+  | 'expiring'
+  | 'expired'
+  | 'draft'
+  | 'in_approval'
+  | 'approved'
+  | 'obsolete'
+  | 'none';
+
+export interface VerificationOverview {
+  verified: number;
+  expiring: number;
+  expired: number;
+  draft: number;
+  inApproval: number;
+  approved: number;
+  obsolete: number;
+  none: number;
+  total: number;
+  /** Pages NOT effectively verified (= not in rag_retrieve). */
+  unverified: number;
+  spaces: Array<{
+    spaceId: string;
+    spaceName: string | null;
+    spaceSlug: string | null;
+    total: number;
+    verified: number;
+    unverified: number;
+  }>;
+  /** max(ai_embeddings.updated_at) for the workspace, null when nothing is indexed. */
+  lastIndexedAt: string | null;
+}
+
+export interface UnverifiedPageItem {
+  id: string;
+  title: string | null;
+  slugId: string;
+  icon: string | null;
+  spaceId: string;
+  spaceName: string | null;
+  spaceSlug: string | null;
+  status: EffectiveStatus;
+  updatedAt: string;
+  lastVerifiedAt: string | null;
+  updatedByName?: string;
+}
+
+export interface BulkVerifyResult {
+  verified: string[];
+  failed: Array<{ pageId: string; reason: string }>;
+}
+
+/**
+ * Keyset cursor for the unverified listing: `<updatedAt ISO>|<page id>`,
+ * base64url-encoded so it is opaque to the client.
+ */
+function encodeUnverifiedCursor(updatedAt: Date, id: string): string {
+  return Buffer.from(`${updatedAt.toISOString()}|${id}`, 'utf8').toString(
+    'base64url',
+  );
+}
+
+function decodeUnverifiedCursor(
+  cursor: string | undefined,
+): { updatedAt: Date; id: string } | null {
+  if (!cursor) return null;
+  let decoded: string;
+  try {
+    decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+  } catch {
+    throw new BadRequestException('Invalid cursor');
+  }
+  const sep = decoded.indexOf('|');
+  if (sep <= 0) throw new BadRequestException('Invalid cursor');
+  const updatedAt = new Date(decoded.slice(0, sep));
+  const id = decoded.slice(sep + 1);
+  if (Number.isNaN(updatedAt.getTime()) || !id) {
+    throw new BadRequestException('Invalid cursor');
+  }
+  return { updatedAt, id };
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (m) => '\\' + m);
+}
 
 @Injectable()
 export class PageVerificationService {
@@ -52,6 +145,7 @@ export class PageVerificationService {
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly spaceMemberRepo: SpaceMemberRepo,
   ) {}
 
   /**
@@ -84,8 +178,30 @@ export class PageVerificationService {
       .set({ status: 'draft', updatedAt: new Date() })
       .where('pageId', 'in', pageIds)
       .where('status', 'in', ['verified', 'expiring', 'approved'])
-      .returning('pageId')
+      .returning(['pageId', 'spaceId', 'workspaceId', 'id'])
       .execute();
+
+    // The page just left the knowledge base without anyone being told: let
+    // the verifiers know so it gets re-verified (in-app notification).
+    for (const row of affected) {
+      try {
+        await this.notificationQueue.add(
+          QueueJob.PAGE_VERIFICATION_INVALIDATED,
+          {
+            pageId: row.pageId,
+            spaceId: row.spaceId,
+            workspaceId: row.workspaceId,
+            verificationId: row.id,
+          },
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to enqueue verification-invalidated notice for page ${row.pageId}`,
+          err,
+        );
+      }
+    }
+
     return affected.map((r) => r.pageId);
   }
 
@@ -429,6 +545,353 @@ export class PageVerificationService {
       spaceId: r.spaceId,
       status: r.verificationStatus ?? 'none',
     }));
+  }
+
+  /**
+   * Verification coverage of the pages the caller can see (all accessible
+   * spaces, or one space after a Read check). Counts use the same effective
+   * status as the RAG gate; `unverified` = pages invisible to rag_retrieve.
+   */
+  async getVerificationOverview(
+    dto: VerificationOverviewDto,
+    user: User,
+    workspace: Workspace,
+  ): Promise<VerificationOverview> {
+    const spaceIds = await this.resolveScopedSpaceIds(user, dto.spaceId);
+    const overview: VerificationOverview = {
+      verified: 0, expiring: 0, expired: 0, draft: 0, inApproval: 0,
+      approved: 0, obsolete: 0, none: 0, total: 0, unverified: 0,
+      spaces: [], lastIndexedAt: null,
+    };
+    if (spaceIds.length === 0) return overview;
+
+    const rows: Array<{
+      spaceId: string;
+      status: string | null;
+      expiresAt: Date | null;
+    }> = await (this.db as any)
+      .selectFrom('pages as p')
+      .leftJoin('pageVerifications as pv', 'pv.pageId', 'p.id')
+      .select(['p.spaceId as spaceId', 'pv.status as status', 'pv.expiresAt as expiresAt'])
+      .where('p.workspaceId', '=', workspace.id)
+      .where('p.deletedAt', 'is', null)
+      .where('p.spaceId', 'in', spaceIds)
+      .execute();
+
+    const spaceRows: Array<{ id: string; name: string | null; slug: string | null }> =
+      await (this.db as any)
+        .selectFrom('spaces')
+        .select(['id', 'name', 'slug'])
+        .where('id', 'in', spaceIds)
+        .where('workspaceId', '=', workspace.id)
+        .execute();
+
+    const perSpace = new Map<string, { total: number; verified: number }>();
+    for (const id of spaceIds) perSpace.set(id, { total: 0, verified: 0 });
+
+    const now = Date.now();
+    for (const r of rows) {
+      const status = this.effectiveStatusForGate(r.status, r.expiresAt, now);
+      overview.total += 1;
+      switch (status) {
+        case 'verified': overview.verified += 1; break;
+        case 'expiring': overview.expiring += 1; break;
+        case 'expired': overview.expired += 1; break;
+        case 'draft': overview.draft += 1; break;
+        case 'in_approval': overview.inApproval += 1; break;
+        case 'approved': overview.approved += 1; break;
+        case 'obsolete': overview.obsolete += 1; break;
+        default: overview.none += 1;
+      }
+      const isVerified = status === 'verified' || status === 'expiring';
+      if (!isVerified) overview.unverified += 1;
+      const bucket = perSpace.get(r.spaceId) ?? { total: 0, verified: 0 };
+      bucket.total += 1;
+      if (isVerified) bucket.verified += 1;
+      perSpace.set(r.spaceId, bucket);
+    }
+
+    const spaceMeta = new Map(spaceRows.map((s) => [s.id, s]));
+    overview.spaces = [...perSpace.entries()]
+      .map(([spaceId, b]) => ({
+        spaceId,
+        spaceName: spaceMeta.get(spaceId)?.name ?? null,
+        spaceSlug: spaceMeta.get(spaceId)?.slug ?? null,
+        total: b.total,
+        verified: b.verified,
+        unverified: b.total - b.verified,
+      }))
+      .sort((a, b) => b.unverified - a.unverified || b.total - a.total);
+
+    try {
+      const idx: { max: Date | string | null } | undefined = await (this.db as any)
+        .selectFrom('aiEmbeddings')
+        .select((eb: any) => eb.fn.max('updatedAt').as('max'))
+        .where('workspaceId', '=', workspace.id)
+        .executeTakeFirst();
+      overview.lastIndexedAt = idx?.max ? new Date(idx.max).toISOString() : null;
+    } catch (err) {
+      this.logger.warn(`lastIndexedAt lookup failed: ${(err as Error)?.message}`);
+    }
+
+    return overview;
+  }
+
+  /**
+   * Paged, filterable variant of listUnverifiedPages for the UI. Same
+   * predicate (not effectively verified), scoped to accessible spaces,
+   * ordered by updatedAt desc with a keyset cursor on (updatedAt, id).
+   */
+  async listUnverifiedPagesPaged(
+    dto: UnverifiedPagesDto,
+    user: User,
+    workspace: Workspace,
+  ): Promise<{ items: UnverifiedPageItem[]; nextCursor: string | null }> {
+    const spaceIds = await this.resolveScopedSpaceIds(user, dto.spaceId);
+    if (spaceIds.length === 0) return { items: [], nextCursor: null };
+
+    const limit = dto.limit ?? UNVERIFIED_DEFAULT_LIMIT;
+    const cursor = decodeUnverifiedCursor(dto.cursor);
+    const now = new Date();
+
+    let query = (this.db as any)
+      .selectFrom('pages as p')
+      .innerJoin('spaces as s', 's.id', 'p.spaceId')
+      .leftJoin('pageVerifications as pv', 'pv.pageId', 'p.id')
+      .leftJoin('users as u', 'u.id', 'p.lastUpdatedById')
+      .select([
+        'p.id as id',
+        'p.title as title',
+        'p.slugId as slugId',
+        'p.icon as icon',
+        'p.spaceId as spaceId',
+        'p.updatedAt as updatedAt',
+        's.name as spaceName',
+        's.slug as spaceSlug',
+        'pv.status as verificationStatus',
+        'pv.expiresAt as expiresAt',
+        'pv.verifiedAt as verifiedAt',
+        'u.name as updatedByName',
+      ])
+      .where('p.workspaceId', '=', workspace.id)
+      .where('p.deletedAt', 'is', null)
+      .where('p.spaceId', 'in', spaceIds)
+      .where((eb: any) =>
+        eb.or([
+          eb('pv.status', 'is', null),
+          eb('pv.status', 'not in', ['verified', 'expiring']),
+          eb.and([
+            eb('pv.expiresAt', 'is not', null),
+            eb('pv.expiresAt', '<=', now),
+          ]),
+        ]),
+      );
+
+    const q = dto.query?.trim();
+    if (q) {
+      query = query.where('p.title', 'ilike', `%${escapeLike(q)}%`);
+    }
+    if (cursor) {
+      query = query.where((eb: any) =>
+        eb.or([
+          eb('p.updatedAt', '<', cursor.updatedAt),
+          eb.and([
+            eb('p.updatedAt', '=', cursor.updatedAt),
+            eb('p.id', '<', cursor.id),
+          ]),
+        ]),
+      );
+    }
+
+    const rows: any[] = await query
+      .orderBy('p.updatedAt', 'desc')
+      .orderBy('p.id', 'desc')
+      .limit(limit + 1)
+      .execute();
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nowMs = now.getTime();
+
+    const items: UnverifiedPageItem[] = page.map((r) => ({
+      id: r.id,
+      title: r.title ?? null,
+      slugId: r.slugId,
+      icon: r.icon ?? null,
+      spaceId: r.spaceId,
+      spaceName: r.spaceName ?? null,
+      spaceSlug: r.spaceSlug ?? null,
+      status: this.effectiveStatusForGate(r.verificationStatus, r.expiresAt, nowMs),
+      updatedAt: new Date(r.updatedAt).toISOString(),
+      lastVerifiedAt: r.verifiedAt ? new Date(r.verifiedAt).toISOString() : null,
+      ...(r.updatedByName ? { updatedByName: r.updatedByName } : {}),
+    }));
+
+    const last = page[page.length - 1];
+    return {
+      items,
+      nextCursor:
+        hasMore && last ? encodeUnverifiedCursor(new Date(last.updatedAt), last.id) : null,
+    };
+  }
+
+  /**
+   * Verify many pages in one call. Per page: must exist in the workspace;
+   * the caller needs manage rights on its space (workspace admin or space
+   * admin) to create a missing verification, or must already be one of its
+   * verifiers. A space admin who is not yet a verifier is added as one so
+   * verifyPage's own check passes. One bad page never aborts the batch.
+   */
+  async bulkVerify(
+    dto: BulkVerifyDto,
+    user: User,
+    workspace: Workspace,
+  ): Promise<BulkVerifyResult> {
+    const result: BulkVerifyResult = { verified: [], failed: [] };
+    const pageIds = [...new Set(dto.pageIds)];
+    const isWorkspaceAdmin = this.isWorkspaceAdmin(user, workspace);
+
+    for (const pageId of pageIds) {
+      try {
+        const page = await this.db
+          .selectFrom('pages')
+          .select(['id', 'spaceId', 'workspaceId'])
+          .where('id', '=', pageId)
+          .where('deletedAt', 'is', null)
+          .executeTakeFirst();
+        if (!page || page.workspaceId !== workspace.id) {
+          result.failed.push({ pageId, reason: 'not_found' });
+          continue;
+        }
+
+        const canManage =
+          isWorkspaceAdmin || (await this.isSpaceAdmin(page.spaceId, user));
+        const existing = await this.db
+          .selectFrom('pageVerifications')
+          .select(['id', 'status'])
+          .where('pageId', '=', pageId)
+          .executeTakeFirst();
+
+        if (!existing) {
+          if (!canManage) {
+            result.failed.push({ pageId, reason: 'forbidden' });
+            continue;
+          }
+          await this.createVerification(
+            {
+              pageId,
+              type: 'expiring',
+              verifierIds: [user.id],
+              ...(dto.expiresInDays
+                ? { mode: 'period', periodAmount: dto.expiresInDays, periodUnit: 'day' }
+                : { mode: 'indefinite' }),
+            } as CreateVerificationDto,
+            user,
+            workspace,
+          );
+        } else {
+          const verifierRows = await this.db
+            .selectFrom('pageVerifiers')
+            .select('userId')
+            .where('pageVerificationId', '=', existing.id)
+            .execute();
+          const isVerifier = verifierRows.some((v) => v.userId === user.id);
+          if (!isVerifier && !canManage) {
+            result.failed.push({ pageId, reason: 'forbidden' });
+            continue;
+          }
+          if (!isVerifier && !isWorkspaceAdmin) {
+            // Space admin: join the verifier list so verifyPage accepts them.
+            if (verifierRows.length >= MAX_VERIFIERS) {
+              result.failed.push({ pageId, reason: 'verifier_limit' });
+              continue;
+            }
+            await this.db
+              .insertInto('pageVerifiers')
+              .values({ pageVerificationId: existing.id, userId: user.id, addedById: user.id })
+              .execute();
+          }
+        }
+
+        await this.verifyPage(pageId, user, workspace);
+        result.verified.push(pageId);
+      } catch (err) {
+        const reason =
+          err instanceof ForbiddenException
+            ? 'forbidden'
+            : err instanceof NotFoundException
+              ? 'not_found'
+              : err instanceof BadRequestException
+                ? 'invalid_state'
+                : 'error';
+        this.logger.warn(
+          `bulkVerify: page ${pageId} failed (${reason}): ${(err as Error)?.message}`,
+        );
+        result.failed.push({ pageId, reason });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Spaces the caller may read: the one requested (after a Read check) or
+   * every space they are a member of.
+   */
+  private async resolveScopedSpaceIds(
+    user: User,
+    spaceId: string | undefined,
+  ): Promise<string[]> {
+    if (!spaceId) return this.spaceMemberRepo.getUserSpaceIds(user.id);
+    let ability;
+    try {
+      ability = await this.spaceAbility.createForUser(user, spaceId);
+    } catch {
+      throw new ForbiddenException('You do not have access to this space');
+    }
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException('You do not have access to this space');
+    }
+    return [spaceId];
+  }
+
+  /**
+   * Effective status as the RAG gate sees it (isEffectivelyVerified in
+   * embedding-indexer.service.ts): verified/expiring rows past expiry are
+   * 'expired'; within EXPIRING_WINDOW_DAYS they are 'expiring'.
+   */
+  private effectiveStatusForGate(
+    status: string | null | undefined,
+    expiresAt: Date | string | null | undefined,
+    nowMs: number,
+  ): EffectiveStatus {
+    if (!status) return 'none';
+    if (status === 'verified' || status === 'expiring') {
+      if (expiresAt) {
+        const expiresMs = new Date(expiresAt).getTime();
+        if (expiresMs <= nowMs) return 'expired';
+        if (expiresMs - nowMs <= EXPIRING_WINDOW_DAYS * 24 * 60 * 60 * 1000) return 'expiring';
+      }
+      return 'verified';
+    }
+    if (status === 'draft' || status === 'in_approval' || status === 'approved' || status === 'obsolete') {
+      return status;
+    }
+    return 'draft';
+  }
+
+  private isWorkspaceAdmin(user: User, workspace: Workspace): boolean {
+    const wAbility = this.workspaceAbility.createForUser(user, workspace);
+    return wAbility.can(WorkspaceCaslAction.Manage, WorkspaceCaslSubject.Settings);
+  }
+
+  private async isSpaceAdmin(spaceId: string, user: User): Promise<boolean> {
+    try {
+      const sAbility = await this.spaceAbility.createForUser(user, spaceId);
+      return sAbility.can(SpaceCaslAction.Manage, SpaceCaslSubject.Settings);
+    } catch {
+      return false;
+    }
   }
 
   private async getPermissions(pageId: string, spaceId: string, verification: any, verifiers: any[], user: User) {

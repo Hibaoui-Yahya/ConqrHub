@@ -1,6 +1,7 @@
 import api from "@/lib/api-client.ts";
 import type {
   AiChat,
+  AiChatFeedbackRating,
   AiChatMessage,
   AiChatStreamEvent,
   ChatAttachment,
@@ -57,6 +58,15 @@ export async function uploadChatFile(
   });
 }
 
+export async function sendFeedback(params: {
+  messageId: string;
+  rating: AiChatFeedbackRating;
+  comment?: string;
+}): Promise<{ ok: boolean }> {
+  const req = await api.post<{ ok: boolean }>("/ai/chats/feedback", params);
+  return req.data;
+}
+
 export function sendChatMessage(
   params: {
     chatId?: string;
@@ -64,6 +74,8 @@ export function sendChatMessage(
     mentionedPageIds?: string[];
     contextPageId?: string;
     attachmentIds?: string[];
+    /** Restrict the assistant to one space (uuid). */
+    spaceId?: string;
   },
   onEvent: (event: AiChatStreamEvent) => void,
   onError?: (error: string) => void,

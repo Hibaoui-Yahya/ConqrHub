@@ -7,6 +7,7 @@ export const NotificationType = {
   PAGE_UPDATED: 'page.updated',
   PAGE_VERIFICATION_EXPIRING: 'page.verification_expiring',
   PAGE_VERIFICATION_EXPIRED: 'page.verification_expired',
+  PAGE_VERIFICATION_INVALIDATED: 'page.verification_invalidated',
   PAGE_VERIFIED: 'page.verified',
   PAGE_APPROVAL_REQUESTED: 'page.approval_requested',
   PAGE_APPROVAL_REJECTED: 'page.approval_rejected',

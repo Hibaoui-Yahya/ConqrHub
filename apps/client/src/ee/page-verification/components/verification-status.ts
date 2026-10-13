@@ -41,3 +41,24 @@ export function getStatusLabel(
       return "";
   }
 }
+
+/** Human label for a `bulk-verify` failure reason code. */
+export function getBulkVerifyReasonLabel(
+  reason: string | undefined,
+  t: (key: string) => string,
+): string {
+  switch (reason) {
+    case "not_found":
+      return t("Page not found");
+    case "forbidden":
+      return t("You are not allowed to verify this page");
+    case "verifier_limit":
+      return t("Verifier limit reached for this page");
+    case "invalid_state":
+      return t("This page cannot be verified in its current state");
+    case "error":
+      return t("An unexpected error occurred");
+    default:
+      return reason || t("An unexpected error occurred");
+  }
+}

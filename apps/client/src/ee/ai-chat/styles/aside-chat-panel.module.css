@@ -137,3 +137,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.errorArea {
+  padding-top: var(--mantine-spacing-xs);
+}

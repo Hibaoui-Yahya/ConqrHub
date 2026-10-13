@@ -5,6 +5,7 @@ import { useChatStream } from "../hooks/use-chat-stream";
 import ChatMessageList from "./chat-message-list";
 import ChatEmptyState from "./chat-empty-state";
 import ChatInput from "./chat-input";
+import ChatStreamError from "./chat-stream-error";
 import type { HomeAiPromptInitialState } from "@/features/home/components/home-ai-prompt";
 import classes from "../styles/ai-chat.module.css";
 
@@ -29,6 +30,9 @@ export default function AiChatLayout() {
     isStreaming,
     error,
     sendMessage,
+    retryLast,
+    canRetry,
+    setMessageFeedback,
     stopGeneration,
     hydrateFromServer,
   } = useChatStream(chatId);
@@ -72,16 +76,15 @@ export default function AiChatLayout() {
             isStreaming={isStreaming}
             streamingContent={streamingContent}
             streamingToolCalls={streamingToolCalls}
+            onFeedback={setMessageFeedback}
           />
           {error && (
-            <div
-              style={{
-                padding: "var(--mantine-spacing-sm) var(--mantine-spacing-lg)",
-                color: "var(--mantine-color-red-6)",
-                fontSize: "var(--mantine-font-size-sm)",
-              }}
-            >
-              {error}
+            <div className={classes.streamError}>
+              <ChatStreamError
+                error={error}
+                canRetry={canRetry}
+                onRetry={retryLast}
+              />
             </div>
           )}
           <div className={classes.inputArea}>
@@ -90,6 +93,7 @@ export default function AiChatLayout() {
               onSend={sendMessage}
               onStop={stopGeneration}
               chatId={chatId}
+              showScope
             />
           </div>
         </>

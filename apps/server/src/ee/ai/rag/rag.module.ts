@@ -3,6 +3,7 @@ import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { AiProviderModule } from '../providers/ai-provider.module';
 import { RagRetrievalService } from './rag-retrieval.service';
 import { RagAnswerService } from './rag-answer.service';
+import { RagSourceService } from './rag-source.service';
 import { RagController } from './rag.controller';
 import { AiAnswersController } from './ai-answers.controller';
 import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.factory';
@@ -10,7 +11,12 @@ import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.fact
 @Module({
   imports: [EmbeddingsModule, AiProviderModule],
   controllers: [RagController, AiAnswersController],
-  providers: [RagRetrievalService, RagAnswerService, SpaceAbilityFactory],
-  exports: [RagRetrievalService],
+  providers: [
+    RagRetrievalService,
+    RagAnswerService,
+    RagSourceService,
+    SpaceAbilityFactory,
+  ],
+  exports: [RagRetrievalService, RagSourceService],
 })
 export class RagModule {}

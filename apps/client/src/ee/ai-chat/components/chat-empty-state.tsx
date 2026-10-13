@@ -1,69 +1,100 @@
+import { useRef } from "react";
+import { Link } from "react-router-dom";
 import {
   IconSparkles,
   IconSearch,
-  IconFilePlus,
-  IconPencil,
   IconFileText,
-  IconBulb,
-  IconList,
+  IconShieldCheck,
+  IconReport,
+  IconArrowsLeftRight,
+  IconClockEdit,
   IconArrowBigRightLines,
+  IconDatabase,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import ChatInput from "./chat-input";
-import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
+import ChatInput, { type ChatInputHandle } from "./chat-input";
+import type {
+  ChatAttachment,
+  PageMention,
+  SendMessageOptions,
+} from "../types/ai-chat.types";
+import { useVerificationOverviewQuery } from "@/ee/page-verification/queries/page-verification-query";
 import classes from "../styles/ai-chat.module.css";
 
 type Suggestion = {
   icon: React.ReactNode;
-  text: string;
-  prompt: string;
+  /** i18n key; the English text doubles as the prompt sent/inserted. */
+  key: string;
 };
 
+// Knowledge-work prompts that make sense for an HR agency and for any wiki.
+// Prompts ending with "@" or "…" are inserted into the composer for the user
+// to complete; the others are sent immediately.
 const SUGGESTIONS: Suggestion[] = [
   {
     icon: <IconSearch size={18} />,
-    text: "Search across all pages",
-    prompt: "Search for pages about ",
-  },
-  {
-    icon: <IconFilePlus size={18} />,
-    text: "Create a new page",
-    prompt: "Create a new page titled ",
+    key: "What do our interview guides say about …",
   },
   {
     icon: <IconFileText size={18} />,
-    text: "Summarize a page",
-    prompt: "Summarize the page @",
+    key: "Summarize the page @",
   },
   {
-    icon: <IconPencil size={18} />,
-    text: "Update page content",
-    prompt: "Update the page @",
+    icon: <IconShieldCheck size={18} />,
+    key: "Which pages are not verified yet?",
   },
   {
-    icon: <IconBulb size={18} />,
-    text: "Get page insights",
-    prompt: "What are the key insights from @",
+    icon: <IconReport size={18} />,
+    key: "Write a report from @",
   },
   {
-    icon: <IconList size={18} />,
-    text: "List recent pages",
-    prompt: "Show me the most recently updated pages",
+    icon: <IconArrowsLeftRight size={18} />,
+    key: "Compare @ and @",
+  },
+  {
+    icon: <IconClockEdit size={18} />,
+    key: "Show the pages modified this week",
   },
 ];
 
+function isFillInPrompt(prompt: string): boolean {
+  const trimmed = prompt.trimEnd();
+  return trimmed.endsWith("@") || trimmed.endsWith("…") || trimmed.endsWith("...");
+}
+
 type Props = {
   isStreaming: boolean;
-  onSend: (content: string, mentions: PageMention[], attachments: ChatAttachment[]) => void;
+  onSend: (
+    content: string,
+    mentions: PageMention[],
+    attachments: ChatAttachment[],
+    options?: SendMessageOptions,
+  ) => void;
   onStop: () => void;
 };
 
 export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
   const { t } = useTranslation();
+  const inputRef = useRef<ChatInputHandle>(null);
+  const overviewQuery = useVerificationOverviewQuery();
 
-  const handleSuggestionClick = (prompt: string) => {
+  const handleSuggestionClick = (key: string) => {
+    const prompt = t(key);
+    if (isFillInPrompt(prompt)) {
+      // Drop a trailing ellipsis so the user continues the sentence; keep a
+      // trailing "@" (no space after it) so the page-mention picker opens.
+      const trimmed = prompt.trimEnd();
+      const text = trimmed.endsWith("@")
+        ? trimmed
+        : `${trimmed.replace(/(…|\.\.\.)$/, "").trimEnd()} `;
+      inputRef.current?.insertText(text);
+      return;
+    }
     onSend(prompt, [], []);
   };
+
+  const overview = overviewQuery.data;
+  const showKbStatus = !overviewQuery.isError && !!overview;
 
   return (
     <div className={classes.emptyState}>
@@ -71,37 +102,53 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
         <div className={classes.emptyStateIconWrapper}>
           <IconSparkles size={32} stroke={1.5} className={classes.emptyStateIcon} />
         </div>
-        <div className={classes.emptyStateBrand}>{t("Conqrai AI")}</div>
+        <div className={classes.emptyStateBrand}>{t("ConqrAI")}</div>
         <div className={classes.emptyStateTitle}>
           {t("How can I help you today?")}
         </div>
         <div className={classes.emptyStateSubtitle}>
           {t("Search pages, create content, or get insights — all in one place.")}
         </div>
+        {showKbStatus && (
+          <Link to="/settings/knowledge-base" className={classes.kbStatus}>
+            <IconDatabase size={13} />
+            <span>
+              {t(
+                "Knowledge base: {{verified}} verified pages · {{unverified}} to verify",
+                {
+                  verified: overview.verified ?? 0,
+                  unverified: overview.unverified ?? 0,
+                },
+              )}
+            </span>
+          </Link>
+        )}
       </div>
 
       <div className={classes.emptyStateInput}>
         <ChatInput
+          ref={inputRef}
           isStreaming={isStreaming}
           onSend={onSend}
           onStop={onStop}
-          placeholder="Ask anything... Use @ to mention pages"
+          placeholder={t("Ask anything... Use @ to mention pages")}
           autofocus
+          showScope
         />
       </div>
 
       <div className={classes.suggestionsSection}>
-        <div className={classes.suggestionsLabel}>Try these</div>
+        <div className={classes.suggestionsLabel}>{t("Try these")}</div>
         <div className={classes.suggestionsGrid}>
           {SUGGESTIONS.map((s) => (
             <button
-              key={s.text}
+              key={s.key}
               type="button"
               className={classes.suggestionCard}
-              onClick={() => handleSuggestionClick(s.prompt)}
+              onClick={() => handleSuggestionClick(s.key)}
             >
               <span className={classes.suggestionIcon}>{s.icon}</span>
-              <span className={classes.suggestionText}>{s.text}</span>
+              <span className={classes.suggestionText}>{t(s.key)}</span>
               <IconArrowBigRightLines size={14} className={classes.suggestionArrow} />
             </button>
           ))}
@@ -110,7 +157,7 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
 
       <div className={classes.emptyStateFooter}>
         <kbd className={classes.kbd}>Shift + Enter</kbd>
-        <span className={classes.footerText}>for new line</span>
+        <span className={classes.footerText}>{t("for new line")}</span>
       </div>
     </div>
   );

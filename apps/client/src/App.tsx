@@ -42,6 +42,7 @@ import WorkspaceApiKeys from "@/ee/api-key/pages/workspace-api-keys";
 import AiSettings from "@/ee/ai/pages/ai-settings.tsx";
 import AuditLogs from "@/ee/audit/pages/audit-logs.tsx";
 import VerifiedPages from "@/ee/page-verification/pages/verified-pages.tsx";
+import KnowledgeBasePage from "@/ee/page-verification/pages/knowledge-base.tsx";
 import DocHealthPage from "@/features/doc-health/pages/doc-health-page.tsx";
 import TemplateList from "@/ee/template/pages/template-list";
 import TemplateEditor from "@/ee/template/pages/template-editor";
@@ -130,6 +131,7 @@ export default function App() {
             <Route path={"ai"} element={<AiSettings />} />
             <Route path={"ai/mcp"} element={<AiSettings />} />
             <Route path={"audit"} element={<AuditLogs />} />
+            <Route path={"knowledge-base"} element={<KnowledgeBasePage />} />
             <Route path={"verifications"} element={<VerifiedPages />} />
             <Route path={"health"} element={<DocHealthPage />} />
             <Route path={"integrations"} element={<IntegrationsSettings />} />

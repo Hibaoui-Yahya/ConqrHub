@@ -1,4 +1,7 @@
-import { EmbeddingIndexerService } from './embedding-indexer.service';
+import {
+  EmbeddingIndexerService,
+  embeddingInput,
+} from './embedding-indexer.service';
 import { ChunkingService } from './chunking.service';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
@@ -23,7 +26,10 @@ type VerificationRow = { status: string | null; expiresAt: Date | null };
 // .select()/.where() calls work before .executeTakeFirst().
 function makeDbWithPage(
   page: PageRow | undefined,
-  verification: VerificationRow | null | undefined = { status: 'verified', expiresAt: null },
+  verification: VerificationRow | null | undefined = {
+    status: 'verified',
+    expiresAt: null,
+  },
 ) {
   const rowFor: Record<string, any> = {
     pages: page,
@@ -42,35 +48,53 @@ function makeDbWithPage(
   } as any;
 }
 
-function makeAiProvider(overrides: {
-  available?: boolean;
-  dimension?: number;
-  embedMany?: jest.Mock;
-} = {}): jest.Mocked<Pick<AiProviderService, 'isAvailable' | 'getEmbeddingDimension' | 'embedMany'>> {
+function makeAiProvider(
+  overrides: {
+    available?: boolean;
+    dimension?: number;
+    embedMany?: jest.Mock;
+  } = {},
+): jest.Mocked<
+  Pick<AiProviderService, 'isAvailable' | 'getEmbeddingDimension' | 'embedMany'>
+> {
   return {
     isAvailable: jest.fn().mockReturnValue(overrides.available ?? true),
-    getEmbeddingDimension: jest.fn().mockReturnValue(overrides.dimension ?? 1024),
+    getEmbeddingDimension: jest
+      .fn()
+      .mockReturnValue(overrides.dimension ?? 1024),
     embedMany: overrides.embedMany ?? jest.fn().mockResolvedValue([[0.1, 0.2]]),
   } as any;
 }
 
-function makeEnv(overrides: {
-  model?: string;
-  chunkChars?: number;
-  overlap?: number;
-  batchSize?: number;
-} = {}): jest.Mocked<Pick<
-  EnvironmentService,
-  | 'getAiEmbeddingModel'
-  | 'getAiEmbeddingChunkChars'
-  | 'getAiEmbeddingChunkOverlap'
-  | 'getAiEmbeddingBatchSize'
->> {
+function makeEnv(
+  overrides: {
+    model?: string;
+    chunkChars?: number;
+    overlap?: number;
+    batchSize?: number;
+  } = {},
+): jest.Mocked<
+  Pick<
+    EnvironmentService,
+    | 'getAiEmbeddingModel'
+    | 'getAiEmbeddingChunkChars'
+    | 'getAiEmbeddingChunkOverlap'
+    | 'getAiEmbeddingBatchSize'
+  >
+> {
   return {
-    getAiEmbeddingModel: jest.fn().mockReturnValue(overrides.model ?? 'mistral-embed'),
-    getAiEmbeddingChunkChars: jest.fn().mockReturnValue(overrides.chunkChars ?? 1600),
-    getAiEmbeddingChunkOverlap: jest.fn().mockReturnValue(overrides.overlap ?? 200),
-    getAiEmbeddingBatchSize: jest.fn().mockReturnValue(overrides.batchSize ?? 32),
+    getAiEmbeddingModel: jest
+      .fn()
+      .mockReturnValue(overrides.model ?? 'mistral-embed'),
+    getAiEmbeddingChunkChars: jest
+      .fn()
+      .mockReturnValue(overrides.chunkChars ?? 1600),
+    getAiEmbeddingChunkOverlap: jest
+      .fn()
+      .mockReturnValue(overrides.overlap ?? 200),
+    getAiEmbeddingBatchSize: jest
+      .fn()
+      .mockReturnValue(overrides.batchSize ?? 32),
   } as any;
 }
 
@@ -90,7 +114,10 @@ function makeSvc(
   env?: ReturnType<typeof makeEnv>,
   repo?: jest.Mocked<EmbeddingRepository>,
   chunking?: ChunkingService,
-  verification: VerificationRow | null | undefined = { status: 'verified', expiresAt: null },
+  verification: VerificationRow | null | undefined = {
+    status: 'verified',
+    expiresAt: null,
+  },
 ) {
   return new EmbeddingIndexerService(
     makeDbWithPage(page, verification),
@@ -126,8 +153,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
 
   describe('verification gate — only verified content enters RAG', () => {
     const PAGE: PageRow = {
-      id: PAGE_ID, title: 'T', textContent: 'real content',
-      spaceId: SPACE_ID, deletedAt: null,
+      id: PAGE_ID,
+      title: 'T',
+      textContent: 'real content',
+      spaceId: SPACE_ID,
+      deletedAt: null,
     };
 
     it('skips indexing and removes embeddings when the page has no verification', async () => {
@@ -147,7 +177,10 @@ describe('EmbeddingIndexerService.indexPage()', () => {
     it('skips indexing when verification is still in draft', async () => {
       const ai = makeAiProvider();
       const repo = makeRepo();
-      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'draft', expiresAt: null });
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, {
+        status: 'draft',
+        expiresAt: null,
+      });
 
       const result = await svc.indexPage(PAGE_ID, WS);
 
@@ -159,7 +192,10 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       const ai = makeAiProvider();
       const repo = makeRepo();
       const past = new Date(Date.now() - 60_000);
-      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'verified', expiresAt: past });
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, {
+        status: 'verified',
+        expiresAt: past,
+      });
 
       const result = await svc.indexPage(PAGE_ID, WS);
 
@@ -170,7 +206,10 @@ describe('EmbeddingIndexerService.indexPage()', () => {
     it('indexes when the page is verified', async () => {
       const ai = makeAiProvider();
       const repo = makeRepo();
-      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'verified', expiresAt: null });
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, {
+        status: 'verified',
+        expiresAt: null,
+      });
 
       const result = await svc.indexPage(PAGE_ID, WS);
 
@@ -182,7 +221,10 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       const ai = makeAiProvider();
       const repo = makeRepo();
       const future = new Date(Date.now() + 60_000);
-      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, { status: 'expiring', expiresAt: future });
+      const svc = makeSvc(PAGE, ai, undefined, repo, undefined, {
+        status: 'expiring',
+        expiresAt: future,
+      });
 
       const result = await svc.indexPage(PAGE_ID, WS);
 
@@ -196,8 +238,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       const ai = makeAiProvider();
       const repo = makeRepo();
       const page: PageRow = {
-        id: PAGE_ID, title: 'T', textContent: 'body',
-        spaceId: 'new-space', deletedAt: null,
+        id: PAGE_ID,
+        title: 'T',
+        textContent: 'body',
+        spaceId: 'new-space',
+        deletedAt: null,
       };
       const svc = makeSvc(page, ai, undefined, repo);
 
@@ -227,8 +272,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
     it('deletes embeddings when the page is soft-deleted', async () => {
       const repo = makeRepo();
       const page: PageRow = {
-        id: PAGE_ID, title: 'T', textContent: 'body',
-        spaceId: 'new-space', deletedAt: new Date(),
+        id: PAGE_ID,
+        title: 'T',
+        textContent: 'body',
+        spaceId: 'new-space',
+        deletedAt: new Date(),
       };
       const svc = makeSvc(page, undefined, undefined, repo);
 
@@ -322,7 +370,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
 
       const content = 'Hello world deterministic';
       const page: PageRow = {
-        id: PAGE_ID, title: null, textContent: content, spaceId: SPACE_ID, deletedAt: null,
+        id: PAGE_ID,
+        title: null,
+        textContent: content,
+        spaceId: SPACE_ID,
+        deletedAt: null,
       };
       const chunking = new ChunkingService();
       const expectedHash = chunking.contentHash(content);
@@ -331,7 +383,10 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       await svc.indexPage(PAGE_ID, WS);
 
       expect(repo.isContentUnchanged).toHaveBeenCalledWith(
-        'page', PAGE_ID, 'mistral-embed', expectedHash,
+        'page',
+        PAGE_ID,
+        'mistral-embed',
+        expectedHash,
       );
     });
   });
@@ -339,14 +394,20 @@ describe('EmbeddingIndexerService.indexPage()', () => {
   describe('happy path: index page successfully', () => {
     const content = 'The quick brown fox jumps over the lazy dog.';
     const page: PageRow = {
-      id: PAGE_ID, title: 'My Page', textContent: content, spaceId: SPACE_ID, deletedAt: null,
+      id: PAGE_ID,
+      title: 'My Page',
+      textContent: content,
+      spaceId: SPACE_ID,
+      deletedAt: null,
     };
 
     it('returns indexed status with correct chunksIndexed count', async () => {
       const chunking = new ChunkingService();
       const expectedChunks = chunking.chunk(content);
       const ai = makeAiProvider({
-        embedMany: jest.fn().mockResolvedValue(expectedChunks.map(() => [0.1, 0.2])),
+        embedMany: jest
+          .fn()
+          .mockResolvedValue(expectedChunks.map(() => [0.1, 0.2])),
       });
       const repo = makeRepo();
       const svc = makeSvc(page, ai, undefined, repo, chunking);
@@ -398,7 +459,58 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       await svc.indexPage(PAGE_ID, WS);
 
       const call = repo.upsertChunks.mock.calls[0][0];
-      expect(call.contentHash).toBe(chunking.contentHash(content));
+      // The title is part of the hashed input (a rename must re-embed).
+      expect(call.contentHash).toBe(
+        chunking.contentHash(embeddingInput('My Page', content)),
+      );
+      expect(call.contentHash).not.toBe(chunking.contentHash(content));
+    });
+
+    it('embeds each chunk prefixed with the page title but stores the raw chunk text', async () => {
+      const chunking = new ChunkingService();
+      const chunks = chunking.chunk(content);
+      const embedMany = jest.fn().mockResolvedValue(chunks.map(() => [0.1]));
+      const ai = makeAiProvider({ embedMany });
+      const repo = makeRepo();
+      const svc = makeSvc(page, ai, undefined, repo, chunking);
+
+      await svc.indexPage(PAGE_ID, WS);
+
+      expect(embedMany).toHaveBeenCalledWith(
+        chunks.map((c) => `My Page\n\n${c.chunkText}`),
+      );
+      const call = repo.upsertChunks.mock.calls[0][0];
+      expect(call.chunks.map((c: any) => c.chunkText)).toEqual(
+        chunks.map((c) => c.chunkText),
+      );
+    });
+
+    it('re-embeds after a rename even when the body is unchanged', async () => {
+      const chunking = new ChunkingService();
+      const before = { ...page, title: 'Old title' };
+      const after = { ...page, title: 'New title' };
+      const repoA = makeRepo();
+      const repoB = makeRepo();
+      await makeSvc(before, undefined, undefined, repoA, chunking).indexPage(
+        PAGE_ID,
+        WS,
+      );
+      await makeSvc(after, undefined, undefined, repoB, chunking).indexPage(
+        PAGE_ID,
+        WS,
+      );
+
+      const hashA = repoA.isContentUnchanged.mock.calls[0][3];
+      const hashB = repoB.isContentUnchanged.mock.calls[0][3];
+      expect(hashA).not.toBe(hashB);
+    });
+  });
+
+  describe('embeddingInput()', () => {
+    it('prefixes the title on its own paragraph and falls back to the bare text', () => {
+      expect(embeddingInput('Title', 'body')).toBe('Title\n\nbody');
+      expect(embeddingInput('  ', 'body')).toBe('body');
+      expect(embeddingInput(null, 'body')).toBe('body');
     });
   });
 
@@ -410,18 +522,27 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       // 50 chars → 10 chunks of 5 chars each
       const textContent = 'ABCDE'.repeat(10);
       const chunking = new ChunkingService();
-      const chunkCount = chunking.chunk(textContent, { chunkChars: 5, overlap: 0 }).length;
+      const chunkCount = chunking.chunk(textContent, {
+        chunkChars: 5,
+        overlap: 0,
+      }).length;
       expect(chunkCount).toBe(10);
 
       // embedMany returns one vector per text in the batch
-      const embedMany = jest.fn().mockImplementation(
-        (texts: string[]) => Promise.resolve(texts.map(() => [0.1])),
-      );
+      const embedMany = jest
+        .fn()
+        .mockImplementation((texts: string[]) =>
+          Promise.resolve(texts.map(() => [0.1])),
+        );
       const ai = makeAiProvider({ embedMany });
       const repo = makeRepo();
 
       const page: PageRow = {
-        id: PAGE_ID, title: null, textContent, spaceId: SPACE_ID, deletedAt: null,
+        id: PAGE_ID,
+        title: null,
+        textContent,
+        spaceId: SPACE_ID,
+        deletedAt: null,
       };
       const svc = makeSvc(page, ai, env, repo, chunking);
 
@@ -437,14 +558,18 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       const chunking = new ChunkingService();
 
       let callIndex = 0;
-      const embedMany = jest.fn().mockImplementation(() =>
-        Promise.resolve([[callIndex++ * 0.1]]),
-      );
+      const embedMany = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve([[callIndex++ * 0.1]]));
       const ai = makeAiProvider({ embedMany });
       const repo = makeRepo();
 
       const page: PageRow = {
-        id: PAGE_ID, title: null, textContent, spaceId: SPACE_ID, deletedAt: null,
+        id: PAGE_ID,
+        title: null,
+        textContent,
+        spaceId: SPACE_ID,
+        deletedAt: null,
       };
       const svc = makeSvc(page, ai, env, repo, chunking);
 
@@ -467,7 +592,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
         embedMany: jest.fn().mockResolvedValue(chunks.map(() => [0.1])),
       });
       const page: PageRow = {
-        id: PAGE_ID, title: null, textContent: content, spaceId: SPACE_ID, deletedAt: null,
+        id: PAGE_ID,
+        title: null,
+        textContent: content,
+        spaceId: SPACE_ID,
+        deletedAt: null,
       };
       const svc = makeSvc(page, ai, env, repo, chunking);
 
@@ -490,7 +619,11 @@ describe('EmbeddingIndexerService.indexPage()', () => {
       const repo = makeRepo();
       const svc = makeSvc(undefined, undefined, undefined, repo);
       await svc.deletePageEmbeddingsBatch(['a', 'b', 'c']);
-      expect(repo.deleteBySourceIds).toHaveBeenCalledWith('page', ['a', 'b', 'c']);
+      expect(repo.deleteBySourceIds).toHaveBeenCalledWith('page', [
+        'a',
+        'b',
+        'c',
+      ]);
     });
   });
 });

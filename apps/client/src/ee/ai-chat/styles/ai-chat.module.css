@@ -266,3 +266,32 @@
 .footerText {
   font-size: var(--mantine-font-size-xs);
 }
+
+/* Knowledge-base status line under the hero */
+.kbStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--mantine-spacing-sm);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  font-size: var(--mantine-font-size-xs);
+  text-decoration: none;
+  transition: color 120ms ease, border-color 120ms ease;
+
+  @mixin hover {
+    color: var(--brand-default, light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-4)));
+    border-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  }
+}
+
+/* Inline stream error with retry */
+.streamError {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--mantine-spacing-lg) var(--mantine-spacing-xs);
+}

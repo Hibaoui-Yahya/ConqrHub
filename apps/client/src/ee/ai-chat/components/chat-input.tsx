@@ -1,8 +1,26 @@
-import { useCallback, useRef, useEffect, useState } from "react";
+import {
+  useCallback,
+  useRef,
+  useEffect,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { useTranslation } from "react-i18next";
-import { IconArrowUp, IconPaperclip, IconPlayerStopFilled, IconX, IconFile, IconPhoto, IconPlus, IconAt, IconFileText } from "@tabler/icons-react";
+import {
+  IconArrowUp,
+  IconPaperclip,
+  IconPlayerStopFilled,
+  IconX,
+  IconFile,
+  IconPhoto,
+  IconPlus,
+  IconAt,
+  IconFileText,
+} from "@tabler/icons-react";
 import { Popover } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import ChatScopeSelect, { SCOPE_ALL } from "./chat-scope-select";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { CharacterCount } from "@tiptap/extensions";
@@ -12,7 +30,11 @@ import EmojiCommand from "@/features/editor/extensions/emoji-command";
 import mentionRenderItems from "@/features/editor/components/mention/mention-suggestion";
 import MentionView from "@/features/editor/components/mention/mention-view";
 import { uploadChatFile } from "../services/ai-chat-service";
-import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
+import type {
+  ChatAttachment,
+  PageMention,
+  SendMessageOptions,
+} from "../types/ai-chat.types";
 import classes from "../styles/chat-input.module.css";
 import { MicButton } from "@/ee/voice-input/mic-button";
 
@@ -23,9 +45,20 @@ const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.csv,.md";
 // Kept in sync with MAX_ATTACHMENTS_PER_MESSAGE in apps/server/src/ee/ai-chat/ai-chat-limits.ts
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 
+export type ChatInputHandle = {
+  /** Insert text at the end of the composer and focus it (used by prompt suggestions). */
+  insertText: (text: string) => void;
+  focus: () => void;
+};
+
 type Props = {
   isStreaming: boolean;
-  onSend: (content: string, mentions: PageMention[], attachments: ChatAttachment[]) => void;
+  onSend: (
+    content: string,
+    mentions: PageMention[],
+    attachments: ChatAttachment[],
+    options?: SendMessageOptions,
+  ) => void;
   onStop: () => void;
   placeholder?: string;
   autofocus?: boolean;
@@ -34,6 +67,8 @@ type Props = {
   variant?: "card" | "flat";
   showDisclaimer?: boolean;
   chatId?: string;
+  /** Show the space-scope chip (full-page chat only). */
+  showScope?: boolean;
 };
 
 function extractMentions(json: any): PageMention[] {
@@ -90,27 +125,36 @@ function editorJsonToText(json: any): string {
   return text;
 }
 
-export default function ChatInput({
-  isStreaming,
-  onSend,
-  onStop,
-  placeholder,
-  autofocus = true,
-  contextPages,
-  onRemoveContextPage,
-  variant = "card",
-  showDisclaimer = true,
-  chatId,
-}: Props) {
+const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
+  {
+    isStreaming,
+    onSend,
+    onStop,
+    placeholder,
+    autofocus = true,
+    contextPages,
+    onRemoveContextPage,
+    variant = "card",
+    showDisclaimer = true,
+    chatId,
+    showScope = false,
+  }: Props,
+  ref,
+) {
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
   const { t } = useTranslation();
   const [isEmpty, setIsEmpty] = useState(true);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [scopeSpaceId, setScopeSpaceId] = useState<string>(SCOPE_ALL);
+  const scopeSpaceIdRef = useRef(scopeSpaceId);
+  scopeSpaceIdRef.current = scopeSpaceId;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
+
+  const scopeEnabled = showScope && variant === "card";
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
@@ -213,11 +257,14 @@ export default function ChatInput({
     if (!text && readyAttachments.length === 0) return;
 
     const mentions = extractMentions(json);
-    onSendRef.current(text, mentions, readyAttachments);
+    const scope = scopeSpaceIdRef.current;
+    const options: SendMessageOptions | undefined =
+      scopeEnabled && scope && scope !== SCOPE_ALL ? { spaceId: scope } : undefined;
+    onSendRef.current(text, mentions, readyAttachments, options);
     editor.commands.clearContent();
     editor.commands.focus();
     setPendingAttachments([]);
-  }, [isStreaming, pendingAttachments]);
+  }, [isStreaming, pendingAttachments, scopeEnabled]);
 
   const handleSubmitRef = useRef(handleSubmit);
   handleSubmitRef.current = handleSubmit;
@@ -230,7 +277,7 @@ export default function ChatInput({
         link: false,
       }),
       Placeholder.configure({
-        placeholder: placeholder || "Ask anything... Use @ to mention pages",
+        placeholder: placeholder || t("Ask anything... Use @ to mention pages"),
       }),
       CharacterCount.configure({
         limit: 50000,
@@ -293,6 +340,21 @@ export default function ChatInput({
     }
   }, [editor]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (text: string) => {
+        if (!editor) return;
+        editor.commands.focus("end");
+        editor.commands.insertContent(text);
+        editor.commands.focus("end");
+        setIsEmpty(!editor.getText().trim());
+      },
+      focus: () => editor?.commands.focus("end"),
+    }),
+    [editor],
+  );
+
   const hasContent = !isEmpty || pendingAttachments.some((a) => !a.uploading) || (contextPages?.length ?? 0) > 0;
 
   const wrapperClass = variant === "flat" ? classes.inputWrapperFlat : classes.inputWrapper;
@@ -315,14 +377,14 @@ export default function ChatInput({
             <div key={page.id} className={classes.attachmentChip}>
               <IconFileText size={14} />
               <span className={classes.attachmentChipName}>
-                {page.title || "Untitled"}
+                {page.title || t("Untitled")}
               </span>
               {onRemoveContextPage && (
                 <button
                   type="button"
                   className={classes.attachmentChipRemove}
                   onClick={() => onRemoveContextPage(page.id)}
-                  aria-label={`Remove ${page.title}`}
+                  aria-label={t("Remove {{name}}", { name: page.title })}
                 >
                   <IconX size={12} />
                 </button>
@@ -347,7 +409,7 @@ export default function ChatInput({
                   type="button"
                   className={classes.attachmentChipRemove}
                   onClick={() => removeAttachment(attachment.id)}
-                  aria-label={`Remove ${attachment.fileName}`}
+                  aria-label={t("Remove {{name}}", { name: attachment.fileName })}
                 >
                   <IconX size={12} />
                 </button>
@@ -365,7 +427,7 @@ export default function ChatInput({
               type="button"
               className={classes.plusButton}
               onClick={() => setPlusMenuOpen((o) => !o)}
-              aria-label="Add content"
+              aria-label={t("Add content")}
             >
               <IconPlus size={14} />
             </button>
@@ -400,7 +462,7 @@ export default function ChatInput({
               }}
             >
               <IconAt size={16} className={classes.plusMenuIcon} />
-              Mention a page
+              {t("Mention a page")}
             </button>
           </Popover.Dropdown>
         </Popover>
@@ -419,6 +481,10 @@ export default function ChatInput({
           }}
         />
 
+        {scopeEnabled && (
+          <ChatScopeSelect value={scopeSpaceId} onChange={setScopeSpaceId} />
+        )}
+
         <div style={{ flex: 1 }} />
 
         {isStreaming ? (
@@ -426,7 +492,7 @@ export default function ChatInput({
             type="button"
             className={classes.stopButton}
             onClick={onStop}
-            aria-label="Stop generation"
+            aria-label={t("Stop generation")}
           >
             <IconPlayerStopFilled size={14} />
           </button>
@@ -436,7 +502,7 @@ export default function ChatInput({
             className={classes.sendButton}
             onClick={handleSubmit}
             disabled={!hasContent}
-            aria-label="Send message"
+            aria-label={t("Send message")}
           >
             <IconArrowUp size={16} stroke={2.5} />
           </button>
@@ -450,4 +516,6 @@ export default function ChatInput({
     )}
     </>
   );
-}
+});
+
+export default ChatInput;

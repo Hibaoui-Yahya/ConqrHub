@@ -7,6 +7,7 @@ export type NotificationType =
   | "page.updated"
   | "page.verification_expiring"
   | "page.verification_expired"
+  | "page.verification_invalidated"
   | "page.verified"
   | "page.approval_requested"
   | "page.approval_rejected";

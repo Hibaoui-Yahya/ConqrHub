@@ -30,6 +30,7 @@ const SETTINGS_SECTIONS: [string, string][] = [
   ["/settings/account/profile", "Profile"],
   ["/settings/verifications", "Verified pages"],
   ["/settings/integrations", "Integrations"],
+  ["/settings/knowledge-base", "AI knowledge base"],
   ["/settings/workspace", "General"],
   ["/settings/api-keys", "API management"],
   ["/settings/security", "Security & SSO"],
