@@ -110,17 +110,37 @@ export class UserRepo {
     insertableUser: InsertableUser,
     trx?: KyselyTransaction,
   ): Promise<User> {
+    const db = dbOrTx(this.db, trx);
+
+    // The company can choose the interface language of new accounts
+    // (Paramètres › Entreprise › Général); the DEFAULT_USER_LOCALE
+    // deployment variable is only the starting point.
+    let workspaceLocale: string | undefined;
+    if (insertableUser.workspaceId) {
+      const ws = await db
+        .selectFrom('workspaces')
+        .select([
+          sql<string | null>`settings->'general'->>'defaultLocale'`.as(
+            'defaultLocale',
+          ),
+        ])
+        .where('id', '=', insertableUser.workspaceId)
+        .executeTakeFirst();
+      workspaceLocale = ws?.defaultLocale ?? undefined;
+    }
+
     const user: InsertableUser = {
       name:
         insertableUser.name || insertableUser.email.split('@')[0].toLowerCase(),
       email: insertableUser.email.toLowerCase(),
       password: await hashPassword(insertableUser.password),
-      locale: defaultUserLocale(),
+      locale: defaultUserLocale(
+        workspaceLocale ?? process.env.DEFAULT_USER_LOCALE,
+      ),
       role: insertableUser?.role,
       lastLoginAt: new Date(),
     };
 
-    const db = dbOrTx(this.db, trx);
     return db
       .insertInto('users')
       .values({ ...insertableUser, ...user })
@@ -219,6 +239,25 @@ export class UserRepo {
         settings: sql`COALESCE(settings, '{}'::jsonb)
                 || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
                 || jsonb_build_object('theme', ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', userId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
+  /**
+   * settings.preferences.meetings — merged key by key so a partial update
+   * (only `autoProcess`, say) keeps the other defaults.
+   */
+  setMeetingDefaults(userId: string, value: Record<string, unknown>) {
+    return this.db
+      .updateTable('users')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object('meetings', COALESCE(settings->'preferences'->'meetings', '{}'::jsonb)
+                || ${sql.lit(JSON.stringify(value))}::jsonb))`,
         updatedAt: new Date(),
       })
       .where('id', '=', userId)

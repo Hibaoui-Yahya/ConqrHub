@@ -508,6 +508,48 @@ export class WorkspaceService {
         );
       }
 
+      // Paramètres › Entreprise › Général: values that only existed as
+      // deployment variables (DEFAULT_USER_LOCALE, MAIL_FROM_NAME).
+      for (const key of [
+        'defaultLocale',
+        'defaultTimezone',
+        'mailFromName',
+      ] as const) {
+        if (typeof updateWorkspaceDto[key] === 'undefined') continue;
+        const prev = settingsBefore?.general?.[key] ?? null;
+        const next = updateWorkspaceDto[key]?.trim() || null;
+        if (prev !== next) {
+          before[key] = prev;
+          after[key] = next;
+        }
+        await this.workspaceRepo.setGeneralSetting(workspaceId, key, next, trx);
+      }
+
+      // Paramètres › Applications › ConqrMeet: company-wide recording rules.
+      if (typeof updateWorkspaceDto.meetSettings !== 'undefined') {
+        const incoming = updateWorkspaceDto.meetSettings ?? {};
+        for (const key of [
+          'consentRequired',
+          'audioRetentionDays',
+          'defaultLanguage',
+          'publishSpaceId',
+          'autoPublish',
+        ] as const) {
+          if (typeof incoming[key] === 'undefined') continue;
+          const prev = settingsBefore?.meet?.[key] ?? null;
+          const next = incoming[key] ?? null;
+          if (prev !== next) {
+            before[`meet.${key}`] = prev;
+            after[`meet.${key}`] = next;
+          }
+          await this.workspaceRepo.setMeetSetting(workspaceId, key, next, trx);
+        }
+      }
+
+      delete updateWorkspaceDto.defaultLocale;
+      delete updateWorkspaceDto.defaultTimezone;
+      delete updateWorkspaceDto.mailFromName;
+      delete updateWorkspaceDto.meetSettings;
       delete updateWorkspaceDto.restrictApiToAdmins;
       delete updateWorkspaceDto.aiSearch;
       delete updateWorkspaceDto.generativeAi;

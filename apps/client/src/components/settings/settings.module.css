@@ -63,3 +63,21 @@
     padding-left: var(--mantine-spacing-xs) ;
     padding-top: 10px;
 }
+
+.backLink {
+    display: block;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--txt-tertiary);
+    line-height: 1.2;
+
+    @mixin hover {
+        color: var(--txt-primary);
+        text-decoration: underline;
+    }
+}
+
+.company {
+    margin-top: var(--mantine-spacing-sm);
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs) 0;
+    border-top: rem(1px) solid var(--border-subtle);
+}

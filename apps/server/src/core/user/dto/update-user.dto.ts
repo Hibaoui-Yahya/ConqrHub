@@ -38,9 +38,36 @@ export class ThemeCustomDto {
   darkPalette: boolean;
 }
 
+/**
+ * Personal ConqrMeet defaults. They used to live in the Meet browser's
+ * localStorage; stored on the account they follow the person everywhere.
+ * `null` clears a value (back to "let the AI decide" / the company default).
+ */
+export class MeetingDefaultsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  defaultMeetingType?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  defaultLanguage?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  autoProcess?: boolean;
+}
+
 export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
+  /** Stored as settings.preferences.meetings (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MeetingDefaultsDto)
+  meetingDefaults: MeetingDefaultsDto;
+
   @IsOptional()
   @IsBoolean()
   fullPageWidth: boolean;

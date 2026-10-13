@@ -32,7 +32,13 @@ export default function Security() {
       <Helmet>
         <title>Security - {getAppName()}</title>
       </Helmet>
-      <SettingsTitle title={t("Security")} />
+      <SettingsTitle
+        title={t("Security and sign-in")}
+        description={t(
+          "Sign-in rules for every member and single sign-on.",
+        )}
+        scope="company"
+      />
 
       <EnforceMfa />
 

@@ -62,6 +62,21 @@ export class UserService {
       );
     }
 
+    if (typeof updateUserDto.meetingDefaults !== 'undefined') {
+      const incoming = updateUserDto.meetingDefaults ?? {};
+      const value: Record<string, unknown> = {};
+      for (const key of [
+        'defaultMeetingType',
+        'defaultLanguage',
+        'autoProcess',
+      ] as const) {
+        if (typeof incoming[key] !== 'undefined') {
+          value[key] = incoming[key];
+        }
+      }
+      return this.userRepo.setMeetingDefaults(userId, value);
+    }
+
     if (typeof updateUserDto.theme !== 'undefined') {
       const value: Record<string, unknown> = { theme: updateUserDto.theme };
       if (updateUserDto.theme === 'custom' && updateUserDto.themeCustom) {

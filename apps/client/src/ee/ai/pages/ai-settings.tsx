@@ -44,7 +44,13 @@ export default function AiSettings() {
       <Helmet>
         <title>AI settings - {getAppName()}</title>
       </Helmet>
-      <SettingsTitle title={t("AI settings")} />
+      <SettingsTitle
+        title={t("Artificial intelligence")}
+        description={t(
+          "What Hub and Meet use to transcribe, summarise and answer. The provider and the key are configured by the host.",
+        )}
+        scope="company"
+      />
 
       <Tabs color="dark" value={activeTab} onChange={handleTabChange}>
         <Tabs.List>

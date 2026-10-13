@@ -32,7 +32,18 @@ export interface IUser {
   notificationCommentResolved: boolean; // used for update
   theme?: ConqrThemeKey; // used for update
   themeCustom?: ConqrCustomTheme; // used for update
+  meetingDefaults?: IMeetingDefaults; // used for update
   hasGeneratedPassword?: boolean;
+}
+
+/**
+ * Personal ConqrMeet defaults (Paramètres › Mon compte › Mes réunions).
+ * Stored on the account so they follow the person on every device.
+ */
+export interface IMeetingDefaults {
+  defaultMeetingType?: string | null;
+  defaultLanguage?: string | null;
+  autoProcess?: boolean;
 }
 
 export interface ICurrentUser {
@@ -46,6 +57,7 @@ export interface IUserSettings {
     pageEditMode: string;
     /* ConqrPlan-style theme, mirrored from the local `conqr-theme-pref` */
     theme?: ConqrThemePreference;
+    meetings?: IMeetingDefaults;
   };
   notifications?: {
     "page.updated"?: boolean;

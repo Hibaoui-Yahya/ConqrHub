@@ -19,7 +19,13 @@ export default function AccountPreferences() {
           {t("Preferences")} - {getAppName()}
         </title>
       </Helmet>
-      <SettingsTitle title={t("Preferences")} />
+      <SettingsTitle
+        title={t("Preferences")}
+        description={t(
+          "Appearance, language and notifications. Saved automatically.",
+        )}
+        scope="account"
+      />
 
       <AccountTheme />
 
