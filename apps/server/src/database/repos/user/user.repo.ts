@@ -3,6 +3,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { DB, Users } from '@docmost/db/types/db';
 import { hashPassword } from '../../../common/helpers';
+import { defaultUserLocale } from './default-locale';
 import { dbOrTx } from '@docmost/db/utils';
 import {
   InsertableUser,
@@ -114,7 +115,7 @@ export class UserRepo {
         insertableUser.name || insertableUser.email.split('@')[0].toLowerCase(),
       email: insertableUser.email.toLowerCase(),
       password: await hashPassword(insertableUser.password),
-      locale: 'en-US',
+      locale: defaultUserLocale(),
       role: insertableUser?.role,
       lastLoginAt: new Date(),
     };
