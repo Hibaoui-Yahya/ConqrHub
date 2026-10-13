@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import {
@@ -76,6 +77,7 @@ export class RagRetrievalService {
     private readonly aiProvider: AiProviderService,
     private readonly repo: EmbeddingRepository,
     private readonly env: EnvironmentService,
+    @Optional() private readonly pagePermissions?: PagePermissionRepo,
   ) {}
 
   /**
@@ -91,8 +93,14 @@ export class RagRetrievalService {
     spaceIds?: string[];
     pageId?: string;
     topK?: number;
+    /**
+     * The reader. When set, page passages are filtered through page-level
+     * permissions, so a restricted page inside a readable space never
+     * reaches the model. Every user-facing caller must pass it.
+     */
+    userId?: string;
   }): Promise<RetrievedContext> {
-    const { question, workspaceId, spaceId, spaceIds, pageId } = opts;
+    const { question, workspaceId, spaceId, spaceIds, pageId, userId } = opts;
     const topK = opts.topK ?? DEFAULT_TOP_K;
 
     // A caller passing an empty allow-list can read no spaces — skip the
@@ -117,10 +125,50 @@ export class RagRetrievalService {
       this.lexicalSearchSafe({ ...scope, query: question, topK: fetchK }),
     ]);
 
-    return this.assembleFused(vector, lexical, {
+    const allowed = userId
+      ? await this.accessiblePageIds([...vector, ...lexical], userId, spaceId)
+      : null;
+    const keep = (r: SimilarityResult) =>
+      !allowed || r.sourceKind !== 'page' || allowed.has(r.sourceId);
+
+    return this.assembleFused(vector.filter(keep), lexical.filter(keep), {
       topK,
       minScore: this.env.getAiRagMinScore(),
     });
+  }
+
+  /**
+   * Page ids among the results that the user may open. Fails closed: if the
+   * permission check cannot run, no page passage is returned.
+   */
+  private async accessiblePageIds(
+    results: SimilarityResult[],
+    userId: string,
+    spaceId?: string,
+  ): Promise<Set<string>> {
+    const pageIds = [
+      ...new Set(
+        results.filter((r) => r.sourceKind === 'page').map((r) => r.sourceId),
+      ),
+    ];
+    if (pageIds.length === 0) return new Set();
+    if (!this.pagePermissions) {
+      this.logger.error('Page permission check unavailable: page passages dropped');
+      return new Set();
+    }
+    try {
+      const ids = await this.pagePermissions.filterAccessiblePageIds({
+        pageIds,
+        userId,
+        spaceId,
+      });
+      return new Set(ids);
+    } catch (err) {
+      this.logger.error(
+        `Page permission check failed, page passages dropped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return new Set();
+    }
   }
 
   /**

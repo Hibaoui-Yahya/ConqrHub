@@ -110,8 +110,38 @@
 }
 
 .emptyStateHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   margin-bottom: var(--mantine-spacing-lg);
+}
+
+/* Centered ConqrAI logo: a small cyan mark above the real wordmark. */
+.emptyStateLogo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+.emptyStateMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: light-dark(#006b94, #00c2ff);
+  background: light-dark(#e5f8ff, #0b2a36);
+  border: 1px solid light-dark(#b8ecff, #124559);
+}
+
+.emptyStateWordmark {
+  display: block;
+  height: 26px;
+  width: auto;
 }
 
 .emptyStateIconWrapper {
@@ -159,7 +189,7 @@
 
 .emptyStateSubtitle {
   font-size: var(--mantine-font-size-sm);
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   margin-top: var(--mantine-spacing-xs);
   line-height: 1.5;
 }
@@ -177,8 +207,8 @@
 
 .suggestionsLabel {
   font-size: var(--mantine-font-size-xs);
-  font-weight: 500;
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  font-weight: 600;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: var(--mantine-spacing-sm);
@@ -223,7 +253,9 @@
 
 .suggestionIcon {
   flex-shrink: 0;
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  align-self: flex-start;
+  margin-top: 2px;
+  color: light-dark(#006b94, #00c2ff);
 }
 
 .suggestionText {
@@ -266,6 +298,7 @@
 
 .footerText {
   font-size: var(--mantine-font-size-xs);
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
 }
 
 /* Knowledge-base status line under the hero */
@@ -363,8 +396,9 @@
 
 .suggestionTag {
   font-size: 11px;
-  font-weight: 500;
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
 }
 
 @media (max-width: 600px) {

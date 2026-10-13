@@ -117,12 +117,21 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
   return (
     <div className={classes.emptyState}>
       <div className={classes.emptyStateHero}>
-        <div className={classes.emptyStateIconWrapper}>
-          <IconSparkles size={32} stroke={1.5} className={classes.emptyStateIcon} />
-        </div>
-        <div className={classes.emptyStateBrand} aria-label="ConqrAI">
-          <span>Conqr</span>
-          <span className={classes.emptyStateBrandAccent}>AI</span>
+        <div className={classes.emptyStateLogo}>
+          <span className={classes.emptyStateMark} aria-hidden="true">
+            <IconSparkles size={22} stroke={1.75} />
+          </span>
+          <img
+            className={`${classes.emptyStateWordmark} conqr-wordmark--light`}
+            src="/branding/conqrai-logo-on-light.png"
+            alt="ConqrAI"
+          />
+          <img
+            className={`${classes.emptyStateWordmark} conqr-wordmark--dark`}
+            src="/branding/conqrai-logo-on-dark.png"
+            alt=""
+            aria-hidden="true"
+          />
         </div>
         <div className={classes.emptyStateTitle}>
           {firstName

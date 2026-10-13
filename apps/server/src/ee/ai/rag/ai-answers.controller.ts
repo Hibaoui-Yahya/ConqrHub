@@ -90,6 +90,7 @@ export class AiAnswersController {
       scope.spaceIds && scope.spaceIds.length === 0
         ? EMPTY_CONTEXT
         : await this.retrieval.retrieve({
+            userId: user.id,
             question: dto.query,
             workspaceId: workspace.id,
             spaceId: scope.spaceId,

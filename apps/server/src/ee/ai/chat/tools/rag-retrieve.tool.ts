@@ -105,6 +105,7 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
 
     try {
       const context = await this.retrieval.retrieve({
+        userId: ctx.user.id,
         question: args.question,
         workspaceId: ctx.workspaceId,
         spaceId: args.spaceId,
