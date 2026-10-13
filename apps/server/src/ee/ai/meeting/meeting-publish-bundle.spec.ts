@@ -68,6 +68,7 @@ describe('MeetingService.publishBundle', () => {
       {} as any,
       pages as any,
       spaceAbility as any,
+      {} as any,
     );
     jest.spyOn(service as any, 'getMeetingOrThrow').mockResolvedValue({
       id: 'm1',

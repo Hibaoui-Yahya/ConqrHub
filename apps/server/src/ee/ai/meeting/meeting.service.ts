@@ -42,6 +42,14 @@ import {
   readEvaluation,
   transcriptForEvaluation,
 } from './meeting-evaluation.util';
+import { MeetingTemplateService } from './meeting-template.service';
+import {
+  buildSectionsPrompt,
+  legacyOutputsFromSections,
+  parseSectionsAnswer,
+  sectionsToMarkdown,
+  type TemplateSpec,
+} from './meeting-template.util';
 import {
   buildMeetingPageMarkdown,
   buildTranscriptMarkdown,
@@ -123,7 +131,18 @@ export class MeetingService {
     private readonly environment: EnvironmentService,
     private readonly pages: PageService,
     private readonly spaceAbility: SpaceAbilityFactory,
+    private readonly templates: MeetingTemplateService,
   ) {}
+
+  /** The template snapshot a meeting was started with, if any. */
+  private templateOf(settings: unknown): { id: string; name: string; version: number; spec: TemplateSpec } | null {
+    const t = (settings as { template?: unknown } | null)?.template as
+      | { id?: string; name?: string; version?: number; spec?: TemplateSpec }
+      | undefined;
+    return t && t.spec && Array.isArray(t.spec.sections)
+      ? { id: String(t.id), name: String(t.name ?? ''), version: Number(t.version) || 0, spec: t.spec }
+      : null;
+  }
 
   // ──────────── start ────────────
 
@@ -135,8 +154,13 @@ export class MeetingService {
       consent?: boolean;
       meetingType?: string;
       languageConfig?: Record<string, unknown>;
+      templateId?: string;
     },
   ) {
+    // The template decides the meeting type and is snapshotted on the
+    // meeting: a later edit of the template never changes this meeting.
+    const template = await this.templates.resolveForMeeting(workspaceId, opts.templateId, opts.meetingType);
+    const meetingType = opts.templateId && template ? template.baseType : opts.meetingType || template?.baseType || 'generic-meeting';
     const meeting = await this.db
       .insertInto('meetings')
       .values({
@@ -145,13 +169,14 @@ export class MeetingService {
         title: opts.title || 'Untitled meeting',
         status: 'recording',
         captureKind: 'live',
-        meetingType: opts.meetingType || 'generic-meeting',
-        meetingTypeSource: opts.meetingType ? 'user' : 'default',
+        meetingType,
+        meetingTypeSource: opts.meetingType || opts.templateId ? 'user' : 'default',
         languageConfig: opts.languageConfig
           ? JSON.stringify(opts.languageConfig)
           : '{}',
         consentConfirmedAt: opts.consent ? new Date() : null,
         consentConfirmedBy: opts.consent ? userId : null,
+        settings: JSON.stringify(template ? { template } : {}),
       })
       .returning(['id', 'title', 'status', 'startedAt'])
       .executeTakeFirstOrThrow();
@@ -458,12 +483,15 @@ export class MeetingService {
       languageConfig?: Record<string, unknown>;
       autoProcess?: boolean;
       mime?: string;
+      templateId?: string;
     },
   ) {
     if (!opts.consent) {
       throw new BadRequestException('Consent is required to upload a meeting');
     }
 
+    const template = await this.templates.resolveForMeeting(workspaceId, opts.templateId, opts.meetingType);
+    const meetingType = opts.templateId && template ? template.baseType : opts.meetingType || template?.baseType || 'generic-meeting';
     // Create meeting
     const meeting = await this.db
       .insertInto('meetings')
@@ -473,13 +501,14 @@ export class MeetingService {
         title: opts.title || filename || 'Uploaded meeting',
         status: 'uploaded',
         captureKind: 'upload',
-        meetingType: opts.meetingType || 'generic-meeting',
-        meetingTypeSource: opts.meetingType ? 'user' : 'default',
+        meetingType,
+        meetingTypeSource: opts.meetingType || opts.templateId ? 'user' : 'default',
         languageConfig: opts.languageConfig
           ? JSON.stringify(opts.languageConfig)
           : '{}',
         consentConfirmedAt: new Date(),
         consentConfirmedBy: userId,
+        settings: JSON.stringify(template ? { template } : {}),
       })
       .returning(['id'])
       .executeTakeFirstOrThrow();
@@ -997,7 +1026,10 @@ export class MeetingService {
       string,
       { displayName?: string | null }
     >;
-    const criteria = normalizeCriteria(rawCriteria);
+    const gridCriteria = this.templateOf(settings)?.spec.grid?.criteria;
+    const criteria = normalizeCriteria(
+      Array.isArray(rawCriteria) && rawCriteria.length ? rawCriteria : gridCriteria?.length ? gridCriteria : undefined,
+    );
     const { system, prompt } = buildEvaluationPrompt({
       title: meeting.title || 'Entrevue',
       criteria,
@@ -2500,6 +2532,10 @@ export class MeetingService {
     const title = meeting.title || 'Untitled meeting';
     const meetingType = meeting.meetingType || 'generic-meeting';
     const outputs: Record<string, string> = {};
+    const template = this.templateOf(this.parseJson(meeting.settings));
+    const templateRules = template?.spec.rules?.trim()
+      ? ` Règles du modèle « ${template.name} » : ${template.spec.rules.trim()}`
+      : '';
 
     const gen = async (
       key: string,
@@ -2509,7 +2545,7 @@ export class MeetingService {
     ): Promise<string | undefined> => {
       try {
         const result = await this.ai.generate({
-          system,
+          system: key.startsWith('_') ? system : system + templateRules,
           prompt,
           temperature: 0.4,
           maxOutputTokens: maxTokens,
@@ -2619,7 +2655,11 @@ export class MeetingService {
       'documents_generating',
       {},
     );
-    await this.generateDocument(meetingId, merged, transcriptVersion);
+    if (template) {
+      await this.generateTemplateDocument(meetingId, template, text, transcriptVersion);
+    } else {
+      await this.generateDocument(meetingId, merged, transcriptVersion);
+    }
     await this.logTransition(
       meetingId,
       'documents_generating',
@@ -2645,6 +2685,71 @@ export class MeetingService {
   }
 
   /** Meeting notes document assembled from the analysis outputs. */
+  /**
+   * The report of a meeting started with a template: every enabled section
+   * of the template, in its order, produced by one model call with the
+   * section instructions and the template rules. Sections named like the
+   * legacy outputs (summary, actions, decisions, next_steps) also refresh
+   * aiOutputs so the overview tab shows the template's text.
+   */
+  private async generateTemplateDocument(
+    meetingId: string,
+    template: { id: string; name: string; version: number; spec: TemplateSpec },
+    text: string,
+    transcriptVersion: number,
+  ) {
+    try {
+      const meeting = await this.getMeetingOrThrow(meetingId);
+      const title = meeting.title || 'Untitled meeting';
+      const { system, prompt, sections } = buildSectionsPrompt({
+        title,
+        templateName: template.name,
+        spec: template.spec,
+        transcript: text,
+      });
+      if (sections.length === 0) return;
+      const result = await this.ai.generate({ system, prompt, temperature: 0.3, maxOutputTokens: 3500 });
+      const content = parseSectionsAnswer(this.stripCodeFence(result.text ?? ''), sections);
+      const when = meeting.startedAt
+        ? new Date(meeting.startedAt).toLocaleDateString('fr-CA', { dateStyle: 'long', timeZone: 'America/Toronto' })
+        : '';
+      const markdown = sectionsToMarkdown({ title, dateLabel: when, templateName: template.name }, sections, content);
+
+      await this.db
+        .deleteFrom('meetingDocuments')
+        .where('meetingId', '=', meetingId)
+        .where('pageId', 'is', null)
+        .execute();
+      await this.db
+        .insertInto('meetingDocuments')
+        .values({
+          meetingId,
+          title: `${template.name} — ${title}`,
+          contentMarkdown: markdown,
+          structured: JSON.stringify({ templateId: template.id, templateVersion: template.version, sections: content }),
+          templateId: template.id,
+          templateVersion: template.version,
+          transcriptVersion,
+          status: 'draft',
+        })
+        .executeTakeFirst();
+
+      const legacy = legacyOutputsFromSections(content);
+      if (Object.keys(legacy).length) {
+        const existing = this.parseJson<Record<string, string>>(meeting.aiOutputs) || {};
+        await this.db
+          .updateTable('meetings')
+          .set({ aiOutputs: JSON.stringify({ ...existing, ...legacy }) })
+          .where('id', '=', meetingId)
+          .executeTakeFirst();
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Meeting ${meetingId}: template document generation failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
   private async generateDocument(
     meetingId: string,
     outputs: Record<string, string>,

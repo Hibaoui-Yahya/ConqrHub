@@ -63,6 +63,7 @@ export class MeetingController {
       consent: dto.consent,
       meetingType: dto.meetingType,
       languageConfig: dto.languageConfig,
+      templateId: dto.templateId,
     });
   }
 
@@ -103,6 +104,7 @@ export class MeetingController {
       consent: fields.consent?.value === 'true',
       title: fields.title?.value,
       meetingType: fields.meetingType?.value,
+      templateId: fields.templateId?.value,
       languageConfig: fields.languageConfig
         ? JSON.parse(fields.languageConfig.value)
         : undefined,

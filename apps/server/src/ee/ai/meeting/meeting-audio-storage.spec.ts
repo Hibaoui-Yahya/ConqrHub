@@ -106,6 +106,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     jest
       .spyOn(service as any, 'getWorkspaceName')
