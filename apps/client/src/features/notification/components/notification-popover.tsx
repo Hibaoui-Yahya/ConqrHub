@@ -60,6 +60,11 @@ export function NotificationPopover() {
             variant="subtle"
             color="dark"
             size="sm"
+            aria-label={
+              unreadCount
+                ? t("Notifications ({{count}} unread)", { count: unreadCount })
+                : t("Notifications")
+            }
             onClick={() => setOpened((o) => !o)}
           >
             <Indicator

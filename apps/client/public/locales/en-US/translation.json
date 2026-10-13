@@ -1226,5 +1226,6 @@
   "Followed updates": "Followed updates",
   "Pages you follow.": "Pages you follow.",
   "Every notification stays in the bell even when its sound and e-mail are off. These settings apply to your account, in Hub and in Meet.": "Every notification stays in the bell even when its sound and e-mail are off. These settings apply to your account, in Hub and in Meet.",
-  "Appearance, language and reading. Saved automatically.": "Appearance, language and reading. Saved automatically."
+  "Appearance, language and reading. Saved automatically.": "Appearance, language and reading. Saved automatically.",
+  "Notifications ({{count}} unread)": "Notifications ({{count}} unread)"
 }

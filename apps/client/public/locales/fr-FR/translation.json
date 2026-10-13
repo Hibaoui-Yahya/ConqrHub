@@ -1228,5 +1228,6 @@
   "Followed updates": "Mises à jour suivies",
   "Pages you follow.": "Pages que vous suivez.",
   "Every notification stays in the bell even when its sound and e-mail are off. These settings apply to your account, in Hub and in Meet.": "Chaque notification reste dans la cloche même si son son et son e-mail sont coupés. Ces réglages s’appliquent à votre compte, dans Hub comme dans Meet.",
-  "Appearance, language and reading. Saved automatically.": "Apparence, langue et lecture. Enregistrement automatique."
+  "Appearance, language and reading. Saved automatically.": "Apparence, langue et lecture. Enregistrement automatique.",
+  "Notifications ({{count}} unread)": "Notifications ({{count}} non lues)"
 }
