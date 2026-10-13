@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAtom } from "jotai";
 import {
   Alert,
-  Anchor,
+  Button,
   Card,
   Select,
   Stack,
@@ -152,9 +152,16 @@ export default function AccountMeetings() {
                 )}
               </Text>
               {meetUrl && (
-                <Anchor href={`${meetUrl}/meetings`} size="sm">
-                  {t("Open ConqrMeet")}
-                </Anchor>
+                <div>
+                  <Button
+                    component="a"
+                    href={`${meetUrl}/meetings`}
+                    variant="default"
+                    size="xs"
+                  >
+                    {t("Open ConqrMeet")}
+                  </Button>
+                </div>
               )}
             </Stack>
           </Card>
