@@ -93,3 +93,27 @@ export function buildMeetingPageMarkdown(input: {
   lines.push('Le rapport et la transcription sont dans les pages ci-dessous.');
   return lines.join('\n') + '\n';
 }
+
+/**
+ * What a re-publication does with a page it made earlier:
+ * - "create"  the page is gone (never made, or deleted in Hub);
+ * - "update"  nobody touched it since the last sync, so it is refreshed;
+ * - "keep"    someone edited it in Hub after the last sync — never overwrite.
+ * The grace window covers the collaborative save of our own write, which
+ * lands a few seconds after the sync is recorded.
+ */
+export type SyncDecision = 'create' | 'update' | 'keep';
+
+export const SYNC_GRACE_MS = 2 * 60 * 1000;
+
+export function syncDecision(
+  page: { updatedAt: Date | string; deletedAt?: Date | string | null } | null | undefined,
+  lastSyncedAt: Date | string | null | undefined,
+): SyncDecision {
+  if (!page || page.deletedAt) return 'create';
+  if (!lastSyncedAt) return 'keep';
+  const edited = new Date(page.updatedAt).getTime();
+  const synced = new Date(lastSyncedAt).getTime();
+  if (!Number.isFinite(edited) || !Number.isFinite(synced)) return 'keep';
+  return edited <= synced + SYNC_GRACE_MS ? 'update' : 'keep';
+}

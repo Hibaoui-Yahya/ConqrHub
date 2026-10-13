@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -35,7 +36,15 @@ import { normalizeMarkers } from './meeting-markers.util';
 import {
   buildMeetingPageMarkdown,
   buildTranscriptMarkdown,
+  syncDecision,
+  type SyncDecision,
 } from './meeting-publish.util';
+import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.factory';
+import {
+  SpaceCaslAction,
+  SpaceCaslSubject,
+} from '../../../core/casl/interfaces/space-ability.type';
+import type { User } from '@docmost/db/types/entity.types';
 
 /** Meeting types the analyzer can classify a transcript into. */
 const KNOWN_MEETING_TYPES = [
@@ -104,6 +113,7 @@ export class MeetingService {
     private readonly delegatedTokens: DelegatedTokenService,
     private readonly environment: EnvironmentService,
     private readonly pages: PageService,
+    private readonly spaceAbility: SpaceAbilityFactory,
   ) {}
 
   // ──────────── start ────────────
@@ -914,105 +924,176 @@ export class MeetingService {
     };
   }
 
+  /**
+   * Meeting content is only filed where the caller may write: the space is
+   * in the meeting's workspace and the caller can create pages in it (the
+   * same rule as creating a page in Hub).
+   */
+  async assertMeetingInWorkspace(meetingId: string, workspaceId: string) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.workspaceId !== workspaceId) {
+      throw new NotFoundException('Meeting not found');
+    }
+  }
+
+  async assertCanPublishIn(user: User, workspaceId: string, spaceId: string) {
+    const space = await this.db
+      .selectFrom('spaces')
+      .select(['id'])
+      .where('id', '=', spaceId)
+      .where('workspaceId', '=', workspaceId)
+      .executeTakeFirst();
+    if (!space) {
+      throw new NotFoundException('Space not found');
+    }
+    const ability = await this.spaceAbility.createForUser(user, spaceId);
+    if (ability.cannot(SpaceCaslAction.Create, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException(
+        'You cannot publish in this space. Ask a space admin for edit access.',
+      );
+    }
+  }
+
   // ──────────── publish bundle ("Publier dans Hub") ────────────
 
   /**
    * Publish the whole meeting in one step: a meeting page (summary, next
    * steps) with every generated document and a timestamped transcript as
-   * child pages. Idempotent: a second call returns the pages already made
-   * (documents published later are still added under the same page).
+   * child pages, filed in a space the caller can write to.
+   *
+   * Calling it again synchronises: pages untouched in Hub since the last
+   * sync are refreshed (new summary, renamed speakers, new marked moments),
+   * pages edited in Hub are kept as they are, pages deleted in Hub are made
+   * again, and documents generated since are added under the meeting page.
+   * The space chosen at the first publication stays the meeting's space.
    */
   async publishBundle(
     workspaceId: string,
     meetingId: string,
     opts: { spaceId: string; parentPageId?: string | null; includeTranscript?: boolean },
+    user: User,
   ) {
     const meeting = await this.getMeetingOrThrow(meetingId);
     if (meeting.workspaceId !== workspaceId) {
       throw new NotFoundException('Meeting not found');
     }
-    // The target space must be in the meeting's own workspace.
-    const space = await this.db
-      .selectFrom('spaces')
-      .select(['id'])
-      .where('id', '=', opts.spaceId)
-      .where('workspaceId', '=', meeting.workspaceId)
-      .executeTakeFirst();
-    if (!space) {
-      throw new NotFoundException('Space not found');
-    }
     const settings =
       (this.parseJson(meeting.settings) as Record<string, any>) ?? {};
     const previous = settings.publishedBundle as
-      | { meetingPageId: string; transcriptPageId?: string | null; spaceId: string }
+      | {
+          meetingPageId: string;
+          transcriptPageId?: string | null;
+          spaceId: string;
+          publishedAt?: string;
+          syncedAt?: string;
+        }
       | undefined;
-
-    let meetingPageId = previous?.meetingPageId ?? null;
-    if (!meetingPageId) {
-      const outputs = (this.parseJson(meeting.aiOutputs) as Record<string, string>) ?? {};
-      const page = await this.pages.create(meeting.userId, meeting.workspaceId, {
-        title: meeting.title,
-        spaceId: opts.spaceId,
-        parentPageId: opts.parentPageId || undefined,
-        content: buildMeetingPageMarkdown({
-          startedAt: meeting.startedAt,
-          durationMs: meeting.durationMs,
-          summary: outputs.summary,
-          nextSteps: outputs.next_steps,
-        }),
-        format: 'markdown',
-      });
-      meetingPageId = page.id;
-    }
     const spaceId = previous?.spaceId ?? opts.spaceId;
+
+    await this.assertCanPublishIn(user, meeting.workspaceId, spaceId);
+
+    const lastSyncedAt = previous?.syncedAt ?? previous?.publishedAt ?? null;
+    const outputs = (this.parseJson(meeting.aiOutputs) as Record<string, string>) ?? {};
+    const meetingMarkdown = buildMeetingPageMarkdown({
+      startedAt: meeting.startedAt,
+      durationMs: meeting.durationMs,
+      summary: outputs.summary,
+      nextSteps: outputs.next_steps,
+    });
+
+    /** Create, refresh or keep one page this meeting owns in Hub. */
+    const syncPage = async (
+      pageId: string | null | undefined,
+      title: string,
+      markdown: string,
+      parentPageId: string | undefined,
+    ): Promise<{ pageId: string; result: SyncDecision }> => {
+      const existing = pageId
+        ? await this.pages.findById(pageId).catch(() => null)
+        : null;
+      const decision = syncDecision(existing, lastSyncedAt);
+      if (decision === 'create') {
+        const page = await this.pages.create(user.id, meeting.workspaceId, {
+          title,
+          spaceId,
+          parentPageId,
+          content: markdown,
+          format: 'markdown',
+        });
+        return { pageId: page.id, result: 'create' };
+      }
+      if (decision === 'update') {
+        await this.pages.updatePageContent(existing!.id, markdown, 'replace', 'markdown', user);
+      }
+      return { pageId: existing!.id, result: decision };
+    };
+
+    const meetingPage = await syncPage(
+      previous?.meetingPageId,
+      meeting.title,
+      meetingMarkdown,
+      previous ? undefined : opts.parentPageId || undefined,
+    );
 
     const documents = [];
     for (const doc of await this.listDocuments(meetingId)) {
       documents.push(
-        await this.publishDocument(meetingId, doc.id, { spaceId, parentPageId: meetingPageId }),
+        await this.publishDocument(meetingId, doc.id, {
+          spaceId,
+          parentPageId: meetingPage.pageId,
+        }),
       );
     }
 
-    let transcriptPageId = previous?.transcriptPageId ?? null;
-    if (!transcriptPageId && opts.includeTranscript !== false) {
+    let transcriptPage: { pageId: string; result: SyncDecision } | null = null;
+    const wantTranscript = previous?.transcriptPageId
+      ? true
+      : opts.includeTranscript !== false;
+    if (wantTranscript) {
       const transcript = await this.getTranscript(meetingId).catch(() => null);
       if (transcript && transcript.segments.length > 0) {
-        const page = await this.pages.create(meeting.userId, meeting.workspaceId, {
-          title: `Transcription — ${meeting.title}`,
-          spaceId,
-          parentPageId: meetingPageId,
-          content: buildTranscriptMarkdown(
+        transcriptPage = await syncPage(
+          previous?.transcriptPageId,
+          `Transcription — ${meeting.title}`,
+          buildTranscriptMarkdown(
             transcript.segments as any[],
             transcript.speakers as Record<string, { displayName?: string | null }>,
             normalizeMarkers(settings.markers),
           ),
-          format: 'markdown',
-        });
-        transcriptPageId = page.id;
+          meetingPage.pageId,
+        );
       }
     }
 
+    const now = new Date();
     settings.publishedBundle = {
-      meetingPageId,
-      transcriptPageId,
+      meetingPageId: meetingPage.pageId,
+      transcriptPageId: transcriptPage?.pageId ?? previous?.transcriptPageId ?? null,
       spaceId,
-      publishedAt: new Date().toISOString(),
+      publishedAt: previous?.publishedAt ?? now.toISOString(),
+      syncedAt: now.toISOString(),
+      syncedById: user.id,
     };
     await this.db
       .updateTable('meetings')
       .set({
         settings: JSON.stringify(settings),
         status: 'published',
-        publishedAt: new Date(),
+        publishedAt: meeting.publishedAt ?? now,
       })
       .where('id', '=', meetingId)
       .executeTakeFirst();
 
     return {
-      meetingPageId,
-      pageUrl: `/p/${meetingPageId}`,
-      transcriptPageId,
+      meetingPageId: meetingPage.pageId,
+      pageUrl: `/p/${meetingPage.pageId}`,
+      transcriptPageId: settings.publishedBundle.transcriptPageId,
       documents,
+      synced: {
+        firstPublication: !previous,
+        meetingPage: meetingPage.result,
+        transcriptPage: transcriptPage?.result ?? null,
+      },
     };
   }
 

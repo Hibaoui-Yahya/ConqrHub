@@ -2,6 +2,7 @@ import {
   buildMeetingPageMarkdown,
   buildTranscriptMarkdown,
   formatStamp,
+  syncDecision,
 } from './meeting-publish.util';
 
 describe('formatStamp', () => {
@@ -62,5 +63,22 @@ describe('buildMeetingPageMarkdown', () => {
     const md = buildMeetingPageMarkdown({ startedAt: null, durationMs: null });
     expect(md).not.toContain('## Résumé');
     expect(md).toContain('Le rapport et la transcription');
+  });
+});
+
+describe('syncDecision', () => {
+  const synced = '2026-10-13T10:00:00.000Z';
+  it('recreates a missing or deleted page', () => {
+    expect(syncDecision(null, synced)).toBe('create');
+    expect(syncDecision({ updatedAt: synced, deletedAt: synced }, synced)).toBe('create');
+  });
+  it('refreshes a page untouched since the last sync (our own save included)', () => {
+    expect(syncDecision({ updatedAt: '2026-10-13T10:00:40.000Z' }, synced)).toBe('update');
+  });
+  it('keeps a page edited in Hub after the sync', () => {
+    expect(syncDecision({ updatedAt: '2026-10-13T11:00:00.000Z' }, synced)).toBe('keep');
+  });
+  it('keeps a page when the last sync time is unknown', () => {
+    expect(syncDecision({ updatedAt: synced }, null)).toBe('keep');
   });
 });

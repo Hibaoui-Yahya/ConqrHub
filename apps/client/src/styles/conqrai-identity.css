@@ -55,7 +55,7 @@
 /* Product wordmark in the header: one image per colour scheme. */
 .conqr-wordmark {
   display: block;
-  height: 22px;
+  height: 15px;
   width: auto;
 }
 [data-mantine-color-scheme="dark"] .conqr-wordmark--light,

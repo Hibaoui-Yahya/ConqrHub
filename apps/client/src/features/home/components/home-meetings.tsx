@@ -41,13 +41,21 @@ export default function HomeMeetings() {
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    api
-      .get("/ai/meeting", { params: { limit: 6 } })
-      .then((res: any) => {
-        const body = res?.data ?? res;
-        setItems(Array.isArray(body) ? body : (body?.items ?? []));
-      })
-      .catch(() => setHidden(true));
+    const load = () =>
+      api
+        .get("/ai/meeting", { params: { limit: 6 } })
+        .then((res: any) => {
+          const body = res?.data ?? res;
+          setItems(Array.isArray(body) ? body : (body?.items ?? []));
+        })
+        .catch(() => setHidden(true));
+    load();
+    // Back from ConqrMeet (a recording reviewed or published) → fresh list.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   if (hidden) return null;

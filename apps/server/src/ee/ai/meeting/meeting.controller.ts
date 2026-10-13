@@ -299,7 +299,11 @@ export class MeetingController {
     @Param('id') id: string,
     @Param('docId') docId: string,
     @Body() dto: PublishDocumentDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
+    await this.meetingService.assertMeetingInWorkspace(id, workspace.id);
+    await this.meetingService.assertCanPublishIn(user, workspace.id, dto.spaceId);
     return this.meetingService.publishDocument(id, docId, {
       spaceId: dto.spaceId,
       parentPageId: dto.parentPageId,
@@ -313,13 +317,19 @@ export class MeetingController {
   async publishBundle(
     @Param('id') id: string,
     @Body() dto: PublishBundleDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.publishBundle(workspace.id, id, {
-      spaceId: dto.spaceId,
-      parentPageId: dto.parentPageId,
-      includeTranscript: dto.includeTranscript,
-    });
+    return this.meetingService.publishBundle(
+      workspace.id,
+      id,
+      {
+        spaceId: dto.spaceId,
+        parentPageId: dto.parentPageId,
+        includeTranscript: dto.includeTranscript,
+      },
+      user,
+    );
   }
 
   // ──────────── GET /:id/proposals ────────────
