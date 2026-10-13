@@ -4,6 +4,7 @@ import {
   IconSparkles,
   IconClipboardList,
   IconExternalLink,
+  IconMicrophone,
   IconSettings,
 } from "@tabler/icons-react";
 import { Group, Button, Badge, Text } from "@mantine/core";
@@ -16,6 +17,28 @@ import { notifications } from "@mantine/notifications";
 import { searchSpotlightStore } from "../constants.ts";
 import classes from "./search-spotlight.module.css";
 import { federatedSearch } from "@/features/integration/services/integration-service";
+import api from "@/lib/api-client";
+
+// ConqrMeet origin for meeting results (same resolution as the app switcher).
+const MEET_URL =
+  process.env.MEET_APP_URL ||
+  (import.meta as any)?.env?.VITE_MEET_URL ||
+  (import.meta.env.DEV ? "http://localhost:5273" : "");
+
+interface MeetingHit {
+  id: string;
+  title: string;
+  status: string;
+  startedAt: string;
+  settings?: { publishedBundle?: { meetingPageId?: string } } | null;
+}
+
+/** Meetings whose title or transcript match (unified search, ConqrMeet). */
+async function searchMeetings(query: string): Promise<MeetingHit[]> {
+  const res: any = await api.get("/ai/meeting", { params: { q: query, limit: 5 } });
+  const body = res?.data ?? res;
+  return Array.isArray(body) ? body : (body?.items ?? []);
+}
 
 // Plane web app origin for palette actions (same resolution as the app switcher).
 const PLANE_URL =
@@ -82,6 +105,17 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
   const planeItems = (federatedItems ?? []).filter(
     (item) => item.source === "plane" && !!item.deepLink,
   );
+  // Unified search with ConqrMeet: meetings matching the title or the
+  // transcript. A published meeting opens its Hub page, the others open
+  // in ConqrMeet. Hidden when the meeting engine is not available.
+  const { data: meetingItems } = useQuery({
+    queryKey: ["palette-meeting-search", debouncedSearchQuery],
+    queryFn: () => searchMeetings(debouncedSearchQuery),
+    enabled: !isAiMode && debouncedSearchQuery.trim().length >= 2,
+    retry: false,
+    staleTime: 15_000,
+  });
+  const meetingHits = meetingItems ?? [];
   const {
     //@ts-ignore
     data: aiSearchResult,
@@ -246,11 +280,50 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
               {query.length > 0 &&
                 !isLoading &&
                 resultItems.length === 0 &&
-                planeItems.length === 0 && (
+                planeItems.length === 0 &&
+                meetingHits.length === 0 && (
                   <Spotlight.Empty>{t("No results found...")}</Spotlight.Empty>
                 )}
 
               {resultItems.length > 0 && <>{resultItems}</>}
+
+              {meetingHits.length > 0 && (
+                <Spotlight.ActionsGroup label={t("Meetings")}>
+                  {meetingHits.map((m) => {
+                    const pageId = m.settings?.publishedBundle?.meetingPageId;
+                    const date = new Date(m.startedAt).toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    });
+                    return (
+                      <Spotlight.Action
+                        key={m.id}
+                        leftSection={<IconMicrophone size={18} stroke={1.5} />}
+                        onClick={() => {
+                          if (pageId) navigate(`/p/${pageId}`);
+                          else if (MEET_URL) window.open(`${MEET_URL}/meetings/${m.id}`, "_blank", "noreferrer");
+                        }}
+                      >
+                        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                          <Text size="sm" truncate style={{ flex: 1 }}>
+                            {m.title}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {date}
+                          </Text>
+                          <Badge size="xs" variant="light" color={pageId ? "green" : "gray"}>
+                            {pageId ? t("Published page") : t("Open in ConqrMeet")}
+                          </Badge>
+                          <Badge size="xs" variant="outline" color="gray">
+                            ConqrMeet
+                          </Badge>
+                        </Group>
+                      </Spotlight.Action>
+                    );
+                  })}
+                </Spotlight.ActionsGroup>
+              )}
 
               {planeItems.length > 0 && (
                 <Spotlight.ActionsGroup label="Plane">

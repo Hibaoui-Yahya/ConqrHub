@@ -170,6 +170,7 @@ export class MeetingController {
     return this.meetingService.list(workspace.id, {
       limit: query.limit,
       offset: query.offset,
+      q: query.q,
     });
   }
 

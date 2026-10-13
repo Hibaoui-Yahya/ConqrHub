@@ -290,25 +290,41 @@ export class MeetingService {
 
   // ──────────── list ────────────
 
-  async list(workspaceId: string, opts: { limit?: number; offset?: number }) {
+  async list(
+    workspaceId: string,
+    opts: { limit?: number; offset?: number; q?: string },
+  ) {
     const limit = Math.min(opts.limit ?? 50, 100);
     const offset = opts.offset ?? 0;
+    const q = (opts.q ?? '').trim().slice(0, 200);
+    // Unified search: a word of the title or of the transcript. "%" and
+    // "_" in the query are literal, not wildcards.
+    const pattern = q ? `%${q.replace(/[\%_]/g, (c) => `\${c}`)}%` : null;
+    const base = () => {
+      let query = this.db
+        .selectFrom('meetings')
+        .where('workspaceId', '=', workspaceId)
+        .where('deletedAt', 'is', null);
+      if (pattern) {
+        query = query.where((eb) =>
+          eb.or([
+            eb('title', 'ilike', pattern),
+            eb('transcript', 'ilike', pattern),
+          ]),
+        );
+      }
+      return query;
+    };
 
     const [items, countResult] = await Promise.all([
-      this.db
-        .selectFrom('meetings')
+      base()
         .selectAll()
-        .where('workspaceId', '=', workspaceId)
-        .where('deletedAt', 'is', null)
         .orderBy('createdAt', 'desc')
         .limit(limit)
         .offset(offset)
         .execute(),
-      this.db
-        .selectFrom('meetings')
+      base()
         .select(sql<string>`count(*)::int`.as('count'))
-        .where('workspaceId', '=', workspaceId)
-        .where('deletedAt', 'is', null)
         .executeTakeFirst(),
     ]);
 
