@@ -2,6 +2,7 @@ import { Container, Space } from "@mantine/core";
 import HomeTabs from "@/features/home/components/home-tabs";
 import HomeGreeting from "@/features/home/components/home-greeting";
 import HomeAiPrompt from "@/features/home/components/home-ai-prompt";
+import HomeMeetings from "@/features/home/components/home-meetings";
 import SpaceCarousel from "@/features/space/components/space-carousel.tsx";
 import { getAppName } from "@/lib/config.ts";
 import { Helmet } from "react-helmet-async";
@@ -22,6 +23,10 @@ export default function Home() {
         <HomeGreeting />
 
         <HomeAiPrompt />
+
+        <Space h="xl" />
+
+        <HomeMeetings />
 
         <Space h="xl" />
 

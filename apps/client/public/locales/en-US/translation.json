@@ -682,7 +682,6 @@
   "Supported tools": "Supported tools",
   "Connect a client": "Connect a client",
   "Soon": "Soon",
-  "Coming soon": "Coming soon",
   "ConqrHub will connect to ConqrKnowledge for retrieval-augmented generation (RAG), GraphRAG, and multimodal search. No setup needed today.": "ConqrHub will connect to ConqrKnowledge for retrieval-augmented generation (RAG), GraphRAG, and multimodal search. No setup needed today.",
   "Recommended: native HTTP transport (Claude Code 1.0+).": "Recommended: native HTTP transport (Claude Code 1.0+).",
   "Python 3.10+. Use this snippet in a LangGraph agent app.": "Python 3.10+. Use this snippet in a LangGraph agent app.",
@@ -926,5 +925,12 @@
   "Try a different search term.": "Try a different search term.",
   "Try again": "Try again",
   "Untitled chat": "Untitled chat",
-  "What can I help you with?": "What can I help you with?"
+  "What can I help you with?": "What can I help you with?",
+  "Recent meetings": "Recent meetings",
+  "{{count}} to review": "{{count}} to review",
+  "Record an interview": "Record an interview",
+  "Meetings recorded in ConqrMeet appear here. Once published, their report and transcript are filed in a space.": "Meetings recorded in ConqrMeet appear here. Once published, their report and transcript are filed in a space.",
+  "To review in ConqrMeet": "To review in ConqrMeet",
+  "Open the page": "Open the page",
+  "Open in ConqrMeet": "Open in ConqrMeet"
 }

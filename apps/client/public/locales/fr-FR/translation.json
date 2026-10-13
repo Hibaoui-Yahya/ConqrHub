@@ -927,5 +927,12 @@
   "Score alerts": "Alertes de score",
   "Threshold": "Seuil",
   "Last fired": "Dernier déclenchement",
-  "Subscribe": "S’abonner"
+  "Subscribe": "S’abonner",
+  "Recent meetings": "Réunions récentes",
+  "{{count}} to review": "{{count}} à vérifier",
+  "Record an interview": "Enregistrer une entrevue",
+  "Meetings recorded in ConqrMeet appear here. Once published, their report and transcript are filed in a space.": "Les réunions enregistrées dans ConqrMeet apparaissent ici. Une fois publiées, leur rapport et leur transcription sont rangés dans un espace.",
+  "To review in ConqrMeet": "À vérifier dans ConqrMeet",
+  "Open the page": "Ouvrir la page",
+  "Open in ConqrMeet": "Ouvrir dans ConqrMeet"
 }
