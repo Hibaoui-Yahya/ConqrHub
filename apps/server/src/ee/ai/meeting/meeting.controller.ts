@@ -30,6 +30,7 @@ import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { SaveMarkersDto } from './dto/save-markers.dto';
+import { PublishBundleDto } from './dto/publish-bundle.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
@@ -302,6 +303,22 @@ export class MeetingController {
     return this.meetingService.publishDocument(id, docId, {
       spaceId: dto.spaceId,
       parentPageId: dto.parentPageId,
+    });
+  }
+
+  // ──────────── POST /:id/publish-bundle ("Publier dans Hub") ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/publish-bundle')
+  async publishBundle(
+    @Param('id') id: string,
+    @Body() dto: PublishBundleDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.publishBundle(workspace.id, id, {
+      spaceId: dto.spaceId,
+      parentPageId: dto.parentPageId,
+      includeTranscript: dto.includeTranscript,
     });
   }
 

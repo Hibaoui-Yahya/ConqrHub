@@ -32,6 +32,10 @@ import {
 import { AiProviderService } from '../providers/ai-provider.service';
 import { mixMeetingPlayback } from './meeting-audio.util';
 import { normalizeMarkers } from './meeting-markers.util';
+import {
+  buildMeetingPageMarkdown,
+  buildTranscriptMarkdown,
+} from './meeting-publish.util';
 
 /** Meeting types the analyzer can classify a transcript into. */
 const KNOWN_MEETING_TYPES = [
@@ -907,6 +911,108 @@ export class MeetingService {
       pageId: page.id,
       pageUrl: `/p/${page.id}`,
       documentStatus: 'published',
+    };
+  }
+
+  // ──────────── publish bundle ("Publier dans Hub") ────────────
+
+  /**
+   * Publish the whole meeting in one step: a meeting page (summary, next
+   * steps) with every generated document and a timestamped transcript as
+   * child pages. Idempotent: a second call returns the pages already made
+   * (documents published later are still added under the same page).
+   */
+  async publishBundle(
+    workspaceId: string,
+    meetingId: string,
+    opts: { spaceId: string; parentPageId?: string | null; includeTranscript?: boolean },
+  ) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.workspaceId !== workspaceId) {
+      throw new NotFoundException('Meeting not found');
+    }
+    // The target space must be in the meeting's own workspace.
+    const space = await this.db
+      .selectFrom('spaces')
+      .select(['id'])
+      .where('id', '=', opts.spaceId)
+      .where('workspaceId', '=', meeting.workspaceId)
+      .executeTakeFirst();
+    if (!space) {
+      throw new NotFoundException('Space not found');
+    }
+    const settings =
+      (this.parseJson(meeting.settings) as Record<string, any>) ?? {};
+    const previous = settings.publishedBundle as
+      | { meetingPageId: string; transcriptPageId?: string | null; spaceId: string }
+      | undefined;
+
+    let meetingPageId = previous?.meetingPageId ?? null;
+    if (!meetingPageId) {
+      const outputs = (this.parseJson(meeting.aiOutputs) as Record<string, string>) ?? {};
+      const page = await this.pages.create(meeting.userId, meeting.workspaceId, {
+        title: meeting.title,
+        spaceId: opts.spaceId,
+        parentPageId: opts.parentPageId || undefined,
+        content: buildMeetingPageMarkdown({
+          startedAt: meeting.startedAt,
+          durationMs: meeting.durationMs,
+          summary: outputs.summary,
+          nextSteps: outputs.next_steps,
+        }),
+        format: 'markdown',
+      });
+      meetingPageId = page.id;
+    }
+    const spaceId = previous?.spaceId ?? opts.spaceId;
+
+    const documents = [];
+    for (const doc of await this.listDocuments(meetingId)) {
+      documents.push(
+        await this.publishDocument(meetingId, doc.id, { spaceId, parentPageId: meetingPageId }),
+      );
+    }
+
+    let transcriptPageId = previous?.transcriptPageId ?? null;
+    if (!transcriptPageId && opts.includeTranscript !== false) {
+      const transcript = await this.getTranscript(meetingId).catch(() => null);
+      if (transcript && transcript.segments.length > 0) {
+        const page = await this.pages.create(meeting.userId, meeting.workspaceId, {
+          title: `Transcription — ${meeting.title}`,
+          spaceId,
+          parentPageId: meetingPageId,
+          content: buildTranscriptMarkdown(
+            transcript.segments as any[],
+            transcript.speakers as Record<string, { displayName?: string | null }>,
+            normalizeMarkers(settings.markers),
+          ),
+          format: 'markdown',
+        });
+        transcriptPageId = page.id;
+      }
+    }
+
+    settings.publishedBundle = {
+      meetingPageId,
+      transcriptPageId,
+      spaceId,
+      publishedAt: new Date().toISOString(),
+    };
+    await this.db
+      .updateTable('meetings')
+      .set({
+        settings: JSON.stringify(settings),
+        status: 'published',
+        publishedAt: new Date(),
+      })
+      .where('id', '=', meetingId)
+      .executeTakeFirst();
+
+    return {
+      meetingPageId,
+      pageUrl: `/p/${meetingPageId}`,
+      transcriptPageId,
+      documents,
     };
   }
 
