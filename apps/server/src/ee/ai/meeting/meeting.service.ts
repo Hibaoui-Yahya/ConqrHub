@@ -31,6 +31,7 @@ import {
 } from './meeting-transcript.util';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { mixMeetingPlayback } from './meeting-audio.util';
+import { normalizeMarkers } from './meeting-markers.util';
 
 /** Meeting types the analyzer can classify a transcript into. */
 const KNOWN_MEETING_TYPES = [
@@ -356,6 +357,28 @@ export class MeetingService {
     }
 
     return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId));
+  }
+
+  // ──────────── markers ("Marquer un moment") ────────────
+
+  /** Replace the moments marked during the recording. Stored in the
+   *  meeting's `settings` JSON so no schema change is needed. */
+  async saveMarkers(workspaceId: string, meetingId: string, raw: unknown) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.workspaceId !== workspaceId) {
+      throw new NotFoundException('Meeting not found');
+    }
+    const markers = normalizeMarkers(raw);
+    const settings = {
+      ...((this.parseJson(meeting.settings) as Record<string, unknown>) ?? {}),
+      markers,
+    };
+    await this.db
+      .updateTable('meetings')
+      .set({ settings: JSON.stringify(settings) })
+      .where('id', '=', meetingId)
+      .executeTakeFirst();
+    return { markers };
   }
 
   // ──────────── save AI output ────────────

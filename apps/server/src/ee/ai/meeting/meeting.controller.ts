@@ -29,6 +29,7 @@ import { ListMeetingsDto } from './dto/list-meetings.dto';
 import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
+import { SaveMarkersDto } from './dto/save-markers.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
@@ -184,6 +185,18 @@ export class MeetingController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
     return this.meetingService.update(id, { title: dto.title });
+  }
+
+  // ──────────── POST /:id/markers (moments marked while recording) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/markers')
+  async saveMarkers(
+    @Param('id') id: string,
+    @Body() dto: SaveMarkersDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveMarkers(workspace.id, id, dto.markers);
   }
 
   // ──────────── DELETE /:id ────────────
