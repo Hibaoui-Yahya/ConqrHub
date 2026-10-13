@@ -4,9 +4,8 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  NoSuchKey,
-  PutObjectCommand,
   S3Client,
+  S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { streamToBuffer } from '../storage.utils';
 import { Readable } from 'stream';
@@ -14,6 +13,33 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getMimeType } from '../../../common/helpers';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Logger } from '@nestjs/common';
+import { isS3NotFoundError, StorageObjectNotFoundError } from '../storage.errors';
+
+/**
+ * Builds every S3 client this driver uses, so the regular client and the
+ * per-import "recreated" client behave identically. Backblaze B2 (and some
+ * other S3-compatible stores) reject the CRC32 checksum headers AWS SDK
+ * >= 3.729 sends by default; WHEN_REQUIRED restores the pre-2025 behavior and
+ * is safe for AWS/MinIO too. Our own S3 options (bucket, baseUrl) are not SDK
+ * options and are stripped. An explicit checksum setting in the config wins.
+ */
+export function createS3Client(config: S3StorageConfig): S3Client {
+  const { bucket: _bucket, baseUrl: _baseUrl, ...sdkConfig } = config;
+  return new S3Client({
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+    ...(sdkConfig as S3ClientConfig),
+  });
+}
+
+/**
+ * CopySource is sent as a header and must be URL-encoded. Keys contain the
+ * original file name (spaces, accents, apostrophes...), so encode each path
+ * segment while keeping the separators.
+ */
+export function encodeCopySource(bucket: string, key: string): string {
+  return `${bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
 
 export class S3Driver implements StorageDriver {
   private readonly s3Client: S3Client;
@@ -21,14 +47,7 @@ export class S3Driver implements StorageDriver {
 
   constructor(config: S3StorageConfig) {
     this.config = config;
-    this.s3Client = new S3Client({
-      // Backblaze B2 (and some other S3-compatible stores) reject the CRC32
-      // checksum headers AWS SDK >= 3.729 sends by default. WHEN_REQUIRED
-      // restores the pre-2025 behavior and is safe for AWS/MinIO too.
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-      responseChecksumValidation: 'WHEN_REQUIRED',
-      ...(config as any),
-    });
+    this.s3Client = createS3Client(config);
   }
 
   async upload(filePath: string, file: Buffer | Readable): Promise<void> {
@@ -63,7 +82,7 @@ export class S3Driver implements StorageDriver {
     // optionally recreate client to avoid socket hang errors
     // (during multi-attachments imports)
     if (options?.recreateClient) {
-      clientToUse = new S3Client(this.config as any);
+      clientToUse = createS3Client(this.config);
       shouldDestroyClient = true;
     }
 
@@ -97,7 +116,7 @@ export class S3Driver implements StorageDriver {
         await this.s3Client.send(
           new CopyObjectCommand({
             Bucket: this.config.bucket,
-            CopySource: `${this.config.bucket}/${fromFilePath}`,
+            CopySource: encodeCopySource(this.config.bucket, fromFilePath),
             Key: toFilePath,
           }),
         );
@@ -118,7 +137,7 @@ export class S3Driver implements StorageDriver {
 
       return streamToBuffer(response.Body as Readable);
     } catch (err) {
-      throw new Error(`Failed to read file from S3: ${(err as Error).message}`);
+      throw this.readError(err);
     }
   }
 
@@ -133,7 +152,7 @@ export class S3Driver implements StorageDriver {
 
       return response.Body as Readable;
     } catch (err) {
-      throw new Error(`Failed to read file from S3: ${(err as Error).message}`);
+      throw this.readError(err);
     }
   }
 
@@ -152,7 +171,7 @@ export class S3Driver implements StorageDriver {
 
       return response.Body as Readable;
     } catch (err) {
-      throw new Error(`Failed to read file from S3: ${(err as Error).message}`);
+      throw this.readError(err);
     }
   }
 
@@ -166,12 +185,30 @@ export class S3Driver implements StorageDriver {
       await this.s3Client.send(command);
       return true;
     } catch (err) {
-      if (err instanceof NoSuchKey) {
+      // HeadObject has no body, so a missing key surfaces as `NotFound` / a
+      // bare 404, never as `NoSuchKey`. 403 and network errors still throw.
+      if (isS3NotFoundError(err)) {
         return false;
       }
       throw err;
     }
   }
+
+  /**
+   * A confirmed-missing object becomes StorageObjectNotFoundError (callers and
+   * the local fallback rely on that type); everything else keeps the original
+   * message so provider/auth failures stay visible.
+   */
+  private readError(err: unknown): Error {
+    const message = `Failed to read file from S3: ${(err as Error)?.message}`;
+    if (isS3NotFoundError(err)) {
+      return new StorageObjectNotFoundError(message, { cause: err });
+    }
+    const error = new Error(message);
+    (error as { cause?: unknown }).cause = err;
+    return error;
+  }
+
   getUrl(filePath: string): string {
     return `${this.config.baseUrl ?? this.config.endpoint}/${this.config.bucket}/${filePath}`;
   }

@@ -127,6 +127,25 @@ export class EnvironmentService {
     return this.configService.get<boolean>('AWS_S3_FORCE_PATH_STYLE');
   }
 
+  /**
+   * Temporary local -> S3 cutover aid (see LocalReadFallbackDriver). Off unless
+   * explicitly enabled, and only honoured when STORAGE_DRIVER=s3.
+   */
+  getStorageLocalReadFallback(): boolean {
+    const raw = this.configService.get<string>('STORAGE_LOCAL_READ_FALLBACK');
+    return ['true', '1', 'yes', 'on'].includes(
+      String(raw ?? '').trim().toLowerCase(),
+    );
+  }
+
+  /** Retained local storage root for the fallback; defaults to the local driver's path. */
+  getStorageLocalReadFallbackPath(): string | undefined {
+    const raw = this.configService.get<string>(
+      'STORAGE_LOCAL_READ_FALLBACK_PATH',
+    );
+    return raw && raw.trim() ? raw.trim() : undefined;
+  }
+
   getAwsS3Url(): string {
     return this.configService.get<string>('AWS_S3_URL');
   }
