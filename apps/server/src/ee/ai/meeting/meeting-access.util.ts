@@ -57,6 +57,25 @@ export function canWriteMeeting(
   return meeting.userId === viewer.id || isWorkspaceManager(viewer.role);
 }
 
+export interface MeetingAccessSummary {
+  /** Review, evaluate, publish, rename, share, delete. */
+  canEdit: boolean;
+  isAuthor: boolean;
+  /** Spaces whose members can read the meeting (its own, the published one). */
+  sharedSpaceIds: string[];
+}
+
+export function meetingAccessFor(
+  meeting: MeetingAccessSubject,
+  viewer: MeetingAccessViewer,
+): MeetingAccessSummary {
+  return {
+    canEdit: canWriteMeeting(meeting, viewer),
+    isAuthor: meeting.userId === viewer.id,
+    sharedSpaceIds: meetingSpaceIds(meeting),
+  };
+}
+
 /** Methods that change a meeting. */
 export function isWriteMethod(method: string | undefined): boolean {
   return !!method && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());

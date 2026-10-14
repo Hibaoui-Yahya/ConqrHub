@@ -196,16 +196,24 @@ export class MeetingController {
 
   @HttpCode(HttpStatus.OK)
   @Get(':id')
-  async get(@Param('id') id: string) {
-    return this.meetingService.getDetail(id);
+  async get(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getDetail(id, { id: user.id, role: user.role, workspaceId: workspace.id });
   }
 
   // ──────────── PATCH /:id (editable metadata) ────────────
 
   @HttpCode(HttpStatus.OK)
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
-    return this.meetingService.update(id, { title: dto.title });
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateMeetingDto,
+    @AuthUser() user: User,
+  ) {
+    return this.meetingService.update(id, { title: dto.title, spaceId: dto.spaceId, user });
   }
 
   // ──────────── POST /:id/markers (moments marked while recording) ────────────
@@ -224,8 +232,16 @@ export class MeetingController {
 
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    await this.meetingService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @Query('hubPages') hubPages: string | undefined,
+    @AuthUser() user: User,
+  ) {
+    // 204 by default; the Hub pages outcome is not needed by the caller.
+    await this.meetingService.delete(id, {
+      hubPages: hubPages === 'trash' ? 'trash' : 'keep',
+      user,
+    });
   }
 
   // ──────────── POST /:id/ai-output ────────────

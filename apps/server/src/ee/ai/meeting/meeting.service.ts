@@ -1,6 +1,7 @@
 import { MeetingNotificationService } from '../../../core/notification/services/meeting.notification';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -63,6 +64,7 @@ import {
   SpaceCaslSubject,
 } from '../../../core/casl/interfaces/space-ability.type';
 import type { User } from '@docmost/db/types/entity.types';
+import { meetingAccessFor } from './meeting-access.util';
 
 /** Meeting types the analyzer can classify a transcript into. */
 const KNOWN_MEETING_TYPES = [
@@ -380,16 +382,28 @@ export class MeetingService {
         .executeTakeFirst(),
     ]);
 
+    // Who owns each meeting and whether the caller may change it, so the
+    // list shows "de Marc" and hides actions a reader cannot do.
+    const ownerIds = [...new Set(items.map((m) => m.userId))];
+    const owners = ownerIds.length
+      ? await this.db.selectFrom('users').select(['id', 'name']).where('id', 'in', ownerIds).execute()
+      : [];
+    const viewer = opts.viewer;
     return {
-      items: items.map((m) => this.toCamelMeeting(m)),
+      items: items.map((m) => ({
+        ...this.toCamelMeeting(m),
+        ownerName: owners.find((o) => o.id === m.userId)?.name ?? null,
+        canEdit: viewer ? m.userId === viewer.id || viewer.isManager : undefined,
+      })),
       total: Number(countResult?.count ?? 0),
     };
   }
 
   // ──────────── get detail ────────────
 
-  async getDetail(meetingId: string) {
+  async getDetail(meetingId: string, viewer?: { id: string; role?: string | null; workspaceId: string }) {
     const meeting = await this.getMeetingOrThrow(meetingId);
+    const access = viewer ? await this.describeAccess(meeting, viewer) : undefined;
 
     const segments = await this.db
       .selectFrom('meetingSegments')
@@ -410,27 +424,128 @@ export class MeetingService {
         durationMs: s.durationMs,
         createdAt: s.createdAt,
       })),
+      access,
+    };
+  }
+
+  /**
+   * What the viewer may do with a meeting and who else sees it — shown in
+   * ConqrMeet so read-only viewers get no buttons that would fail.
+   */
+  private async describeAccess(
+    meeting: { userId: string; workspaceId: string; spaceId: string | null; settings: unknown; legalHold?: boolean | null },
+    viewer: { id: string; role?: string | null; workspaceId: string },
+  ) {
+    const summary = meetingAccessFor(
+      { ...meeting, settings: this.parseJson(meeting.settings) },
+      viewer,
+    );
+    const ids = summary.sharedSpaceIds;
+    const [owner, spaces] = await Promise.all([
+      this.db.selectFrom('users').select(['id', 'name']).where('id', '=', meeting.userId).executeTakeFirst(),
+      ids.length
+        ? this.db.selectFrom('spaces').select(['id', 'name', 'slug']).where('id', 'in', ids).execute()
+        : Promise.resolve([] as { id: string; name: string | null; slug: string }[]),
+    ]);
+    const bundle = (this.parseJson(meeting.settings) as { publishedBundle?: { spaceId?: string } } | null)?.publishedBundle;
+    const nameOf = (id?: string | null) => spaces.find((s) => s.id === id) ?? null;
+    return {
+      canEdit: summary.canEdit,
+      isAuthor: summary.isAuthor,
+      owner: owner ? { id: owner.id, name: owner.name } : { id: meeting.userId, name: null },
+      space: meeting.spaceId ? nameOf(meeting.spaceId) : null,
+      publishedSpace: bundle?.spaceId ? nameOf(bundle.spaceId) : null,
+      legalHold: !!meeting.legalHold,
     };
   }
 
   // ──────────── delete ────────────
 
-  async delete(meetingId: string) {
-    await this.getMeetingOrThrow(meetingId);
+  /**
+   * Delete a meeting (recording, transcript, evaluation) from ConqrMeet.
+   * Rules: refused under legal hold; the Hub pages it was published to are
+   * kept by default — knowledge stays in Hub — or moved to the Hub trash
+   * (restorable) when asked, only if the caller may edit them. The check
+   * runs before anything is deleted, so a refusal changes nothing.
+   */
+  async delete(
+    meetingId: string,
+    opts: { hubPages?: 'keep' | 'trash'; user?: User } = {},
+  ): Promise<{ hubPages: 'none' | 'kept' | 'trashed'; trashedPageIds: string[] }> {
+    const meeting = await this.getMeetingOrThrow(meetingId);
+    if (meeting.legalHold) {
+      throw new ConflictException('This meeting is under legal hold and cannot be deleted.');
+    }
+    const settings = (this.parseJson(meeting.settings) as Record<string, any>) ?? {};
+    const bundlePageId: string | undefined = settings.publishedBundle?.meetingPageId;
+    const docPages = (
+      await this.db
+        .selectFrom('meetingDocuments')
+        .select(['pageId'])
+        .where('meetingId', '=', meetingId)
+        .where('pageId', 'is not', null)
+        .execute()
+    ).map((d) => d.pageId as string);
+    const hubPageIds = [...new Set([bundlePageId, ...docPages].filter((x): x is string => !!x))];
 
+    const toTrash: { id: string; spaceId: string }[] = [];
+    if (opts.hubPages === 'trash' && hubPageIds.length) {
+      if (!opts.user) throw new ForbiddenException();
+      for (const id of hubPageIds) {
+        const page = await this.pages.findById(id).catch(() => null);
+        if (!page || page.deletedAt || page.workspaceId !== meeting.workspaceId) continue;
+        const ability = await this.spaceAbility.createForUser(opts.user, page.spaceId);
+        if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+          throw new ForbiddenException(
+            'You cannot move the Hub pages of this meeting to the trash. Keep them, or ask a space admin.',
+          );
+        }
+        toTrash.push({ id: page.id, spaceId: page.spaceId });
+      }
+    }
+
+    for (const p of toTrash) {
+      await this.pages.removePage(p.id, opts.user!.id, meeting.workspaceId);
+    }
     await this.db
       .updateTable('meetings')
       .set({ deletedAt: new Date() })
       .where('id', '=', meetingId)
       .executeTakeFirst();
+
+    return {
+      hubPages: hubPageIds.length === 0 ? 'none' : toTrash.length ? 'trashed' : 'kept',
+      trashedPageIds: toTrash.map((p) => p.id),
+    };
   }
 
   // ──────────── update metadata ────────────
 
-  async update(meetingId: string, opts: { title?: string }) {
-    await this.getMeetingOrThrow(meetingId);
+  async update(meetingId: string, opts: { title?: string; spaceId?: string | null; user?: User }) {
+    const meeting = await this.getMeetingOrThrow(meetingId);
 
     const updates: Record<string, unknown> = {};
+    if (opts.spaceId !== undefined) {
+      if (opts.spaceId === null) {
+        updates.spaceId = null;
+      } else {
+        // Share only with a space of this workspace the caller belongs to.
+        const space = await this.db
+          .selectFrom('spaces')
+          .select(['id'])
+          .where('id', '=', opts.spaceId)
+          .where('workspaceId', '=', meeting.workspaceId)
+          .executeTakeFirst();
+        if (!space) throw new NotFoundException('Space not found');
+        if (opts.user) {
+          const ability = await this.spaceAbility.createForUser(opts.user, opts.spaceId);
+          if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+            throw new ForbiddenException('You can only share a meeting with a space you belong to.');
+          }
+        }
+        updates.spaceId = opts.spaceId;
+      }
+    }
     if (opts.title !== undefined) {
       const title = opts.title.trim();
       if (!title) {
