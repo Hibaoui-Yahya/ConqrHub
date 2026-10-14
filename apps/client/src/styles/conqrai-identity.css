@@ -55,8 +55,53 @@
 /* Product wordmark in the header: one image per colour scheme. */
 .conqr-wordmark {
   display: block;
-  height: 15px;
+  height: 18px;
   width: auto;
+}
+
+/* Top bar (Pencil "Barre du haut · A · Claire"): the app tile is black,
+   so on the black dark-mode canvas it gets a hairline ring to stay a tile. */
+.conqr-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 4px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.conqr-brand-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+[data-mantine-color-scheme="dark"] .conqr-brand-mark {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.conqr-header-sep {
+  width: 1px;
+  height: 20px;
+  margin-inline: 4px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+.conqr-kbd {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2, var(--bg-layer-1));
+  color: var(--txt-tertiary);
+  font-weight: 500;
+  font-family: inherit;
+}
+@media (max-width: 767px) {
+  .conqr-header-sep {
+    display: none;
+  }
 }
 [data-mantine-color-scheme="dark"] .conqr-wordmark--light,
 :root:not([data-mantine-color-scheme="dark"]) .conqr-wordmark--dark {

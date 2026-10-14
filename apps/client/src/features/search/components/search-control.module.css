@@ -2,14 +2,14 @@
    w-[364px] h-7 rounded-lg border border-subtle-1 bg-layer-2, 13px text,
    placeholder color, 14px icon, subtle kbd hint. */
 .root {
-    width: rem(364px);
-    max-width: 60vw;
-    height: rem(28px);
-    padding: 0 rem(8px);
+    width: rem(520px);
+    max-width: 100%;
+    height: rem(36px);
+    padding: 0 rem(10px);
     border-radius: rem(8px);
     color: var(--txt-placeholder);
     border: rem(1px) solid var(--border-subtle-1);
-    background-color: var(--bg-layer-2);
+    background-color: var(--bg-surface-1, var(--bg-layer-2));
     transition: background-color 150ms ease;
 
     @mixin hover {
@@ -24,14 +24,5 @@
 
 .shortcut {
     margin-left: auto;
-    font-size: 11px;
-    line-height: 1;
-    padding: 3px 6px;
-    border-radius: var(--mantine-radius-sm);
-    border: rem(1px) solid var(--border-subtle);
-    background-color: var(--bg-layer-1);
-    color: var(--txt-tertiary);
-    font-weight: 600;
-    white-space: nowrap;
     flex-shrink: 0;
 }

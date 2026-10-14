@@ -19,7 +19,7 @@
 .suiteHeader {
   padding-inline: 16px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 364px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 520px minmax(0, 1fr);
   column-gap: 12px;
 }
 

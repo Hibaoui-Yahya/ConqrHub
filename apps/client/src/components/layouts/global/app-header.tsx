@@ -52,7 +52,7 @@ export function AppHeader() {
   return (
     <>
       <Group h="100%" className={classes.suiteHeader} wrap={"nowrap"}>
-        <Group wrap="nowrap">
+        <Group wrap="nowrap" gap={8}>
           {/* Mobile keeps its hamburger here; the desktop toggle lives in the
               sidebar's top row (Plane parity). */}
           <Tooltip label={t("Sidebar toggle")}>
@@ -66,18 +66,16 @@ export function AppHeader() {
           </Tooltip>
 
           <AppSwitcher />
+          <span className="conqr-header-sep" aria-hidden="true" />
 
-          <Link to="/home" className={classes.brand} aria-label="ConqrHub">
-            <Box className={classes.brandIcon}>
-              <img
-                src="/branding/conqrhub-mark.svg"
-                alt=""
-                aria-hidden="true"
-                width={22}
-                height={22}
-              />
-            </Box>
-            <Box visibleFrom="sm" ml={8}>
+          <Link to="/home" className="conqr-brand" aria-label="ConqrHub">
+            <img
+              className="conqr-brand-mark"
+              src="/branding/conqrhub-mark.svg"
+              alt=""
+              aria-hidden="true"
+            />
+            <Box visibleFrom="sm">
               <img
                 className="conqr-wordmark conqr-wordmark--light"
                 src="/branding/conqrhub-wordmark-light.png"
@@ -179,6 +177,7 @@ export function AppHeader() {
                 : `${trialDaysLeft} days left`}
             </Badge>
           )}
+          <span className="conqr-header-sep" aria-hidden="true" />
           <TopMenu />
         </Group>
       </Group>

@@ -22,11 +22,17 @@ export function SearchControl({ className, ...others }: SearchControlProps) {
   return (
     <UnstyledButton {...others} className={cx(classes.root, className)}>
       <Group gap={8} wrap="nowrap" h="100%" style={{ width: "100%" }}>
-        <IconSearch style={{ width: rem(14), height: rem(14), flexShrink: 0 }} stroke={1.5} />
+        <IconSearch
+          style={{ width: rem(15), height: rem(15), flexShrink: 0 }}
+          stroke={1.5}
+        />
         <Text className={classes.label} truncate>
           {t("Search commands...")}
         </Text>
-        <Text className={classes.shortcut}>Ctrl + K</Text>
+        <Group gap={3} wrap="nowrap" className={classes.shortcut}>
+          <kbd className="conqr-kbd">Ctrl</kbd>
+          <kbd className="conqr-kbd">K</kbd>
+        </Group>
       </Group>
     </UnstyledButton>
   );

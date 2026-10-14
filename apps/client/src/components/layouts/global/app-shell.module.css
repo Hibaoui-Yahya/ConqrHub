@@ -111,7 +111,7 @@
 
 .aside {
   @media (max-width: $mantine-breakpoint-sm) {
-    margin-top: 40px; /* Plane's top-nav height (min-h-10) */
+    margin-top: 52px; /* top bar height (Barre du haut · A) */
   }
 }
 
