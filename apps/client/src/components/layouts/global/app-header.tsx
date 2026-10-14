@@ -68,15 +68,16 @@ export function AppHeader() {
           <AppSwitcher />
 
           <Link to="/home" className={classes.brand} aria-label="ConqrHub">
-            <Box hiddenFrom="sm" className={classes.brandIcon}>
+            <Box className={classes.brandIcon}>
               <img
-                src="/icons/favicon-32x32.png"
-                alt="ConqrHub"
+                src="/branding/conqrhub-mark.svg"
+                alt=""
+                aria-hidden="true"
                 width={22}
                 height={22}
               />
             </Box>
-            <Box visibleFrom="sm">
+            <Box visibleFrom="sm" ml={8}>
               <img
                 className="conqr-wordmark conqr-wordmark--light"
                 src="/branding/conqrhub-wordmark-light.png"

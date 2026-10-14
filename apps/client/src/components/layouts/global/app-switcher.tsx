@@ -56,6 +56,7 @@ type SuiteApp = {
   current?: boolean;
   icon: typeof IconNotebook;
   color: string;
+  logo?: string;
 };
 
 interface UseSuiteAppsProps {
@@ -88,6 +89,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       current: true,
       icon: IconNotebook,
       color: "var(--brand-default)",
+      logo: "/branding/conqrhub-mark.svg",
     },
     {
       key: "plane",
@@ -110,6 +112,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       external: true,
       icon: IconMicrophone,
       color: "var(--extended-color-teal-500, #12b886)",
+      logo: "/branding/conqrmeet-mark.svg",
     },
   ];
 
@@ -129,9 +132,13 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
 function AppTile({ app }: { app: SuiteApp }) {
   const inner = (
     <>
-      <Box className={classes.tileIcon} style={{ background: app.color }}>
-        <app.icon size={17} stroke={2} color="#fff" />
-      </Box>
+      {app.logo ? (
+        <img className={classes.tileIcon} src={app.logo} alt="" />
+      ) : (
+        <Box className={classes.tileIcon} style={{ background: app.color }}>
+          <app.icon size={17} stroke={2} color="#fff" />
+        </Box>
+      )}
       <div className={classes.tileText}>
         <Group gap={6} wrap="nowrap">
           <Text className={classes.tileName}>{app.name}</Text>
