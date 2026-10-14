@@ -137,6 +137,23 @@ describe('RagAnswerService.ask()', () => {
       });
     });
 
+    it('keeps distinct document and OCR citations on the same page in the public answer', async () => {
+      const context = makeContext();
+      context.chunks = ['document.txt', 'scan.png'].map((fileName, index) => ({
+        kind: 'page', sourceId: 'same-page', chunkText: 'Fictional budget',
+        title: 'QA page', score: 0.9, label: `P${index + 1}`,
+        attachmentId: `file-${index}`, fileName,
+      }));
+      const retrieval = makeRetrieval(context);
+      const svc = makeSvc(makeAiProvider('7421 [P1]; 5327 [P2]'), retrieval, true);
+      const result = await svc.ask({ ...DTO, pageId: 'same-page' }, USER);
+      expect(result.sources).toEqual([
+        { label: 'P1', kind: 'page', sourceId: 'same-page', title: 'QA page', attachmentId: 'file-0', fileName: 'document.txt' },
+        { label: 'P2', kind: 'page', sourceId: 'same-page', title: 'QA page', attachmentId: 'file-1', fileName: 'scan.png' },
+      ]);
+      expect(retrieval.retrieve).toHaveBeenCalledWith(expect.objectContaining({ userId: USER.id, workspaceId: WORKSPACE_ID, pageId: 'same-page' }));
+    });
+
     it('passes workspaceId and spaceId from user/dto to retrieval', async () => {
       const retrieval = makeRetrieval();
       const svc = makeSvc(makeAiProvider(), retrieval, true);
