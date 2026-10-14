@@ -16,7 +16,10 @@ jest.mock('../providers/ai-provider.service', () => ({
 }));
 // Actual encoding is separately checked with FFmpeg and known frequencies.
 jest.mock('./meeting-audio.util', () => ({
+  ...jest.requireActual('./meeting-audio.util'),
   mixMeetingPlayback: jest.fn(async () => Buffer.from('combined playback')),
+  // No ffmpeg in unit runs: "cannot measure" keeps the existing path.
+  inspectAudioSignal: jest.fn(async () => null),
 }));
 
 // This integration spec runs against a disposable local PostgreSQL container.
@@ -27,6 +30,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   let files: Map<string, Buffer>;
   let storage: any;
   let meetingId: string;
+  // An Owner/Admin of the meeting's workspace may write to it (LTC-03).
+  let actor: { id: string; role: string; workspaceId: string };
   const meta = (source: string, durationMs = 3000) => ({
     source,
     sequence: 0,
@@ -60,6 +65,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   beforeEach(async () => {
     meetingId = randomUUID();
     files = new Map();
+    actor = { id: randomUUID(), role: 'admin', workspaceId: randomUUID() };
     await db
       .insertInto('meetings')
       .values({
@@ -68,7 +74,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
         audioManifest: { retained: true },
         durationMs: 0,
         captureKind: 'live',
-        workspaceId: randomUUID(),
+        workspaceId: actor.workspaceId,
       })
       .execute();
     storage = {
@@ -122,8 +128,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
 
   it('retains distinct microphone and system bytes and both manifest entries when uploaded together', async () => {
     await Promise.all([
-      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ]);
     const row = await meeting();
     expect(row.audioManifest.retained).toBe(true);
@@ -145,10 +151,10 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     ).toHaveLength(2);
   });
   it('retries replace only the matching channel/sequence without duplicate transcript inputs', async () => {
-    await service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic'));
+    await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic'));
     await Promise.all([
-      service.ingestChunk(meetingId, Buffer.from('replacement'), meta('mic')),
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('replacement'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ]);
     expect((await meeting()).audioManifest.chunks).toHaveLength(2);
     expect(files.size).toBe(2);
@@ -158,29 +164,28 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     ).toBe('replacement');
   });
   it('takes the longer channel duration without shrinking it on a later short upload', async () => {
-    await service.ingestChunk(
-      meetingId,
+    await service.ingestChunk(actor, meetingId,
       Buffer.from('remote'),
       meta('system', 7000),
     );
-    await service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic', 3000));
+    await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic', 3000));
     expect((await meeting()).durationMs).toBe(7000);
   });
   it('preserves the other channel if a storage write fails', async () => {
-    await service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic'));
+    await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic'));
     storage.upload.mockRejectedValueOnce(new Error('upload failed'));
     await expect(
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ).rejects.toThrow('upload failed');
     expect((await meeting()).audioManifest.chunks).toHaveLength(1);
     expect(files.size).toBe(1);
   });
   it('rejects closed recordings and invalid source/timing before persisting files', async () => {
     await expect(
-      service.ingestChunk(meetingId, Buffer.from('x'), meta('../system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('x'), meta('../system')),
     ).rejects.toThrow('Invalid audio');
     await expect(
-      service.ingestChunk(meetingId, Buffer.from('x'), meta('mic', -1)),
+      service.ingestChunk(actor, meetingId, Buffer.from('x'), meta('mic', -1)),
     ).rejects.toThrow('Invalid audio');
     await db
       .updateTable('meetings')
@@ -188,14 +193,14 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       .where('id', '=', meetingId)
       .execute();
     await expect(
-      service.ingestChunk(meetingId, Buffer.from('x'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('x'), meta('mic')),
     ).rejects.toThrow('not recording');
     expect(files.size).toBe(0);
   });
   it('transcribes both channels into interleaved distinct speaker turns', async () => {
     await Promise.all([
-      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ]);
     const sources = await (service as any).resolveAudioSources(await meeting());
     const result = await (service as any).transcribeMeeting(meetingId, sources);
@@ -212,8 +217,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
 
   it('persists combined playback as an object while retaining both inputs with the production Postgres.js driver', async () => {
     await Promise.all([
-      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic')),
-      service.ingestChunk(meetingId, Buffer.from('remote'), meta('system')),
+      service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ]);
     const row = await meeting();
     const sources = await (service as any).resolveAudioSources(row);
@@ -233,9 +238,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
 
   it('retains three acoustic voices and repeated remote identity on the shared timeline', async () => {
     await Promise.all([
-      service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic', 9000)),
-      service.ingestChunk(
-        meetingId,
+      service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic', 9000)),
+      service.ingestChunk(actor, meetingId,
         Buffer.from('remote'),
         meta('system', 9000),
       ),
@@ -288,8 +292,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
 
   it('stores the entire long transcript beyond the analysis prompt limit', async () => {
     const speech = 'détail important '.repeat(3000) + 'FIN DU TRANSCRIPT';
-    await service.ingestChunk(
-      meetingId,
+    await service.ingestChunk(actor, meetingId,
       Buffer.from(speech),
       meta('mic', 120000),
     );
@@ -301,12 +304,11 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   });
 
   it('transcribes multiple files of the same channel together to keep voice ids stable', async () => {
-    await service.ingestChunk(
-      meetingId,
+    await service.ingestChunk(actor, meetingId,
       Buffer.from('part one'),
       meta('system', 3000),
     );
-    await service.ingestChunk(meetingId, Buffer.from('part two'), {
+    await service.ingestChunk(actor, meetingId, Buffer.from('part two'), {
       ...meta('system', 3000),
       sequence: 1,
       startMs: 6000,
@@ -377,7 +379,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   });
 
   it('proposes names from each acoustic self-introduction and still requires review', async () => {
-    await service.ingestChunk(meetingId, Buffer.from('mic'), meta('mic', 9000));
+    await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic', 9000));
     (service as any).stt.transcribeDiarized.mockResolvedValue({
       text: '',
       language: null,

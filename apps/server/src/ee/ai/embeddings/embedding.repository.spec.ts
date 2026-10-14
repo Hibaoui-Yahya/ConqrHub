@@ -159,7 +159,7 @@ describe('EmbeddingRepository', () => {
         contentHash: 'hash',
         chunks: [],
       });
-      expect(deleteSpy).toHaveBeenCalledWith('page', 'page-1');
+      expect(deleteSpy).toHaveBeenCalledWith('page', 'page-1', undefined);
     });
 
     it('inserts one row per chunk', async () => {
@@ -237,7 +237,13 @@ describe('EmbeddingRepository', () => {
           { chunkIndex: 0, chunkText: 'Hi', embedding: [0.1], metadata: meta },
         ],
       });
-      expect(inserts[0].metadata).toBe(JSON.stringify(meta));
+      // Cast server-side from text so postgres-js does not re-encode the
+      // JSON into a string scalar (see the PostgreSQL spec in attachments-ee).
+      const compiled = inserts[0].metadata.toOperationNode();
+      expect(JSON.stringify(compiled)).toContain('::text::jsonb');
+      expect(JSON.stringify(compiled)).toContain(
+        JSON.stringify(JSON.stringify(meta)),
+      );
     });
 
     it('stores null metadata when none is provided', async () => {

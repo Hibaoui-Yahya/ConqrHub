@@ -4,6 +4,7 @@
  * page. Pure; unit-tested in meeting-publish.util.spec.ts.
  */
 import type { MeetingMarker } from './meeting-markers.util';
+import { formatMeetingDateTime, resolveTimeZone } from './meeting-locale.util';
 
 export interface PublishSegment {
   speaker: string;
@@ -80,13 +81,16 @@ export function buildMeetingPageMarkdown(input: {
   nextSteps?: string | null;
   /** Validated competency evaluation, already rendered as Markdown. */
   evaluationMarkdown?: string | null;
+  /** IANA zone of the dates (the company's, LTC-05). The page names the
+   *  zone, so the time is never ambiguous for a reader elsewhere. */
+  timeZone?: string;
 }): string {
   const lines: string[] = [];
-  const date = input.startedAt ? new Date(input.startedAt) : null;
-  const when =
-    date && !Number.isNaN(date.getTime())
-      ? date.toLocaleString('fr-CA', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Toronto' })
-      : null;
+  const when = formatMeetingDateTime(
+    input.startedAt,
+    resolveTimeZone([input.timeZone]),
+    'fr',
+  );
   const minutes = input.durationMs ? Math.round(input.durationMs / 60000) : null;
   const meta = [when, minutes ? `${minutes} min` : null].filter(Boolean).join(' · ');
   if (meta) lines.push(`_Réunion du ${meta} · publiée depuis ConqrMeet._`, '');

@@ -9,6 +9,7 @@ export enum QueueName {
   HISTORY_QUEUE = '{history-queue}',
   NOTIFICATION_QUEUE = '{notification-queue}',
   AUDIT_QUEUE = '{audit-queue}',
+  MEETING_QUEUE = '{meeting-queue}',
 }
 
 export enum QueueJob {
@@ -99,4 +100,5 @@ export enum QueueJob {
   BROKEN_LINKS_SCAN_ALL = 'broken-links-scan-all',
   DUPLICATES_SCAN_ALL = 'duplicates-scan-all',
 
+  MEETING_PIPELINE = 'meeting-pipeline',
 }

@@ -76,3 +76,67 @@ export async function mixMeetingPlayback(
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+/** Loudness of a whole recording, as measured by ffmpeg's volumedetect. */
+export type AudioSignal = { meanDb: number; peakDb: number };
+
+/**
+ * volumedetect uses signed 16-bit samples: zero samples report -91 dB,
+ * while even a single nonzero least-significant bit peaks at -90.3 dB.
+ * Keep every measurable nonzero sample, including extremely quiet audio.
+ */
+export const DIGITAL_SILENCE_PEAK_DB = -91;
+/** Above this size the file is not inspected; the existing path runs. */
+export const MAX_SIGNAL_INSPECTION_BYTES = 300 * 1024 * 1024;
+const SIGNAL_INSPECTION_TIMEOUT_MS = 120_000;
+
+const VOLUME_PATTERNS = {
+  mean_volume: /mean_volume:\s*(-?inf|-?\d+(?:\.\d+)?)\s*dB/,
+  max_volume: /max_volume:\s*(-?inf|-?\d+(?:\.\d+)?)\s*dB/,
+} as const;
+
+function parseDb(text: string, key: 'mean_volume' | 'max_volume'): number | null {
+  const m = VOLUME_PATTERNS[key].exec(text);
+  if (!m) return null;
+  return m[1].endsWith('inf') ? -Infinity : Number(m[1]);
+}
+
+/** Parses ffmpeg volumedetect output; null when it is not there. */
+export function parseVolumeDetect(stderr: string): AudioSignal | null {
+  const meanDb = parseDb(stderr, 'mean_volume');
+  const peakDb = parseDb(stderr, 'max_volume');
+  if (meanDb === null || peakDb === null) return null;
+  return { meanDb, peakDb };
+}
+
+/** Only a measurement can say "silent": unknown is never silence. */
+export function isDigitalSilence(signal: AudioSignal | null | undefined): boolean {
+  return !!signal && signal.peakDb <= DIGITAL_SILENCE_PEAK_DB;
+}
+
+/**
+ * Measures a recording locally with ffmpeg (bounded size and time). Returns
+ * null when it cannot be measured — ffmpeg missing, unreadable file, too
+ * large, timeout — so the caller keeps its existing path instead of
+ * guessing.
+ */
+export async function inspectAudioSignal(audio: Buffer): Promise<AudioSignal | null> {
+  if (!audio?.length || audio.length > MAX_SIGNAL_INSPECTION_BYTES) return null;
+  const directory = await mkdtemp(join(tmpdir(), 'conqr-meeting-signal-'));
+  try {
+    const input = join(directory, 'input.audio');
+    await writeFile(input, audio);
+    const { stderr } = await run(
+      'ffmpeg',
+      ['-hide_banner', '-nostats', '-i', input, '-vn', '-af', 'volumedetect', '-f', 'null', '-'],
+      { timeout: SIGNAL_INSPECTION_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+    );
+    return parseVolumeDetect(String(stderr ?? ''));
+  } catch {
+    return null;
+  } finally {
+    if (directory.startsWith(join(tmpdir(), 'conqr-meeting-signal-'))) {
+      await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+}

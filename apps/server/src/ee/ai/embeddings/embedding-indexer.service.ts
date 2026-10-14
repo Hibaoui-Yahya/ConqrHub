@@ -1,10 +1,56 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { ChunkingService } from './chunking.service';
-import { EmbeddingRepository } from './embedding.repository';
+import {
+  EmbeddingChunkInsert,
+  EmbeddingRepository,
+} from './embedding.repository';
+import {
+  AttachmentIndexPart,
+  PageAttachmentContentService,
+  referencedAttachmentIds,
+} from '../../attachments-ee/page-attachment-content.service';
+
+/**
+ * The page (or one of its attachments) changed between reading it and storing
+ * its embeddings. Thrown so the queue retries with fresh data instead of
+ * storing a mix of old and new content.
+ */
+export class StaleIndexInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StaleIndexInputError';
+  }
+}
+
+/** Bump when the attachment chunk format changes, to re-embed once. */
+// 3: document chunks carry their source version (attachmentUpdatedAt),
+// which retrieval requires; pages with documents are re-indexed once
+// (vectors of unchanged chunk texts are reused).
+const ATTACHMENT_CHUNK_FORMAT = 3;
+
+/**
+ * First line of every attachment chunk: names the document for citation and,
+ * when only part of it was read, says so (the model must not present a
+ * partial scan as the whole document).
+ */
+export function attachmentChunkHeader(
+  fileName: string,
+  coverage?: string,
+): string {
+  return coverage
+    ? `[Attachment: ${fileName} (partial text: ${coverage})]`
+    : `[Attachment: ${fileName}]`;
+}
+
+function sameInstant(a: unknown, b: unknown): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return new Date(a as string).getTime() === new Date(b as string).getTime();
+}
 
 export interface IndexPageResult {
   pageId: string;
@@ -16,6 +62,10 @@ export interface IndexPageResult {
     | 'ai_unavailable'
     | 'not_verified';
   chunksIndexed?: number;
+  /** Chunks whose vector was reused from the previous index (no embedding call). */
+  chunksReused?: number;
+  /** Attachments whose extracted text was indexed with the page. */
+  attachmentsIndexed?: number;
 }
 
 /**
@@ -45,6 +95,33 @@ export function embeddingInput(title: string | null, text: string): string {
   return t ? `${t}\n\n${text}` : text;
 }
 
+/**
+ * Hash input for a page plus its attachments. Without attachments it is
+ * exactly the historical page hash input, so existing embeddings of pages
+ * without documents are not re-embedded after this change.
+ */
+export function pageContentHashInput(
+  title: string | null,
+  text: string,
+  parts: Array<
+    Pick<
+      AttachmentIndexPart,
+      'attachmentId' | 'fileName' | 'textSha256' | 'coverage'
+    >
+  >,
+): string {
+  const base = embeddingInput(title, text);
+  if (parts.length === 0) return base;
+  return [
+    base,
+    `\u0000attachments:v${ATTACHMENT_CHUNK_FORMAT}`,
+    ...parts.map(
+      (p) =>
+        `${p.attachmentId}:${p.fileName}:${p.textSha256}:${p.coverage ?? ''}`,
+    ),
+  ].join('\n');
+}
+
 @Injectable()
 export class EmbeddingIndexerService {
   private readonly logger = new Logger(EmbeddingIndexerService.name);
@@ -55,11 +132,14 @@ export class EmbeddingIndexerService {
     private readonly env: EnvironmentService,
     private readonly chunking: ChunkingService,
     private readonly repo: EmbeddingRepository,
+    @Optional()
+    private readonly attachmentContent?: PageAttachmentContentService,
   ) {}
 
   async indexPage(
     pageId: string,
     workspaceId: string,
+    opts: { attachmentFollowUp?: number } = {},
   ): Promise<IndexPageResult> {
     if (!this.aiProvider.isAvailable()) {
       return { pageId, status: 'ai_unavailable' };
@@ -67,7 +147,7 @@ export class EmbeddingIndexerService {
 
     const page = await (this.db as any)
       .selectFrom('pages')
-      .select(['id', 'title', 'textContent', 'spaceId', 'deletedAt'])
+      .select(['id', 'title', 'textContent', 'content', 'spaceId', 'deletedAt'])
       .where('id', '=', pageId)
       .where('workspaceId', '=', workspaceId)
       .executeTakeFirst();
@@ -88,7 +168,7 @@ export class EmbeddingIndexerService {
     // drop any existing embeddings so RAG never retrieves unverified content.
     const verification = await (this.db as any)
       .selectFrom('pageVerifications')
-      .select(['status', 'expiresAt'])
+      .select(['status', 'expiresAt', 'verifiedAt'])
       .where('pageId', '=', pageId)
       .executeTakeFirst();
 
@@ -97,8 +177,37 @@ export class EmbeddingIndexerService {
       return { pageId, status: 'not_verified' };
     }
 
-    if (!page.textContent?.trim()) {
+    // Documents attached to the page. Only consulted for a verified page, and
+    // files added or replaced after the verification are left out.
+    let parts: AttachmentIndexPart[] = [];
+    let attachmentsPending = false;
+    if (this.attachmentContent) {
+      const collected = await this.attachmentContent.collectForPage(
+        {
+          id: pageId,
+          workspaceId,
+          spaceId: page.spaceId,
+          content: page.content,
+        },
+        verification.verifiedAt ?? null,
+      );
+      parts = collected.parts;
+      attachmentsPending = collected.pending;
+    }
+    const followUp = async () => {
+      if (attachmentsPending) {
+        await this.attachmentContent?.scheduleFollowUp(
+          pageId,
+          workspaceId,
+          (opts.attachmentFollowUp ?? 0) + 1,
+        );
+      }
+    };
+
+    const pageText: string = page.textContent?.trim() ? page.textContent : '';
+    if (!pageText && parts.length === 0) {
       await this.repo.deleteBySource('page', pageId);
+      await followUp();
       return { pageId, status: 'no_content' };
     }
 
@@ -108,7 +217,7 @@ export class EmbeddingIndexerService {
     // rename must re-embed even when the body is untouched.
     const title = page.title ?? null;
     const contentHash = this.chunking.contentHash(
-      embeddingInput(title, page.textContent),
+      pageContentHashInput(title, pageText, parts),
     );
 
     const unchanged = await this.repo.isContentUnchanged(
@@ -118,6 +227,7 @@ export class EmbeddingIndexerService {
       contentHash,
     );
     if (unchanged) {
+      await followUp();
       return { pageId, status: 'skipped' };
     }
 
@@ -125,56 +235,172 @@ export class EmbeddingIndexerService {
     const overlap = this.env.getAiEmbeddingChunkOverlap();
     const batchSize = this.env.getAiEmbeddingBatchSize();
 
-    const chunks = this.chunking.chunk(page.textContent, {
-      chunkChars,
-      overlap,
-    });
+    const baseMetadata = { pageId, title, spaceId: page.spaceId, workspaceId };
+    const planned: Array<{
+      chunkText: string;
+      metadata: Record<string, unknown>;
+    }> = pageText
+      ? this.chunking
+          .chunk(pageText, { chunkChars, overlap })
+          .map((c) => ({ chunkText: c.chunkText, metadata: baseMetadata }))
+      : [];
+    // Attachment chunks follow the page's own chunks under the same page
+    // source, so retrieval, permission scoping and deletion are unchanged;
+    // each one names its document so answers can cite it.
+    for (const part of parts) {
+      const header = attachmentChunkHeader(part.fileName, part.coverage);
+      for (const c of this.chunking.chunk(part.text, { chunkChars, overlap })) {
+        planned.push({
+          chunkText: `${header}\n${c.chunkText}`,
+          metadata: {
+            ...baseMetadata,
+            attachmentId: part.attachmentId,
+            fileName: part.fileName,
+            // Version of the bytes this text came from. Retrieval drops the
+            // chunk once the live attachment is another version (replaced,
+            // even if the page was re-verified before re-indexing ran).
+            attachmentUpdatedAt: new Date(part.updatedAt).toISOString(),
+            textSha256: part.textSha256,
+          },
+        });
+      }
+    }
 
-    if (chunks.length === 0) {
+    if (planned.length === 0) {
       await this.repo.deleteBySource('page', pageId);
+      await followUp();
       return { pageId, status: 'no_content' };
     }
 
     // Embed the chunk with its page title in front so the vector carries the
     // page's topic even when the chunk itself never names it. The stored
     // chunk_text stays raw: it is what gets shown and lexically searched.
-    const texts = chunks.map((c) => embeddingInput(title, c.chunkText));
-    const allEmbeddings: number[][] = [];
+    // Vectors of chunks already embedded under the same title are reused, so
+    // attaching one more document does not re-pay the rest of the page.
+    const reusable = await this.repo.findReusableVectors(
+      'page',
+      pageId,
+      model,
+      title,
+    );
+    const vectors: Array<number[] | undefined> = planned.map((c) =>
+      reusable.get(c.chunkText),
+    );
+    const missing = planned
+      .map((c, i) => ({ i, input: embeddingInput(title, c.chunkText) }))
+      .filter(({ i }) => !vectors[i]);
 
-    for (let i = 0; i < texts.length; i += batchSize) {
-      const batch = texts.slice(i, i + batchSize);
-      const vectors = await this.aiProvider.embedMany(batch);
-      allEmbeddings.push(...vectors);
+    for (let b = 0; b < missing.length; b += batchSize) {
+      const batch = missing.slice(b, b + batchSize);
+      const embedded = await this.aiProvider.embedMany(
+        batch.map((m) => m.input),
+      );
+      batch.forEach((m, k) => {
+        vectors[m.i] = embedded[k];
+      });
     }
 
-    const embeddingChunks = chunks.map((c, i) => ({
-      chunkIndex: c.chunkIndex,
+    const embeddingChunks: EmbeddingChunkInsert[] = planned.map((c, i) => ({
+      chunkIndex: i,
       chunkText: c.chunkText,
-      embedding: allEmbeddings[i],
-      metadata: {
-        pageId,
-        title,
-        spaceId: page.spaceId,
-        workspaceId,
-      },
+      embedding: vectors[i],
+      metadata: c.metadata,
     }));
 
-    await this.repo.upsertChunks({
-      workspaceId,
-      spaceId: page.spaceId,
-      sourceKind: 'page',
-      sourceId: pageId,
-      model,
-      dim,
-      contentHash,
-      chunks: embeddingChunks,
-    });
+    // Re-check eligibility under row locks right before writing: a page
+    // unverified, deleted or moved, or a document replaced, while this pass
+    // was extracting/embedding must not leave retrievable stale embeddings.
+    const status: 'indexed' | 'deleted' | 'not_verified' = await (
+      this.db as any
+    )
+      .transaction()
+      .execute(async (trx: any) => {
+        const current = await trx
+          .selectFrom('pageVerifications')
+          .select(['status', 'expiresAt', 'verifiedAt'])
+          .where('pageId', '=', pageId)
+          .forShare()
+          .executeTakeFirst();
+        const live = await trx
+          .selectFrom('pages')
+          .select(['spaceId', 'deletedAt', 'title', 'textContent', 'content'])
+          .where('id', '=', pageId)
+          .where('workspaceId', '=', workspaceId)
+          .forShare()
+          .executeTakeFirst();
 
+        if (!live || live.deletedAt) {
+          await this.repo.deleteBySource('page', pageId, trx);
+          return 'deleted';
+        }
+        if (!isEffectivelyVerified(current)) {
+          await this.repo.deleteBySource('page', pageId, trx);
+          return 'not_verified';
+        }
+        if (live.spaceId !== page.spaceId) {
+          throw new StaleIndexInputError(`Page ${pageId} moved while indexing`);
+        }
+        // The exact version that was embedded must still be the current one:
+        // same title and text, same verification (a re-verification can make
+        // other documents eligible), and every document used still
+        // referenced by the page body.
+        if (
+          (live.title ?? null) !== (page.title ?? null) ||
+          (live.textContent ?? '') !== (page.textContent ?? '') ||
+          !sameInstant(current.verifiedAt, verification.verifiedAt)
+        ) {
+          throw new StaleIndexInputError(
+            `Page ${pageId} changed or was re-verified while indexing`,
+          );
+        }
+        if (parts.length > 0) {
+          const referenced = new Set(referencedAttachmentIds(live.content));
+          if (parts.some((p) => !referenced.has(p.attachmentId))) {
+            throw new StaleIndexInputError(
+              `A document was removed from page ${pageId} while indexing`,
+            );
+          }
+        }
+        if (
+          parts.length > 0 &&
+          !(await this.attachmentContent.stillCurrent(trx, pageId, parts))
+        ) {
+          throw new StaleIndexInputError(
+            `An attachment of page ${pageId} changed while indexing`,
+          );
+        }
+
+        await this.repo.upsertChunks(
+          {
+            workspaceId,
+            spaceId: page.spaceId,
+            sourceKind: 'page',
+            sourceId: pageId,
+            model,
+            dim,
+            contentHash,
+            chunks: embeddingChunks,
+          },
+          trx,
+        );
+        return 'indexed';
+      });
+
+    await followUp();
+    if (status !== 'indexed') return { pageId, status };
+
+    const chunksReused = planned.length - missing.length;
     this.logger.debug(
-      `Indexed page ${pageId}: ${chunks.length} chunks (model=${model})`,
+      `Indexed page ${pageId}: ${planned.length} chunks (${chunksReused} reused, ${parts.length} attachment(s), model=${model})`,
     );
 
-    return { pageId, status: 'indexed', chunksIndexed: chunks.length };
+    return {
+      pageId,
+      status: 'indexed',
+      chunksIndexed: planned.length,
+      chunksReused,
+      attachmentsIndexed: parts.length,
+    };
   }
 
   /**

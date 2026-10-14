@@ -18,12 +18,14 @@ import { copyToClipboard, htmlToMarkdown } from "@docmost/editor-ext";
 import { useLocation } from "react-router-dom";
 import { MicButton } from "@/ee/voice-input/mic-button";
 import { extractPageSlugId } from "@/lib";
+import { useTranslation } from "react-i18next";
 
 interface EditorAiMenuProps {
   editor: Editor | null;
 }
 
 const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
+  const { t } = useTranslation();
   const aiGenerateStreamMutation = useAiGenerateStreamMutation();
   const location = useLocation();
   const isSmBreakpoint = useMediaQuery("(max-width: 48em)");
@@ -322,7 +324,7 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
           <TextInput
             ref={inputRef}
             className={classes.aiInput}
-            placeholder="Ask AI..."
+            placeholder={t("Ask AI...")}
             data-autofocus
             value={prompt}
             disabled={isLoading}
@@ -351,6 +353,7 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
                 radius="xl"
                 size="sm"
                 onClick={() => handleGenerate()}
+                aria-label={t("Send")}
               >
                 <IconArrowUp size={14} stroke={2.5} />
               </ActionIcon>

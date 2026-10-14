@@ -5,9 +5,10 @@ import { Link } from "react-router-dom";
 import classes from "./home-block.module.css";
 
 /**
- * The one building block of the Home: an icon, a title, an optional count,
- * a "see all" link, then at most five rows. Every Home section uses it so
- * they all look and behave the same. An empty block folds into one line.
+ * The one building block of the Homes: an icon, a title, an optional count,
+ * a "see all" link, then at most five rows with one action each. An empty
+ * block folds into one line. The same file is copied verbatim into
+ * ConqrMeet (src/components/home-block.tsx) — change both together.
  */
 export function HomeBlock({
   icon: Icon,
@@ -29,12 +30,12 @@ export function HomeBlock({
   emptyText: string;
   isEmpty: boolean;
   children?: ReactNode;
-  /** "quiet" = tinted background, for the managers-only block. */
-  tone?: "default" | "quiet";
+  /** "quiet" = tinted (managers-only block), "accent" = brand call to action. */
+  tone?: "default" | "quiet" | "accent";
   aside?: ReactNode;
 }) {
   return (
-    <Card withBorder padding={0} radius="md" className={tone === "quiet" ? classes.quiet : undefined}>
+    <Card withBorder padding={0} radius="md" className={tone === "default" ? undefined : classes[tone]}>
       <Group gap="xs" px="md" py="sm" wrap="nowrap" className={classes.header}>
         <Icon size={18} color="var(--brand-default)" stroke={1.8} />
         <Text fw={600} size="sm">
@@ -88,6 +89,7 @@ export function HomeRow({
   onOpen,
   action,
   primary,
+  badge,
 }: {
   icon: TablerIcon;
   title: string;
@@ -98,6 +100,8 @@ export function HomeRow({
   action?: string;
   /** The block's most important action is filled, the others outlined. */
   primary?: boolean;
+  /** A status shown before the action (e.g. a meeting status). */
+  badge?: { label: string; color: string };
 }) {
   const linkProps = to
     ? { component: Link, to }
@@ -117,6 +121,11 @@ export function HomeRow({
           </Text>
         )}
       </Anchor>
+      {badge && (
+        <Badge size="sm" variant="light" color={badge.color}>
+          {badge.label}
+        </Badge>
+      )}
       {action && (
         <Button
           size="compact-sm"

@@ -35,3 +35,8 @@
 .quiet {
   background: var(--bg-layer-1, var(--mantine-color-default-hover));
 }
+
+.accent {
+  background: var(--brand-100, var(--mantine-color-default-hover));
+  border-color: var(--bg-accent-primary, var(--mantine-primary-color-filled));
+}

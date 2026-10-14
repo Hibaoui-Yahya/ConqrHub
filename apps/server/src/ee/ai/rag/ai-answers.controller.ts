@@ -47,6 +47,9 @@ export interface AnswerSource extends EnrichablePageSource {
   label: string;
   chunkIndex?: number;
   matchedBy?: Array<'vector' | 'lexical'>;
+  /** Present when the passage comes from a document attached to the page. */
+  attachmentId?: string;
+  fileName?: string;
 }
 
 const EMPTY_CONTEXT: RetrievedContext = {
@@ -171,6 +174,9 @@ export class AiAnswersController {
       label: c.label,
       chunkIndex: c.chunkIndex,
       matchedBy: c.matchedBy,
+      ...(c.attachmentId
+        ? { attachmentId: c.attachmentId, fileName: c.fileName }
+        : {}),
       verified: false,
     }));
     try {

@@ -80,7 +80,13 @@ describe('parseEvaluation', () => {
       { id: 'skills', level: 3, rationale: 'Aucun détail technique.', citations: [] },
       { id: 'unknown-id', level: 4, citations: [] },
     ],
-    overall: { recommendation: 'advance', summary: 'Profil solide.' },
+    overall: { recommendation: 'advance', summary: 'Profil solide.', watch: ['Attentes : 140 k$ (fourchette 120–135 k$)', '', 42, 'Préavis de 6 semaines'] },
+  });
+
+  it('keeps the watch points and starts every item as proposed by the AI', () => {
+    const ev = parseEvaluation(answer, DEFAULT_CRITERIA, segments, { transcriptVersion: 1 });
+    expect(ev.overall.watch).toEqual(['Attentes : 140 k$ (fourchette 120–135 k$)', 'Préavis de 6 semaines']);
+    expect(ev.items.every((i) => i.confirmed === false)).toBe(true);
   });
 
   it('builds one item per grid criterion, verifies citations, drops unsupported levels', () => {
@@ -97,7 +103,7 @@ describe('parseEvaluation', () => {
     expect(skills.level).toBeNull(); // a level without evidence is not kept
     expect(skills.rationale).toBe('Aucun détail technique.');
     expect(ev.items[2].level).toBeNull();
-    expect(ev.overall).toEqual({ recommendation: 'advance', summary: 'Profil solide.' });
+    expect(ev.overall).toMatchObject({ recommendation: 'advance', summary: 'Profil solide.' });
     expect(ev.status).toBe('draft');
     expect(ev.transcriptVersion).toBe(3);
     expect(ev.generatedAt).toBe('2026-10-13T10:00:00.000Z');
@@ -141,7 +147,10 @@ describe('applyEvaluationEdit', () => {
     expect(out.items[0].citations.map((c) => c.segmentId)).toEqual(['s3']);
     expect(out.items[1]).toMatchObject({ level: 2, comment: 'Vu dans le CV.' });
     expect(out.items).toHaveLength(DEFAULT_CRITERIA.length);
-    expect(out.overall).toEqual({ recommendation: 'discuss', summary: 'À valider avec le client.' });
+    expect(out.overall).toMatchObject({ recommendation: 'discuss', summary: 'À valider avec le client.' });
+    // validation confirms every rated criterion
+    expect(out.items.filter((i) => i.level).every((i) => i.confirmed)).toBe(true);
+    expect(out.items.find((i) => i.criterionId === 'communication')?.confirmed).toBe(false);
     expect(out.status).toBe('validated');
     expect(out.validatedAt).toBe('2026-10-13T11:00:00.000Z');
     expect(out.validatedById).toBe('u1');
@@ -183,7 +192,7 @@ describe('buildEvaluationMarkdown', () => {
     );
     const md = buildEvaluationMarkdown(ev, speakers);
     expect(md).toContain('## Évaluation des compétences');
-    expect(md).toContain('**Recommandation :** Recommander au client');
+    expect(md).toContain('**Recommandation :** Présenter au client');
     expect(md).toContain('| Expérience pertinente | 4/4 · Excellent |');
     expect(md).toContain('| Compétences techniques | Non évalué |');
     expect(md).toContain('> « le délai est passé de douze jours à cinq » — Candidate, 01:05');

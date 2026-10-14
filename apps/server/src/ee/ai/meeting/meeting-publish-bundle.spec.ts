@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingService } from './meeting.service';
 
 // Collaborators are doubles below; keep their ESM editor/SDK dependencies out.
@@ -15,7 +15,8 @@ jest.mock('../providers/ai-provider.service', () => ({
  * pages refreshed only when untouched in Hub, deleted pages made again.
  */
 describe('MeetingService.publishBundle', () => {
-  const user = { id: 'u-pub' } as any;
+  // An admin publishing a coworker's meeting (creator: u-owner).
+  const user = { id: 'u-pub', role: 'admin' } as any;
   const T0 = '2026-10-13T10:00:00.000Z';
 
   function setup(opts: {
@@ -23,6 +24,8 @@ describe('MeetingService.publishBundle', () => {
     canCreate?: boolean;
     spaceInWorkspace?: boolean;
     pages?: Record<string, { id: string; updatedAt: string; deletedAt?: string | null }>;
+    status?: string;
+    documents?: Array<{ id: string; title: string; publishBlocker: string | null }>;
   }) {
     const updates: any[] = [];
     const db: any = {
@@ -71,19 +74,33 @@ describe('MeetingService.publishBundle', () => {
       {} as any,
       { onTransition: async () => undefined, onPublished: async () => undefined } as any,
     );
-    jest.spyOn(service as any, 'getMeetingOrThrow').mockResolvedValue({
+    jest.spyOn(service as any, 'getMeetingOrThrow').mockImplementation(async (_id: any, o: any) => {
+      if (o?.workspaceId && o.workspaceId !== 'w1') throw new NotFoundException('Meeting not found');
+      return {
       id: 'm1',
       workspaceId: 'w1',
       userId: 'u-owner',
+      status: opts.status ?? 'awaiting_review',
       title: 'Entrevue — Analyste',
       startedAt: T0,
       durationMs: 1_800_000,
       publishedAt: null,
       aiOutputs: { summary: 'Bon profil.' },
       settings: opts.settings ?? null,
+      };
     });
-    jest.spyOn(service, 'listDocuments').mockResolvedValue([] as any);
-    jest.spyOn(service, 'getTranscript').mockResolvedValue({
+    jest.spyOn(service as any, 'localeContext').mockResolvedValue({
+      language: 'fr',
+      sharedTimeZone: 'America/Toronto',
+      readerTimeZone: 'America/Toronto',
+    });
+    jest.spyOn(service as any, 'readDocuments').mockResolvedValue((opts.documents ?? []) as any);
+    jest.spyOn(service as any, 'publishDocumentAs').mockImplementation(async (_u: any, _m: any, id: any) => ({
+      pageId: `doc-page-${id}`,
+      pageUrl: `/p/doc-page-${id}`,
+      documentStatus: 'published',
+    }));
+    jest.spyOn(service as any, 'readTranscript').mockResolvedValue({
       segments: [{ speaker: 'S1', startMs: 0, text: 'Bonjour' }],
       speakers: { S1: { displayName: 'Marie' } },
     } as any);
@@ -99,6 +116,40 @@ describe('MeetingService.publishBundle', () => {
     const settings = JSON.parse(updates[0].settings);
     expect(settings.publishedBundle).toMatchObject({ meetingPageId: 'new-1', transcriptPageId: 'new-2', spaceId: 'space-1' });
     expect(updates[0].status).toBe('published');
+  });
+
+  it('lets a member read but not publish a coworker meeting, before touching Hub', async () => {
+    const { service, pages, spaceAbility } = setup({});
+    const member = { id: 'u-member', role: 'member' } as any;
+    await expect(service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, member)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pages.create).not.toHaveBeenCalled();
+    expect(spaceAbility.createForUser).not.toHaveBeenCalled();
+    // The creator still needs the space's own permission (checked next).
+    const creator = setup({ canCreate: false });
+    await expect(creator.service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, { id: 'u-owner', role: 'member' } as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(creator.pages.create).not.toHaveBeenCalled();
+  });
+
+  it('files every validated document but keeps a failed report in Meet, and refuses while processing', async () => {
+    const { service } = setup({
+      documents: [
+        { id: 'ok', title: 'Notes', publishBlocker: null },
+        { id: 'bad', title: 'Rapport', publishBlocker: 'Ce compte rendu est incomplet' },
+      ],
+    });
+    const res = await service.publishBundle('w1', 'm1', { spaceId: 'space-1', includeTranscript: false }, user);
+    expect(res.documents.map((d: any) => d.pageId)).toEqual(['doc-page-ok']);
+    expect(res.skippedDocuments).toEqual([{ id: 'bad', title: 'Rapport', reason: 'Ce compte rendu est incomplet' }]);
+    await expect(
+      setup({ status: 'analyzing' }).service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, user),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('dates the meeting page in the company time zone, with its abbreviation', async () => {
+    const { service, pages } = setup({});
+    await service.publishBundle('w1', 'm1', { spaceId: 'space-1', includeTranscript: false }, user);
+    // 10:00 UTC on 13 Oct 2026 is 06:00 in Toronto (EDT).
+    expect((pages.create.mock.calls[0] as any[])[2].content).toContain('13 octobre 2026 à 06 h 00 HAE');
   });
 
   it('refuses a space the caller cannot write to, before creating anything', async () => {

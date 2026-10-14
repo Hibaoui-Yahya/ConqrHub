@@ -24,6 +24,7 @@ import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { MeetingService } from './meeting.service';
+import type { MeetingActor } from './meeting-access.util';
 import { StartMeetingDto } from './dto/start-meeting.dto';
 import { ListMeetingsDto } from './dto/list-meetings.dto';
 import { AiOutputDto } from './dto/ai-output.dto';
@@ -32,8 +33,6 @@ import { UpdateMeetingDto } from './dto/update-meeting.dto';
 import { SaveMarkersDto } from './dto/save-markers.dto';
 import { PublishBundleDto } from './dto/publish-bundle.dto';
 import { MeetingAccessGuard } from './meeting-access.guard';
-import { isWorkspaceManager } from './meeting-access.util';
-import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
@@ -44,18 +43,22 @@ import { ApproveProposalDto } from './dto/approve-proposal.dto';
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
 
-// MeetingAccessGuard: every /:id route answers 404 unless the caller may
-// read that meeting (author, member of its space, workspace manager).
+/** Every route works in the caller's workspace with the caller's role:
+ *  members read every meeting of the company; the creator and
+ *  Owners/Admins change it (LTC-03). */
+function actor(user: User, workspace: Workspace): MeetingActor {
+  return { id: user.id, role: user.role, workspaceId: workspace.id };
+}
+
+// MeetingAccessGuard: every /:id route answers 404 unless the meeting is a
+// live meeting of the caller's company (company-wide read, LTC-03).
 @UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
 @RequireAiFeature('stt')
 @Controller('ai/meeting')
 export class MeetingController {
   private readonly logger = new Logger(MeetingController.name);
 
-  constructor(
-    private readonly meetingService: MeetingService,
-    private readonly spaceMembers: SpaceMemberRepo,
-  ) {}
+  constructor(private readonly meetingService: MeetingService) {}
 
   // ──────────── POST /start ────────────
 
@@ -128,6 +131,8 @@ export class MeetingController {
   async chunk(
     @Param('id') id: string,
     @Req() req: FastifyRequest,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
     if (!req.isMultipart()) {
       throw new BadRequestException('Expected multipart/form-data');
@@ -152,7 +157,7 @@ export class MeetingController {
     const file: Buffer = await fileData.toBuffer();
     const fields = fileData.fields || {};
 
-    return this.meetingService.ingestChunk(id, file, {
+    return this.meetingService.ingestChunk(actor(user, workspace), id, file, {
       source: fields.source?.value || 'mic',
       sequence: Number(fields.sequence?.value || 0),
       startMs: Number(fields.startMs?.value || 0),
@@ -165,8 +170,12 @@ export class MeetingController {
 
   @HttpCode(HttpStatus.OK)
   @Post(':id/stop')
-  async stop(@Param('id') id: string) {
-    return this.meetingService.stop(id);
+  async stop(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.stop(actor(user, workspace), id);
   }
 
   // ──────────── GET / (list) ────────────
@@ -178,34 +187,44 @@ export class MeetingController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    const isManager = isWorkspaceManager(user.role);
-    return this.meetingService.list(workspace.id, {
-      limit: query.limit,
-      offset: query.offset,
-      q: query.q,
-      mine: query.scope === 'mine',
-      viewer: {
-        id: user.id,
-        isManager,
-        spaceIds: isManager ? [] : await this.spaceMembers.getUserSpaceIds(user.id),
+    return this.meetingService.list(
+      workspace.id,
+      {
+        limit: query.limit,
+        offset: query.offset,
+        q: query.q,
+        // Home: only the caller's own meetings; otherwise company-wide.
+        mine: query.scope === 'mine',
       },
-    });
+      actor(user, workspace),
+    );
   }
 
   // ──────────── GET /:id ────────────
 
   @HttpCode(HttpStatus.OK)
   @Get(':id')
-  async get(@Param('id') id: string) {
-    return this.meetingService.getDetail(id);
+  async get(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getDetail(actor(user, workspace), id);
   }
 
   // ──────────── PATCH /:id (editable metadata) ────────────
 
   @HttpCode(HttpStatus.OK)
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
-    return this.meetingService.update(id, { title: dto.title });
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateMeetingDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.update(actor(user, workspace), id, {
+      title: dto.title,
+    });
   }
 
   // ──────────── POST /:id/markers (moments marked while recording) ────────────
@@ -215,17 +234,26 @@ export class MeetingController {
   async saveMarkers(
     @Param('id') id: string,
     @Body() dto: SaveMarkersDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.saveMarkers(workspace.id, id, dto.markers);
+    return this.meetingService.saveMarkers(
+      actor(user, workspace),
+      id,
+      dto.markers,
+    );
   }
 
   // ──────────── DELETE /:id ────────────
 
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    await this.meetingService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.meetingService.delete(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/ai-output ────────────
@@ -235,8 +263,15 @@ export class MeetingController {
   async saveAiOutput(
     @Param('id') id: string,
     @Body() dto: AiOutputDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.saveAiOutput(id, dto.key, dto.value);
+    return this.meetingService.saveAiOutput(
+      actor(user, workspace),
+      id,
+      dto.key,
+      dto.value,
+    );
   }
 
   // ──────────── POST /:id/process ────────────
@@ -246,20 +281,38 @@ export class MeetingController {
   async process(
     @Param('id') id: string,
     @Body() dto: ProcessMeetingDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.process(id, {
+    return this.meetingService.process(actor(user, workspace), id, {
       meetingType: dto.meetingType,
       languageConfig: dto.languageConfig,
       force: dto.force,
     });
   }
 
+  // ──────────── POST /:id/retry ("Relancer le traitement") ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/retry')
+  async retry(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.retryProcessing(actor(user, workspace), id);
+  }
+
   // ──────────── GET /:id/status ────────────
 
   @HttpCode(HttpStatus.OK)
   @Get(':id/status')
-  async status(@Param('id') id: string) {
-    return this.meetingService.getStatus(id);
+  async status(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getStatus(actor(user, workspace), id);
   }
 
   // ──────────── GET /:id/transcript ────────────
@@ -268,10 +321,12 @@ export class MeetingController {
   @Get(':id/transcript')
   async transcript(
     @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
     @Query('version') version?: string,
   ) {
     const v = version === 'latest' || !version ? 'latest' : Number(version);
-    return this.meetingService.getTranscript(id, v);
+    return this.meetingService.getTranscript(actor(user, workspace), id, v);
   }
 
   // ──────────── POST /:id/transcript/speakers ────────────
@@ -281,8 +336,10 @@ export class MeetingController {
   async reviewSpeakers(
     @Param('id') id: string,
     @Body() dto: ReviewSpeakersDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.reviewSpeakers(id, {
+    return this.meetingService.reviewSpeakers(actor(user, workspace), id, {
       baseVersion: dto.baseVersion,
       renames: dto.renames,
       merges: dto.merges,
@@ -299,16 +356,26 @@ export class MeetingController {
   async attributeSpeakers(
     @Param('id') id: string,
     @Body() dto: AttributeSpeakersDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.attributeSpeakers(id, dto.baseVersion);
+    return this.meetingService.attributeSpeakers(
+      actor(user, workspace),
+      id,
+      dto.baseVersion,
+    );
   }
 
   // ──────────── GET /:id/documents ────────────
 
   @HttpCode(HttpStatus.OK)
   @Get(':id/documents')
-  async listDocuments(@Param('id') id: string) {
-    return this.meetingService.listDocuments(id);
+  async listDocuments(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listDocuments(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/documents/:docId/publish ────────────
@@ -322,9 +389,7 @@ export class MeetingController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    await this.meetingService.assertMeetingInWorkspace(id, workspace.id);
-    await this.meetingService.assertCanPublishIn(user, workspace.id, dto.spaceId);
-    return this.meetingService.publishDocument(id, docId, {
+    return this.meetingService.publishDocument(user, workspace.id, id, docId, {
       spaceId: dto.spaceId,
       parentPageId: dto.parentPageId,
     });
@@ -359,9 +424,14 @@ export class MeetingController {
   async generateEvaluation(
     @Param('id') id: string,
     @Body() dto: GenerateEvaluationDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.generateEvaluation(workspace.id, id, dto.criteria);
+    return this.meetingService.generateEvaluation(
+      actor(user, workspace),
+      id,
+      dto.criteria,
+    );
   }
 
   @HttpCode(HttpStatus.OK)
@@ -372,15 +442,19 @@ export class MeetingController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.saveEvaluation(workspace.id, id, dto, user.id);
+    return this.meetingService.saveEvaluation(actor(user, workspace), id, dto);
   }
 
   // ──────────── GET /:id/proposals ────────────
 
   @HttpCode(HttpStatus.OK)
   @Get(':id/proposals')
-  async listProposals(@Param('id') id: string) {
-    return this.meetingService.listProposals(id);
+  async listProposals(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listProposals(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/proposals/:pid/approve ────────────
@@ -392,11 +466,11 @@ export class MeetingController {
     @Param('pid') pid: string,
     @Body() dto: ApproveProposalDto,
     @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.approveProposal(id, pid, {
+    return this.meetingService.approveProposal(actor(user, workspace), id, pid, {
       payload: dto.payload,
       confirmRisk: dto.confirmRisk,
-      actorId: user.id,
     });
   }
 
@@ -407,8 +481,10 @@ export class MeetingController {
   async rejectProposal(
     @Param('id') id: string,
     @Param('pid') pid: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    await this.meetingService.rejectProposal(id, pid);
+    await this.meetingService.rejectProposal(actor(user, workspace), id, pid);
   }
 
   // ──────────── POST /:id/review (close / reopen the review stage) ────────────
@@ -419,16 +495,25 @@ export class MeetingController {
     @Param('id') id: string,
     @Body() dto: ReviewMeetingDto,
     @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.reviewMeeting(id, dto.action, user.id);
+    return this.meetingService.reviewMeeting(
+      actor(user, workspace),
+      id,
+      dto.action,
+    );
   }
 
   // ──────────── POST /:id/proposals/approve-safe ────────────
 
   @HttpCode(HttpStatus.OK)
   @Post(':id/proposals/approve-safe')
-  async approveSafeProposals(@Param('id') id: string) {
-    return this.meetingService.approveSafeProposals(id);
+  async approveSafeProposals(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.approveSafeProposals(actor(user, workspace), id);
   }
 
   // ──────────── GET /:id/audio ────────────
@@ -437,9 +522,15 @@ export class MeetingController {
   @Get(':id/audio')
   async getAudio(
     @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
     @Query('target') target?: string,
   ) {
-    return this.meetingService.getAudioUrl(id, target || 'original');
+    return this.meetingService.getAudioUrl(
+      actor(user, workspace),
+      id,
+      target || 'original',
+    );
   }
 
   // ──────────── GET /:id/audio/file (auth-protected audio stream) ────────────
@@ -450,9 +541,12 @@ export class MeetingController {
   async streamAudio(
     @Param('id') id: string,
     @Query('target') target: string | undefined,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
     @Res() reply: FastifyReply,
   ) {
     const { stream, mime } = await this.meetingService.getAudioFile(
+      actor(user, workspace),
       id,
       target || 'original',
     );

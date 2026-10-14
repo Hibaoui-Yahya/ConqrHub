@@ -26,14 +26,16 @@ export class EmbeddingReindexScheduler {
   async reindexStalePages() {
     try {
       // Find pages that were updated after their last embedding
-      const stalePages: { id: string }[] = await (this.db as any)
+      const stalePages: { id: string; workspaceId: string }[] = await (
+        this.db as any
+      )
         .selectFrom('pages as p')
         .innerJoin('aiEmbeddings as e', (join) =>
           join
             .onRef('e.sourceId', '=', 'p.id')
             .on('e.sourceKind', '=', 'page'),
         )
-        .select(['p.id'])
+        .select(['p.id', 'p.workspaceId'])
         .where('p.updatedAt', '>', (eb: any) =>
           eb.selectFrom('aiEmbeddings')
             .select((eb2: any) => eb2.fn.max('updatedAt'))
@@ -41,16 +43,25 @@ export class EmbeddingReindexScheduler {
             .where('sourceKind', '=', 'page'),
         )
         .where('p.deletedAt', 'is', null)
-        .groupBy('p.id')
+        .groupBy(['p.id', 'p.workspaceId'])
         .limit(500)
         .execute();
 
-      if (stalePages.length > 0) {
-        const batch = stalePages.map((p) => p.id);
+      // The indexer scopes every lookup by workspace, so one job per
+      // workspace (a null workspaceId would make every page look missing).
+      const byWorkspace = new Map<string, string[]>();
+      for (const p of stalePages) {
+        const ids = byWorkspace.get(p.workspaceId) ?? [];
+        ids.push(p.id);
+        byWorkspace.set(p.workspaceId, ids);
+      }
+      for (const [workspaceId, pageIds] of byWorkspace) {
         await this.aiQueue.add(QueueJob.GENERATE_PAGE_EMBEDDINGS, {
-          pageIds: batch,
-          workspaceId: null,
+          pageIds,
+          workspaceId,
         });
+      }
+      if (stalePages.length > 0) {
         this.logger.log(`Re-indexed ${stalePages.length} stale pages`);
       }
     } catch (err) {

@@ -14,6 +14,7 @@ import { AiProviderModule } from '../providers/ai-provider.module';
 import { PageVerificationModule } from '../../page-verification/page-verification.module';
 import { WorkItemIndexerService } from './work-item-indexer.service';
 import { IntegrationModule } from '../../../core/integration/integration.module';
+import { AttachmentsEeModule } from '../../attachments-ee/attachments-ee.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { IntegrationModule } from '../../../core/integration/integration.module'
     AiProviderModule,
     PageVerificationModule,
     IntegrationModule,
+    AttachmentsEeModule,
     BullModule.registerQueue({ name: QueueName.AI_QUEUE }),
   ],
   controllers: [EmbeddingsAdminController],

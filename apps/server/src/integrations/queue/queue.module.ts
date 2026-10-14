@@ -85,6 +85,17 @@ import { GeneralQueueProcessor } from './processors/general-queue.processor';
     BullModule.registerQueue({
       name: QueueName.NOTIFICATION_QUEUE,
     }),
+    // Meeting processing (ConqrMeet): one job per pipeline run, retried with
+    // backoff; a run interrupted by a restart is picked up as a stalled job.
+    BullModule.registerQueue({
+      name: QueueName.MEETING_QUEUE,
+      defaultJobOptions: {
+        removeOnComplete: true,
+        removeOnFail: true,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30 * 1000 },
+      },
+    }),
     BullModule.registerQueue({
       name: QueueName.AUDIT_QUEUE,
       defaultJobOptions: {

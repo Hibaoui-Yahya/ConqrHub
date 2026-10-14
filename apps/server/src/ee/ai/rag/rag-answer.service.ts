@@ -41,6 +41,7 @@ export class RagAnswerService {
     await this.assertSpaceReadAccess(user, dto.spaceId);
 
     const context = await this.retrieval.retrieve({
+
       userId: user.id,
       question: dto.question,
       workspaceId: user.workspaceId,
@@ -76,6 +77,7 @@ export class RagAnswerService {
       }
 
       const context = await this.retrieval.retrieve({
+
         userId: user.id,
         question: dto.question,
         workspaceId: user.workspaceId,

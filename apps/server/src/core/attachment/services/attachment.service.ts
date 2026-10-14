@@ -16,7 +16,11 @@ import {
 } from '../attachment.utils';
 import { v4 as uuid4, v7 as uuid7 } from 'uuid';
 import { AttachmentRepo } from '@docmost/db/repos/attachment/attachment.repo';
-import { AttachmentType, validImageExtensions } from '../attachment.constants';
+import {
+  AttachmentType,
+  textExtractableExtensions,
+  validImageExtensions,
+} from '../attachment.constants';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { Attachment, User, Workspace } from '@docmost/db/types/entity.types';
 import { InjectKysely } from 'nestjs-kysely';
@@ -29,6 +33,7 @@ import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { Queue } from 'bullmq';
 import { createByteCountingStream } from '../../../common/helpers/utils';
 
+import { AvatarThumbnailService } from './avatar-thumbnail.service';
 @Injectable()
 export class AttachmentService {
   private readonly logger = new Logger(AttachmentService.name);
@@ -40,6 +45,7 @@ export class AttachmentService {
     private readonly spaceRepo: SpaceRepo,
     @InjectKysely() private readonly db: KyselyDB,
     @InjectQueue(QueueName.ATTACHMENT_QUEUE) private attachmentQueue: Queue,
+    private readonly avatarThumbnails: AvatarThumbnailService,
   ) {}
 
   async uploadFile(opts: {
@@ -117,8 +123,11 @@ export class AttachmentService {
         });
       }
 
-      // Only index PDFs and DOCX files
-      if (['.pdf', '.docx'].includes(attachment.fileExt.toLowerCase())) {
+      // Extract text from page documents (native only at upload; a replaced
+      // file is re-extracted because its updated_at changes)
+      if (
+        textExtractableExtensions.includes(attachment.fileExt.toLowerCase())
+      ) {
         await this.attachmentQueue.add(
           QueueJob.ATTACHMENT_INDEX_CONTENT,
           {
@@ -246,6 +255,10 @@ export class AttachmentService {
       const oldFilePath =
         getAttachmentFolderPath(type, workspaceId) + '/' + oldFileName;
       await this.deleteRedundantFile(oldFilePath);
+      if (type === AttachmentType.Avatar) {
+        // The new photo has a new file name; drop the old one's thumbnails.
+        await this.avatarThumbnails.deleteFor(oldFilePath);
+      }
     }
 
     return attachment;
@@ -385,6 +398,7 @@ export class AttachmentService {
         userAvatars.map(async (attachment) => {
           try {
             await this.storageService.delete(attachment.filePath);
+            await this.avatarThumbnails.deleteFor(attachment.filePath);
             await this.attachmentRepo.deleteAttachmentById(attachment.id);
           } catch (err) {
             this.logger.log(
@@ -449,6 +463,7 @@ export class AttachmentService {
     if (user.avatarUrl && !user.avatarUrl.toLowerCase().startsWith('http')) {
       const filePath = `${getAttachmentFolderPath(AttachmentType.Avatar, user.workspaceId)}/${user.avatarUrl}`;
       await this.deleteRedundantFile(filePath);
+      await this.avatarThumbnails.deleteFor(filePath);
     }
 
     await this.userRepo.updateUser(

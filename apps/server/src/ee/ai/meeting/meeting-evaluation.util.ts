@@ -28,9 +28,9 @@ export const RECOMMENDATIONS = ['advance', 'discuss', 'decline'] as const;
 export type Recommendation = (typeof RECOMMENDATIONS)[number];
 
 export const RECOMMENDATION_LABELS: Record<Recommendation, string> = {
-  advance: 'Recommander au client',
-  discuss: 'À discuter en équipe',
-  decline: 'Ne pas retenir',
+  advance: 'Présenter au client',
+  discuss: 'Deuxième entrevue',
+  decline: 'Non retenu',
 };
 
 /** The agency's default grid for a recruitment interview. */
@@ -70,6 +70,8 @@ export interface EvaluationItem {
   citations: EvaluationCitation[];
   /** The recruiter's own note. */
   comment: string;
+  /** false = proposed by the AI; true = the recruiter confirmed or set it. */
+  confirmed: boolean;
 }
 
 export interface MeetingEvaluation {
@@ -79,6 +81,8 @@ export interface MeetingEvaluation {
   overall: {
     recommendation: Recommendation | null;
     summary: string;
+    /** Points to watch (salary gap, notice, constraints), as said. */
+    watch: string[];
   };
   generatedAt: string | null;
   transcriptVersion: number | null;
@@ -180,7 +184,8 @@ export function buildEvaluationPrompt(input: {
       `Transcription (chaque ligne commence par [identifiant horodatage intervenant]) :\n"""\n${input.transcript}\n"""\n\n` +
       'Retourne : {"criteria": [{"id": "<id de la grille>", "level": 1-4 ou null, "rationale": "2-3 phrases en français, factuelles", ' +
       '"citations": [{"segmentId": "<identifiant entre crochets>", "quote": "<extrait exact de ce segment, 8 à 40 mots>"}]}], ' +
-      '"overall": {"recommendation": "advance" | "discuss" | "decline" | null, "summary": "4-6 phrases en français : forces, réserves, points à vérifier"}}. ' +
+      '"overall": {"recommendation": "advance" | "discuss" | "decline" | null, "summary": "4-6 phrases en français : forces, réserves, points à vérifier", ' +
+        '"watch": ["au plus 5 points de vigilance factuels et courts : attentes salariales vs fourchette, préavis, mobilité, contraintes — chiffres tels que dits"]}}. ' +
       `Un critère par id de la grille, au plus ${MAX_CITATIONS_PER_CRITERION} citations par critère, aucune citation inventée.`,
   };
 }
@@ -278,7 +283,7 @@ export function parseEvaluation(
       if (citations.length >= MAX_CITATIONS_PER_CRITERION) break;
     }
     const level = citations.length ? toLevel(a?.level) : null;
-    return { criterionId: c.id, level, rationale, citations, comment: '' };
+    return { criterionId: c.id, level, rationale, citations, comment: '', confirmed: false };
   });
 
   const overall = (parsed.overall ?? {}) as Record<string, unknown>;
@@ -289,6 +294,7 @@ export function parseEvaluation(
     overall: {
       recommendation: toRecommendation(overall.recommendation),
       summary: typeof overall.summary === 'string' ? overall.summary.trim().slice(0, 2000) : '',
+      watch: toWatch(overall.watch),
     },
     generatedAt: (meta.now ?? new Date()).toISOString(),
     transcriptVersion: meta.transcriptVersion,
@@ -325,6 +331,8 @@ export function applyEvaluationEdit(
       comment:
         typeof x.comment === 'string' ? x.comment.trim().slice(0, MAX_COMMENT_CHARS) : item.comment,
       citations: keep ? item.citations.filter((c) => keep.has(c.segmentId)) : item.citations,
+      // Setting a level is a confirmation; "confirmed" can also be sent alone.
+      confirmed: typeof x.confirmed === 'boolean' ? x.confirmed : 'level' in x ? true : !!item.confirmed,
     };
   });
   const overallEdit = (e.overall ?? {}) as Record<string, unknown>;
@@ -337,18 +345,29 @@ export function applyEvaluationEdit(
       typeof overallEdit.summary === 'string'
         ? overallEdit.summary.trim().slice(0, 2000)
         : current.overall.summary,
+    watch: 'watch' in overallEdit ? toWatch(overallEdit.watch) : (current.overall.watch ?? []),
   };
   const now = (actor.now ?? new Date()).toISOString();
   const status: MeetingEvaluation['status'] =
     e.status === 'validated' ? 'validated' : e.status === 'draft' ? 'draft' : current.status;
   return {
     ...current,
-    items,
+    // Validating confirms every rated criterion: nothing proposed by the AI
+    // reaches Hub without the recruiter's confirmation.
+    items: status === 'validated' ? items.map((i) => (i.level ? { ...i, confirmed: true } : i)) : items,
     overall,
     status,
     validatedAt: status === 'validated' ? (current.status === 'validated' && current.validatedAt ? current.validatedAt : now) : null,
     validatedById: status === 'validated' ? (current.status === 'validated' && current.validatedById ? current.validatedById : actor.userId) : null,
   };
+}
+
+function toWatch(v: unknown): string[] {
+  return (Array.isArray(v) ? v : [])
+    .filter((w): w is string => typeof w === 'string')
+    .map((w) => w.replace(/\s+/g, ' ').trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(0, 5);
 }
 
 /** Reads the evaluation stored in meeting settings, or null. */
@@ -370,6 +389,8 @@ export function buildEvaluationMarkdown(
     lines.push(`**Recommandation :** ${RECOMMENDATION_LABELS[ev.overall.recommendation]}`, '');
   }
   if (ev.overall.summary.trim()) lines.push(ev.overall.summary.trim(), '');
+  const watch = ev.overall.watch ?? [];
+  if (watch.length) lines.push('**Points de vigilance :**', '', ...watch.map((w) => `- ${w}`), '');
   lines.push('| Critère | Niveau |', '| --- | --- |');
   for (const item of ev.items) {
     const c = ev.criteria.find((x) => x.id === item.criterionId);

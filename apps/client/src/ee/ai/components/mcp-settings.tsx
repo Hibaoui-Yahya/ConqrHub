@@ -101,6 +101,7 @@ export default function McpSettings() {
                     color={copied ? "teal" : "gray"}
                     variant="subtle"
                     onClick={copy}
+                    aria-label={copied ? t("Copied") : t("Copy")}
                   >
                     {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                   </ActionIcon>

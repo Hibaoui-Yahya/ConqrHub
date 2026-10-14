@@ -109,8 +109,8 @@ describe('AiEmbeddingQueueProcessor.process()', () => {
       await proc.process(makeJob(jobName, { pageIds: ['p1', 'p2'], workspaceId: 'ws' }));
 
       expect(indexer.indexPage).toHaveBeenCalledTimes(2);
-      expect(indexer.indexPage).toHaveBeenNthCalledWith(1, 'p1', 'ws');
-      expect(indexer.indexPage).toHaveBeenNthCalledWith(2, 'p2', 'ws');
+      expect(indexer.indexPage).toHaveBeenNthCalledWith(1, 'p1', 'ws', {});
+      expect(indexer.indexPage).toHaveBeenNthCalledWith(2, 'p2', 'ws', {});
     });
 
     it(`${jobName} does NOT call delete helpers`, async () => {

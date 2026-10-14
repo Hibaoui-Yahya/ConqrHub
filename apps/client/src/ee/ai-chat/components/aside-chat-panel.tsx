@@ -212,19 +212,30 @@ export default function AsideChatPanel() {
             variant="subtle"
             color="dark"
             onClick={handleNewChat}
+            aria-label={t("New chat")}
           >
             <IconPlus size={20} stroke={1.75} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={t("Open full page")} openDelay={250}>
-          <ActionIcon variant="subtle" color="dark" onClick={handleExpand}>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={handleExpand}
+            aria-label={t("Open full page")}
+          >
             <IconArrowsDiagonal size={18} stroke={1.5} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={t("Close")} openDelay={250}>
-          <ActionIcon variant="subtle" color="dark" onClick={handleClose}>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={handleClose}
+            aria-label={t("Close")}
+          >
             <IconX size={20} stroke={1.75} />
           </ActionIcon>
         </Tooltip>

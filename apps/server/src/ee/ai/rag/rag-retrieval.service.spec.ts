@@ -37,6 +37,9 @@ function makeEnv(minScore = 0): any {
   return { getAiRagMinScore: jest.fn().mockReturnValue(minScore) };
 }
 
+/** Access filter double that lets every chunk through (tested separately). */
+const PASS_ALL = { filter: async (r: SimilarityResult[]) => r };
+
 function makeSvc(
   results: SimilarityResult[] = [],
   embedding: number[] = [0.1],
@@ -498,7 +501,7 @@ describe('RagRetrievalService hybrid retrieval', () => {
   });
 
   describe('retrieve() — orchestration', () => {
-    it('runs vector and lexical searches with topK*2 over the same scope and fuses them', async () => {
+    it('runs vector and lexical searches with topK*3 over the same scope and fuses them', async () => {
       const ai = makeAiProvider([0.3, 0.7]);
       const repo = makeRepo(
         [page('v', 0, 'vector hit', 0.9)],
@@ -508,9 +511,11 @@ describe('RagRetrievalService hybrid retrieval', () => {
         ai as any,
         repo as any,
         makeEnv(0) as any,
+        PASS_ALL as any,
       );
 
       const ctx = await svc.retrieve({
+        userId: 'u1',
         question: 'Qui est Dupont ?',
         workspaceId: 'ws',
         spaceIds: ['sp-1'],
@@ -525,7 +530,7 @@ describe('RagRetrievalService hybrid retrieval', () => {
           spaceIds: ['sp-1'],
           sourceId: 'page-99',
           queryEmbedding: [0.3, 0.7],
-          topK: 10,
+          topK: 15,
         }),
       );
       expect(repo.lexicalSearch).toHaveBeenCalledWith(
@@ -534,7 +539,7 @@ describe('RagRetrievalService hybrid retrieval', () => {
           spaceIds: ['sp-1'],
           sourceId: 'page-99',
           query: 'Qui est Dupont ?',
-          topK: 10,
+          topK: 15,
         }),
       );
       expect(ctx.chunks.map((c) => c.sourceId).sort()).toEqual(['l', 'v']);
@@ -546,19 +551,21 @@ describe('RagRetrievalService hybrid retrieval', () => {
         makeAiProvider() as any,
         repo as any,
         makeEnv() as any,
+        PASS_ALL as any,
       );
 
       await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp-42',
       });
 
       expect(repo.similaritySearch).toHaveBeenCalledWith(
-        expect.objectContaining({ spaceId: 'sp-42', topK: 20 }),
+        expect.objectContaining({ spaceId: 'sp-42', topK: 30 }),
       );
       expect(repo.lexicalSearch).toHaveBeenCalledWith(
-        expect.objectContaining({ spaceId: 'sp-42', topK: 20 }),
+        expect.objectContaining({ spaceId: 'sp-42', topK: 30 }),
       );
     });
 
@@ -569,9 +576,11 @@ describe('RagRetrievalService hybrid retrieval', () => {
         ai as any,
         repo as any,
         makeEnv() as any,
+        PASS_ALL as any,
       );
 
       const ctx = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceIds: [],
@@ -592,9 +601,11 @@ describe('RagRetrievalService hybrid retrieval', () => {
         makeAiProvider() as any,
         repo as any,
         makeEnv(0.5) as any,
+        PASS_ALL as any,
       );
 
       const ctx = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -609,9 +620,11 @@ describe('RagRetrievalService hybrid retrieval', () => {
         makeAiProvider() as any,
         repo as any,
         makeEnv(0) as any,
+        PASS_ALL as any,
       );
 
       const ctx = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -633,14 +646,17 @@ describe('RagRetrievalService hybrid retrieval', () => {
         makeAiProvider() as any,
         repo as any,
         makeEnv() as any,
+        PASS_ALL as any,
       );
 
       const first = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp',
       });
       const second = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -665,9 +681,11 @@ describe('RagRetrievalService hybrid retrieval', () => {
         makeAiProvider() as any,
         repo as any,
         makeEnv() as any,
+        PASS_ALL as any,
       );
 
       const ctx = await svc.retrieve({
+        userId: 'u1',
         question: 'Q',
         workspaceId: 'ws',
         spaceId: 'sp',
@@ -687,6 +705,7 @@ describe('RagRetrievalService hybrid retrieval', () => {
         ai as any,
         repo as any,
         makeEnv() as any,
+        PASS_ALL as any,
       );
 
       await expect(

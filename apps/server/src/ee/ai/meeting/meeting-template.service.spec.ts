@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingTemplateService } from './meeting-template.service';
 import { BUILTIN_TEMPLATES } from './meeting-template.util';
 
@@ -158,5 +158,25 @@ describe('MeetingTemplateService', () => {
     const t = await service.create(W, 'u1', { name: 'Cadre', baseId: 'recruitment-interview' });
     await expect(service.get('other', t.id)).rejects.toBeInstanceOf(NotFoundException);
     expect((await service.list('other')).every((x) => x.builtin)).toBe(true);
+  });
+
+  it('lets every member read and start templates; only the author or an Owner/Admin edits; only Owners/Admins set the company default (LTC-03)', async () => {
+    const author = { id: 'u1', role: 'member', workspaceId: W };
+    const coworker = { id: 'u2', role: 'member', workspaceId: W };
+    const admin = { id: 'u3', role: 'admin', workspaceId: W };
+    const t = await service.create(W, author.id, { name: 'Cadre', baseId: 'recruitment-interview' });
+    const seen = (await service.list(W, coworker)).find((x) => x.id === t.id) as any;
+    expect(seen).toMatchObject({ canEdit: false, canSetDefault: false });
+    expect(((await service.list(W, author)).find((x) => x.id === t.id) as any).canEdit).toBe(true);
+    await expect(service.update(W, coworker.id, t.id, { name: 'Pirate' }, coworker)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.publish(W, coworker.id, t.id, coworker)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.remove(W, t.id, coworker)).rejects.toBeInstanceOf(ForbiddenException);
+    await service.update(W, author.id, t.id, { name: 'Cadre v2' }, author);
+    await service.publish(W, author.id, t.id, author);
+    // The default applies to the whole company: not even the author sets it.
+    await expect(service.setDefault(W, author.id, t.id, true, author)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.setDefault(W, author.id, 'recruitment-interview', true, author)).rejects.toBeInstanceOf(ForbiddenException);
+    expect((await service.setDefault(W, admin.id, t.id, true, admin)).isDefault).toBe(true);
+    expect((await service.update(W, admin.id, t.id, { name: 'Par un admin' }, admin)).name).toBe('Par un admin');
   });
 });

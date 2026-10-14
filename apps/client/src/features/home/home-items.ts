@@ -29,6 +29,7 @@ export type TodoKind =
   | "approval"
   | "rejected"
   | "verification"
+  | "meeting-speakers"
   | "meeting-review"
   | "meeting-failed"
   | "meeting-publish";
@@ -79,18 +80,21 @@ const KIND_BY_TYPE: Record<string, TodoKind> = {
   "meeting.failed": "meeting-failed",
 };
 
-const REVIEW_STATUSES = new Set(["awaiting_review", "speakers_pending_review"]);
+const REVIEW_STATUSES = new Set(["awaiting_review"]);
+const SPEAKER_STATUSES = new Set(["speakers_pending_review"]);
+const FAILED_STATUSES = new Set(["failed", "partially_failed"]);
 const DONE_STATUSES = new Set(["completed"]);
 
 /** Highest first: what blocks someone else, then my own work. */
 const PRIORITY: Record<TodoKind, number> = {
   approval: 0,
   "meeting-failed": 1,
-  "meeting-review": 2,
-  "meeting-publish": 3,
-  mention: 4,
-  verification: 5,
-  rejected: 6,
+  "meeting-speakers": 2,
+  "meeting-review": 3,
+  "meeting-publish": 4,
+  mention: 5,
+  verification: 6,
+  rejected: 7,
 };
 
 export function buildTodo(
@@ -126,7 +130,9 @@ export function buildTodo(
     if (meetingsSeen.has(m.id)) continue;
     const published = !!m.settings?.publishedBundle?.meetingPageId;
     let kind: TodoKind | null = null;
-    if (REVIEW_STATUSES.has(m.status)) kind = "meeting-review";
+    if (SPEAKER_STATUSES.has(m.status)) kind = "meeting-speakers";
+    else if (REVIEW_STATUSES.has(m.status)) kind = "meeting-review";
+    else if (FAILED_STATUSES.has(m.status)) kind = "meeting-failed";
     else if (DONE_STATUSES.has(m.status) && !published) kind = "meeting-publish";
     if (!kind) continue;
     meetingsSeen.add(m.id);

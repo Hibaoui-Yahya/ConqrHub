@@ -6,6 +6,8 @@ jest.mock('../stt/stt.service', () => ({ SttService: class {} }));
 jest.mock('../providers/ai-provider.service', () => ({ AiProviderService: class {} }));
 
 describe('meeting audio links during storage cutover', () => {
+  const actor = { id: 'user-id', role: 'member', workspaceId: 'workspace-id' };
+
   function setup() {
     const storage = {
       getDriverName: jest.fn(() => 's3'),
@@ -15,7 +17,7 @@ describe('meeting audio links during storage cutover', () => {
       storage,
       resolveAudioFile: jest.fn(async () => ({ filePath: 'workspace/audio/test.wav', mime: 'audio/wav' })),
     };
-    const get = (target?: string) => MeetingService.prototype.getAudioUrl.call(fake as any, 'meeting-id', target);
+    const get = (target?: string) => MeetingService.prototype.getAudioUrl.call(fake as any, actor, 'meeting-id', target);
     return { storage, fake, get };
   }
 
@@ -26,6 +28,12 @@ describe('meeting audio links during storage cutover', () => {
       url: '/hubapi/ai/meeting/meeting-id/audio/file?target=system',
       expiresIn: 3600,
     });
+  });
+
+  it("resolves the file inside the caller's workspace", async () => {
+    const { fake, get } = setup();
+    await get();
+    expect(fake.resolveAudioFile).toHaveBeenCalledWith('meeting-id', 'original', 'workspace-id');
   });
 
   it('keeps existing signed S3 playback compatible', async () => {

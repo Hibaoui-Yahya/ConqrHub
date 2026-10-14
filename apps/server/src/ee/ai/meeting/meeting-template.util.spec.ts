@@ -3,6 +3,8 @@ import {
   BUILTIN_TEMPLATES,
   buildSectionsPrompt,
   builtinTemplate,
+  documentPublishBlocker,
+  interpretSectionsAnswer,
   legacyOutputsFromSections,
   normalizeTemplateSpec,
   parseSectionsAnswer,
@@ -95,5 +97,83 @@ describe('sections prompt and answer', () => {
     expect(md).toBe('# Entrevue — J. Tremblay\n\n_13 oct. 2026 · LTC Cadre_\n\n## Résumé\n\n_Rien de consigné._\n\n## Forces\n\n- Rigueur\n');
     expect(legacyOutputsFromSections({ summary: '_Rien de consigné._', strengths: 'x', actions: '- a' })).toEqual({ actions: '- a' });
     expect(parseSectionsAnswer('pas du json', sections).summary).toBe('_Rien de consigné._');
+  });
+});
+
+describe('reading the report answer without hiding failures (LTC-02)', () => {
+  const sections = BUILTIN_TEMPLATES['generic-meeting'].draft.sections; // summary, decisions, actions, next_steps
+  const full = {
+    summary: 'Budget Atlas : 45 000 $.',
+    decisions: '- Phase deux en novembre.',
+    actions: '- [Marie] Plan de recrutement (vendredi)',
+    next_steps: '- Valider les embauches jeudi.',
+  };
+
+  it('reads a correct populated answer', () => {
+    const r = interpretSectionsAnswer(JSON.stringify({ sections: full }), sections);
+    expect(r).toMatchObject({ ok: true, filled: ['summary', 'decisions', 'actions', 'next_steps'], empty: [], missing: [] });
+  });
+
+  it('reads code fences, prose around the JSON and trailing commas', () => {
+    const fenced = 'Voici le compte rendu :\n```json\n{"sections": {"summary": "Budget Atlas.", "decisions": "- Phase deux",}}\n```\nBonne journée !';
+    const r = interpretSectionsAnswer(fenced, sections);
+    expect(r.ok && r.content.summary).toBe('Budget Atlas.');
+    expect(r.ok && r.missing).toEqual(['actions', 'next_steps']);
+  });
+
+  it('accepts equivalent shapes: flat object, list of sections, titles as keys, bullet arrays', () => {
+    expect(interpretSectionsAnswer(JSON.stringify(full), sections).ok).toBe(true);
+    const list = interpretSectionsAnswer(
+      JSON.stringify({ sections: [{ id: 'summary', content: 'Résumé.' }, { title: 'Décisions', markdown: '- Oui' }] }),
+      sections,
+    );
+    expect(list.ok && list.content).toEqual({ summary: 'Résumé.', decisions: '- Oui' });
+    const titled = interpretSectionsAnswer(
+      { 'Prochaines étapes': ['Valider jeudi', '- Envoyer le contrat'], RÉSUMÉ: { text: 'Court.' } },
+      sections,
+    );
+    expect(titled.ok && titled.content).toEqual({ next_steps: '- Valider jeudi\n- Envoyer le contrat', summary: 'Court.' });
+  });
+
+  it('keeps an explicitly empty section empty, without inventing content', () => {
+    const r = interpretSectionsAnswer(
+      JSON.stringify({ sections: { summary: 'Court échange.', decisions: '_Rien de consigné._', actions: '', next_steps: null } }),
+      sections,
+    );
+    expect(r).toMatchObject({ ok: true, filled: ['summary'], empty: ['decisions', 'actions', 'next_steps'], missing: [] });
+    expect(r.ok && r.content.actions).toBe('_Rien de consigné._');
+  });
+
+  it('never turns a wholly invalid answer into an empty report', () => {
+    expect(interpretSectionsAnswer('pas du json', sections)).toEqual({ ok: false, reason: 'unparseable' });
+    expect(interpretSectionsAnswer('{"sections": {"résumé_fr": "x"}}', sections)).toEqual({ ok: false, reason: 'no_sections' });
+    expect(interpretSectionsAnswer('{"sections": {"summary": {"weird": 1}}}', sections)).toEqual({ ok: false, reason: 'no_sections' });
+    expect(interpretSectionsAnswer('', sections).ok).toBe(false);
+  });
+
+  it('blocks publication of failed, partial or all-empty legacy reports only', () => {
+    expect(documentPublishBlocker({ status: 'draft', structured: { generation: { status: 'complete' } } })).toBeNull();
+    expect(documentPublishBlocker({ status: 'draft', structured: { generation: { status: 'partial' } } })).toContain('incomplet');
+    expect(documentPublishBlocker({ status: 'failed', structured: {} })).toContain('n’a pas pu être généré');
+    // The audited case: every section of a legacy report was the placeholder.
+    expect(
+      documentPublishBlocker({ status: 'draft', structured: { sections: { summary: '_Rien de consigné._', actions: '_Rien de consigné._' } } }),
+    ).toContain('aucune section remplie');
+    // A legacy report with real content, and a complete report of an
+    // honestly empty meeting, still publish.
+    expect(documentPublishBlocker({ status: 'draft', structured: { sections: { summary: 'Oui.', actions: '_Rien de consigné._' } } })).toBeNull();
+    expect(
+      documentPublishBlocker({ status: 'draft', structured: { sections: { summary: '_Rien de consigné._' }, generation: { status: 'complete' } } }),
+    ).toBeNull();
+    expect(documentPublishBlocker({ status: 'draft', structured: { summary: 'Notes' } })).toBeNull();
+  });
+
+  it('asks for the report language and, on retry, for strict JSON', () => {
+    const spec = BUILTIN_TEMPLATES['generic-meeting'].draft;
+    const en = buildSectionsPrompt({ title: 'T', templateName: 'G', spec, transcript: 'x', language: 'en' });
+    expect(en.system).toContain('in English');
+    const retry = buildSectionsPrompt({ title: 'T', templateName: 'G', spec, transcript: 'x', strict: true });
+    expect(retry.prompt).toContain('Ta réponse précédente était inutilisable');
+    expect(retry.prompt).toContain('{"sections":{"summary":"- …","decisions":"- …"}}');
   });
 });

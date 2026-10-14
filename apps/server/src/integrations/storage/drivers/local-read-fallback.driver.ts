@@ -9,7 +9,8 @@ import {
 } from '../storage.errors';
 import { LocalDriver } from './local.driver';
 
-export const DEFAULT_FALLBACK_TOMBSTONE_PREFIX = '.conqr-local-fallback-tombstones/';
+export const DEFAULT_FALLBACK_TOMBSTONE_PREFIX =
+  '.conqr-local-fallback-tombstones/';
 
 /**
  * Keys the fallback may look up on the local volume. Storage keys are always
@@ -17,7 +18,10 @@ export const DEFAULT_FALLBACK_TOMBSTONE_PREFIX = '.conqr-local-fallback-tombston
  * anything else (absolute paths, `..` segments, backslashes, NUL bytes,
  * drive letters) is refused before the local driver's own root check runs.
  */
-export function isSafeFallbackKey(key: string, tombstonePrefix: string): boolean {
+export function isSafeFallbackKey(
+  key: string,
+  tombstonePrefix: string,
+): boolean {
   if (typeof key !== 'string' || key.length === 0 || key.length > 1024) {
     return false;
   }
@@ -72,7 +76,9 @@ export class LocalReadFallbackDriver implements StorageDriver {
     try {
       return await this.primary.read(filePath);
     } catch (err) {
-      return this.fromFallback(filePath, err, () => this.fallback.read(filePath));
+      return this.fromFallback(filePath, err, () =>
+        this.fallback.read(filePath),
+      );
     }
   }
 
@@ -114,7 +120,9 @@ export class LocalReadFallbackDriver implements StorageDriver {
     }
     // B2 has no conditional PUT; a HEAD followed by upload can overwrite a
     // concurrent primary write. Reconciliation handles these files instead.
-    throw new Error('Local-only source must be reconciled into S3 before copying.');
+    throw new Error(
+      'Local-only source must be reconciled into S3 before copying.',
+    );
   }
 
   getUrl(filePath: string): string {
@@ -192,7 +200,9 @@ export class LocalReadFallbackDriver implements StorageDriver {
     if (!(await this.availableInFallback(filePath))) throw primaryError;
     try {
       const result = await readLocal();
-      this.logger.warn(`Local fallback served ${filePath} (missing in S3)`);
+      // Info level on purpose: production logs drop `warn`, and operators
+      // watch these lines to know when the fallback can be switched off.
+      this.logger.log(`Local fallback served ${filePath} (missing in S3)`);
       return result;
     } catch (localErr) {
       if (isStorageObjectNotFound(localErr)) throw primaryError;

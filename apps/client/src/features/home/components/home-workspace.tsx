@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Anchor, Badge, Button, Group, Paper, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
+import { Anchor, Badge, Button, Group, Kbd, Paper, SimpleGrid, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import {
   IconActivity,
   IconAlertTriangle,
@@ -46,6 +46,7 @@ const TODO_ICON = {
   approval: IconUserCheck,
   rejected: IconAlertTriangle,
   verification: IconShieldCheck,
+  "meeting-speakers": IconMicrophone,
   "meeting-review": IconMicrophone,
   "meeting-failed": IconAlertTriangle,
   "meeting-publish": IconMicrophone,
@@ -92,9 +93,11 @@ export default function HomeWorkspace() {
   const created = useCreatedByQuery({ userId: me?.id });
   const favorites = useFavoritesQuery("page");
   const recent = useRecentChangesQuery();
-  const spaces = useGetSpacesQuery({ page: 1, limit: 8 } as any);
-  const spaceItems = spaces.data?.items ?? [];
-  const managesSpaces = isAdmin || spaceItems.some((s) => s.membership?.role === SpaceRole.ADMIN);
+  // Manager status is decided on all my spaces; the chips show the first 8.
+  const spaces = useGetSpacesQuery({ page: 1, limit: 100 } as any);
+  const allSpaces = spaces.data?.items ?? [];
+  const spaceItems = allSpaces.slice(0, 8);
+  const managesSpaces = isAdmin || allSpaces.some((s) => s.membership?.role === SpaceRole.ADMIN);
   const health = useVerificationOverviewQuery(undefined, { enabled: managesSpaces });
 
   const todo = useMemo(
@@ -129,22 +132,25 @@ export default function HomeWorkspace() {
   const ago = (d: string | Date) => timeAgo(new Date(d));
 
   const todoRow = (item: TodoItem, index: number) => {
-    const pageTo =
-      item.pageSlugId && item.spaceSlug ? buildPageUrl(item.spaceSlug, item.pageSlugId, item.pageTitle) : undefined;
+    // buildPageUrl falls back to /p/<slug> when the space is unknown.
+    const pageTo = item.pageSlugId ? buildPageUrl(item.spaceSlug as string, item.pageSlugId, item.pageTitle) : undefined;
     const open = () => item.notificationId && markRead.mutate([item.notificationId]);
     const page = item.pageTitle ? `« ${item.pageTitle} »` : t("a page");
     const meeting = item.meetingTitle || t("Untitled meeting");
     const rows: Record<TodoItem["kind"], { title: string; detail: string; action: string }> = {
       mention: { title: t("{{name}} mentioned you in {{page}}", { name: item.actorName ?? t("Someone"), page }), detail: ago(item.at), action: t("Reply") },
-      approval: { title: t("{{name}} asks for your approval: {{page}}", { name: item.actorName ?? t("Someone"), page }), detail: t("Page approval"), action: t("Review") },
-      rejected: { title: t("Approval declined: {{page}}", { page }), detail: ago(item.at), action: t("Open") },
-      verification: { title: t("{{page}} needs to be verified again", { page }), detail: t("You are a verifier of this page"), action: t("Review") },
-      "meeting-review": { title: t("Meeting to review: {{title}}", { title: meeting }), detail: t("In ConqrMeet · speakers and actions"), action: t("Review") },
-      "meeting-failed": { title: t("Processing failed: {{title}}", { title: meeting }), detail: t("In ConqrMeet"), action: t("Open") },
+      approval: { title: t("{{name}} asks for your approval: {{page}}", { name: item.actorName ?? t("Someone"), page }), detail: t("Page approval"), action: t("Verify") },
+      rejected: { title: t("Approval declined: {{page}}", { page }), detail: ago(item.at), action: t("Open page") },
+      verification: { title: t("{{page}} needs to be verified again", { page }), detail: t("You are a verifier of this page"), action: t("Verify") },
+      "meeting-speakers": { title: t("Speakers to confirm: {{title}}", { title: meeting }), detail: t("In ConqrMeet · names suggested by the AI"), action: t("Verify") },
+      "meeting-review": { title: t("Meeting to review: {{title}}", { title: meeting }), detail: t("In ConqrMeet · speakers and actions"), action: t("Verify") },
+      "meeting-failed": { title: t("Processing failed: {{title}}", { title: meeting }), detail: t("In ConqrMeet"), action: t("Open in ConqrMeet") },
       "meeting-publish": { title: t("Ready to publish: {{title}}", { title: meeting }), detail: t("In ConqrMeet · report and transcript"), action: t("Publish") },
     };
     const r = rows[item.kind];
-    const href = item.meetingId ? meetingHref(item.meetingId) : undefined;
+    const href = item.meetingId
+      ? meetingHref(item.meetingId) && `${meetingHref(item.meetingId)}${item.kind === "meeting-speakers" ? "?tab=transcript&review=1" : ""}`
+      : undefined;
     return (
       <HomeRow
         key={item.key}
@@ -154,7 +160,8 @@ export default function HomeWorkspace() {
         to={href ? undefined : pageTo}
         href={href}
         onOpen={open}
-        action={r.action}
+        // No destination (ConqrMeet URL unset): no button that leads nowhere.
+        action={href || pageTo ? r.action : undefined}
         primary={index === 0}
       />
     );
@@ -173,7 +180,7 @@ export default function HomeWorkspace() {
           {firstName ? t("Hello, {{name}}", { name: firstName }) : t("Hello")}
         </Title>
         <Text size="sm" c="dimmed">
-          {t(summary.key, summary.values)}
+          {loadingTodo ? t("Your pages, spaces and meetings.") : t(summary.key, summary.values)}
         </Text>
       </div>
 
@@ -191,9 +198,9 @@ export default function HomeWorkspace() {
               {t("Ask AI")}
             </Button>
           )}
-          <Badge variant="default" radius="sm" visibleFrom="sm">
-            Ctrl K
-          </Badge>
+          <Kbd size="xs" visibleFrom="sm">
+            Ctrl + K
+          </Kbd>
         </Group>
       </Paper>
 
@@ -271,7 +278,7 @@ export default function HomeWorkspace() {
               key={page.id}
               icon={IconFileText}
               title={page.title || t("Untitled")}
-              detail={[page.space?.name, page.lastUpdatedBy?.name, ago(page.updatedAt)].filter(Boolean).join(" · ")}
+              detail={[page.space?.name, ago(page.updatedAt)].filter(Boolean).join(" · ")}
               to={buildPageUrl(page.space?.slug, page.slugId, page.title)}
             />
           ))}

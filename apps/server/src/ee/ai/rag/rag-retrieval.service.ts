@@ -1,11 +1,11 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import {
   EmbeddingRepository,
   SimilarityResult,
 } from '../embeddings/embedding.repository';
+import { RagAccessFilter } from './rag-access.filter';
 
 export interface ContextChunk {
   kind: 'expert_insight' | 'page';
@@ -24,6 +24,9 @@ export interface ContextChunk {
   excerpt?: string;
   /** Which retrieval paths surfaced this passage. */
   matchedBy?: Array<'vector' | 'lexical'>;
+  /** Set when the passage comes from a document attached to the page. */
+  attachmentId?: string;
+  fileName?: string;
 }
 
 export interface RetrievedContext {
@@ -66,6 +69,8 @@ type PassageInput = {
   title: string | null;
   score: number;
   matchedBy?: Array<'vector' | 'lexical'>;
+  attachmentId?: string;
+  fileName?: string;
 };
 
 @Injectable()
@@ -77,7 +82,7 @@ export class RagRetrievalService {
     private readonly aiProvider: AiProviderService,
     private readonly repo: EmbeddingRepository,
     private readonly env: EnvironmentService,
-    @Optional() private readonly pagePermissions?: PagePermissionRepo,
+    @Optional() private readonly access?: RagAccessFilter,
   ) {}
 
   /**
@@ -94,9 +99,9 @@ export class RagRetrievalService {
     pageId?: string;
     topK?: number;
     /**
-     * The reader. When set, page passages are filtered through page-level
-     * permissions, so a restricted page inside a readable space never
-     * reaches the model. Every user-facing caller must pass it.
+     * The reader. Every chunk is re-checked against the CURRENT page access,
+     * verification, deletion and document association for this user before
+     * it can reach a prompt; without a reader nothing is returned.
      */
     userId?: string;
   }): Promise<RetrievedContext> {
@@ -109,7 +114,8 @@ export class RagRetrievalService {
       return { chunks: [], contextText: '', isEmpty: true };
     }
 
-    const fetchK = topK * 2;
+    // Over-fetch: stale or restricted rows are removed by the access check.
+    const fetchK = topK * 3;
     const scope = { workspaceId, spaceId, spaceIds, sourceId: pageId };
 
     const [vector, lexical] = await Promise.all([
@@ -125,50 +131,25 @@ export class RagRetrievalService {
       this.lexicalSearchSafe({ ...scope, query: question, topK: fetchK }),
     ]);
 
-    const allowed = userId
-      ? await this.accessiblePageIds([...vector, ...lexical], userId, spaceId)
-      : null;
-    const keep = (r: SimilarityResult) =>
-      !allowed || r.sourceKind !== 'page' || allowed.has(r.sourceId);
+    // Both result lists go through the live access check BEFORE fusion, so no
+    // stale, restricted, unverified or deleted text reaches the context.
+    const ctx = { workspaceId, userId, spaceId, spaceIds };
+    const [allowedVector, allowedLexical] = this.access
+      ? await Promise.all([
+          this.access.filter(vector, ctx),
+          this.access.filter(lexical, ctx),
+        ])
+      : this.accessUnavailable();
 
-    return this.assembleFused(vector.filter(keep), lexical.filter(keep), {
+    return this.assembleFused(allowedVector, allowedLexical, {
       topK,
       minScore: this.env.getAiRagMinScore(),
     });
   }
 
-  /**
-   * Page ids among the results that the user may open. Fails closed: if the
-   * permission check cannot run, no page passage is returned.
-   */
-  private async accessiblePageIds(
-    results: SimilarityResult[],
-    userId: string,
-    spaceId?: string,
-  ): Promise<Set<string>> {
-    const pageIds = [
-      ...new Set(
-        results.filter((r) => r.sourceKind === 'page').map((r) => r.sourceId),
-      ),
-    ];
-    if (pageIds.length === 0) return new Set();
-    if (!this.pagePermissions) {
-      this.logger.error('Page permission check unavailable: page passages dropped');
-      return new Set();
-    }
-    try {
-      const ids = await this.pagePermissions.filterAccessiblePageIds({
-        pageIds,
-        userId,
-        spaceId,
-      });
-      return new Set(ids);
-    } catch (err) {
-      this.logger.error(
-        `Page permission check failed, page passages dropped: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return new Set();
-    }
+  private accessUnavailable(): [SimilarityResult[], SimilarityResult[]] {
+    this.logger.error('RAG access filter unavailable: all passages dropped');
+    return [[], []];
   }
 
   /**
@@ -340,6 +321,7 @@ export class RagRetrievalService {
           chunkIndex: first.chunkIndex,
           chunkText: text,
           title: this.extractTitle(first.metadata),
+          ...this.extractAttachment(first.metadata),
           score: runBestVector ?? sourceBestVector ?? FALLBACK_LEXICAL_SCORE,
           matchedBy,
           rrf: Math.max(...run.map((c) => c.rrf)),
@@ -349,7 +331,16 @@ export class RagRetrievalService {
 
       for (const c of ordered) {
         const prev = run[run.length - 1];
-        if (prev && c.chunkIndex !== prev.chunkIndex + 1) flush();
+        // A page's own text and each attached document stay separate
+        // passages so every passage cites exactly one document.
+        if (
+          prev &&
+          (c.chunkIndex !== prev.chunkIndex + 1 ||
+            this.extractAttachment(c.metadata).attachmentId !==
+              this.extractAttachment(prev.metadata).attachmentId)
+        ) {
+          flush();
+        }
         run.push(c);
       }
       flush();
@@ -376,6 +367,7 @@ export class RagRetrievalService {
         chunkIndex: r.chunkIndex,
         chunkText: r.chunkText,
         title: this.extractTitle(r.metadata),
+        ...this.extractAttachment(r.metadata),
         score: r.score,
         matchedBy: ['vector'],
       })),
@@ -403,6 +395,9 @@ export class RagRetrievalService {
         chunkIndex: r.chunkIndex,
         excerpt: makeExcerpt(text),
         matchedBy: r.matchedBy ?? ['vector'],
+        ...(r.attachmentId
+          ? { attachmentId: r.attachmentId, fileName: r.fileName }
+          : {}),
       });
       return true;
     };
@@ -442,7 +437,10 @@ export class RagRetrievalService {
     if (pageChunks.length > 0) {
       parts.push('[Pages]');
       for (const c of pageChunks) {
-        const heading = c.title ? `[${c.label}] ${c.title}` : `[${c.label}]`;
+        const base = c.title ? `[${c.label}] ${c.title}` : `[${c.label}]`;
+        const heading = c.fileName
+          ? `${base} — attached document "${c.fileName}"`
+          : base;
         parts.push(`${heading}\n${c.chunkText}`);
       }
     }
@@ -454,6 +452,19 @@ export class RagRetrievalService {
     metadata: Record<string, unknown> | null,
   ): string | null {
     return (metadata?.title as string | undefined) ?? null;
+  }
+
+  private extractAttachment(metadata: Record<string, unknown> | null): {
+    attachmentId?: string;
+    fileName?: string;
+  } {
+    const id = metadata?.attachmentId;
+    if (typeof id !== 'string' || !id) return {};
+    const fileName = metadata?.fileName;
+    return {
+      attachmentId: id,
+      fileName: typeof fileName === 'string' ? fileName : undefined,
+    };
   }
 }
 

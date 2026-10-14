@@ -124,6 +124,9 @@ export class RagRetrieveTool implements ChatTool, OnModuleInit {
           excerpt: c.chunkText.slice(0, 2000),
           chunkIndex: c.chunkIndex,
           matchedBy: c.matchedBy,
+          ...(c.attachmentId
+            ? { attachmentId: c.attachmentId, fileName: c.fileName }
+            : {}),
         })),
       };
     } catch (err) {

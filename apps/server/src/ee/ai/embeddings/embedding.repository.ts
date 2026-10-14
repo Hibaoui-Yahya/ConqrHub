@@ -3,6 +3,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { sql } from 'kysely';
 import { AiSourceKind } from '@docmost/db/types/embeddings.types';
+import { KyselyTransaction } from '@docmost/db/types/kysely.types';
 
 export interface SimilarityResult {
   sourceKind: AiSourceKind;
@@ -21,6 +22,30 @@ export interface EmbeddingChunkInsert {
 }
 
 const MAX_LEXICAL_TERMS = 24;
+
+/**
+ * ai_embeddings.metadata as a JSON object. Rows written before the
+ * metadata-encoding fix hold a JSON *string* (the stringified object was
+ * re-encoded by the postgres-js driver), on which `->>`, `?` and jsonb_set
+ * do not work; this expression reads both shapes.
+ */
+export const METADATA_OBJECT = sql`(case when jsonb_typeof(metadata) = 'string' then (metadata #>> '{}')::jsonb else metadata end)`;
+
+/** Metadata as returned to callers: always an object (or null). */
+export function parseEmbeddingMetadata(
+  raw: unknown,
+): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+}
 
 // Function words that carry no retrieval signal. The 'simple' text-search
 // configuration keeps every token, so they must be removed here or a French
@@ -264,6 +289,46 @@ export class EmbeddingRepository {
   }
 
   /**
+   * Vectors already stored for a source, keyed by chunk text, limited to rows
+   * embedded with the same model and under the same title (the title is part
+   * of the embedding input). Lets a re-index embed only the chunks that are
+   * actually new.
+   */
+  async findReusableVectors(
+    sourceKind: AiSourceKind,
+    sourceId: string,
+    model: string,
+    title: string | null,
+  ): Promise<Map<string, number[]>> {
+    const rows: Array<{ chunkText: string; embedding: string | number[] }> =
+      await (this.db as any)
+        .selectFrom('aiEmbeddings')
+        .select(['chunkText', 'embedding'])
+        .where('sourceKind', '=', sourceKind)
+        .where('sourceId', '=', sourceId)
+        .where('model', '=', model)
+        .where(
+          sql`coalesce(${METADATA_OBJECT}->>'title', '')`,
+          '=',
+          title ?? '',
+        )
+        .execute();
+
+    const out = new Map<string, number[]>();
+    for (const r of rows) {
+      try {
+        const v = Array.isArray(r.embedding)
+          ? r.embedding.map(Number)
+          : (JSON.parse(r.embedding) as number[]);
+        if (Array.isArray(v) && v.length > 0) out.set(r.chunkText, v);
+      } catch {
+        // Unparseable vector: simply re-embed that chunk.
+      }
+    }
+    return out;
+  }
+
+  /**
    * Upsert a complete set of chunks for a source.  Uses the unique index on
    * (source_kind, source_id, chunk_index, model) so re-indexing the same
    * content is idempotent.
@@ -271,16 +336,19 @@ export class EmbeddingRepository {
    * After upsert, stale chunks (chunk_index >= newChunkCount) are deleted so
    * reducing a page never leaves orphaned embedding rows.
    */
-  async upsertChunks(opts: {
-    workspaceId: string;
-    spaceId: string;
-    sourceKind: AiSourceKind;
-    sourceId: string;
-    model: string;
-    dim: number;
-    contentHash: string;
-    chunks: EmbeddingChunkInsert[];
-  }): Promise<void> {
+  async upsertChunks(
+    opts: {
+      workspaceId: string;
+      spaceId: string;
+      sourceKind: AiSourceKind;
+      sourceId: string;
+      model: string;
+      dim: number;
+      contentHash: string;
+      chunks: EmbeddingChunkInsert[];
+    },
+    trx?: KyselyTransaction,
+  ): Promise<void> {
     const {
       workspaceId,
       spaceId,
@@ -293,11 +361,11 @@ export class EmbeddingRepository {
     } = opts;
 
     if (chunks.length === 0) {
-      await this.deleteBySource(sourceKind, sourceId);
+      await this.deleteBySource(sourceKind, sourceId, trx);
       return;
     }
 
-    const db = this.db as any;
+    const db = (trx ?? this.db) as any;
 
     for (const chunk of chunks) {
       const vectorLiteral = `[${chunk.embedding.join(',')}]`;
@@ -314,7 +382,12 @@ export class EmbeddingRepository {
           model,
           dim,
           contentHash,
-          metadata: chunk.metadata ? JSON.stringify(chunk.metadata) : null,
+          // Sent as text and cast server-side so the column holds a JSON
+          // object: a bare string parameter is re-encoded by postgres-js
+          // into a JSON string scalar.
+          metadata: chunk.metadata
+            ? sql`${JSON.stringify(chunk.metadata)}::text::jsonb`
+            : null,
           updatedAt: sql`now()`,
         })
         .onConflict((oc: any) =>
@@ -363,7 +436,7 @@ export class EmbeddingRepository {
       .set({
         workspaceId: opts.workspaceId,
         spaceId: opts.spaceId,
-        metadata: sql`jsonb_set(coalesce(metadata, '{}'::jsonb), '{spaceId}', to_jsonb(${opts.spaceId}::text), true)`,
+        metadata: sql`jsonb_set(coalesce(${METADATA_OBJECT}, '{}'::jsonb), '{spaceId}', to_jsonb(${opts.spaceId}::text), true)`,
         updatedAt: sql`now()`,
       })
       .where('sourceKind', '=', opts.sourceKind)
@@ -374,8 +447,9 @@ export class EmbeddingRepository {
   async deleteBySource(
     sourceKind: AiSourceKind,
     sourceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
-    await (this.db as any)
+    await ((trx ?? this.db) as any)
       .deleteFrom('aiEmbeddings')
       .where('sourceKind', '=', sourceKind)
       .where('sourceId', '=', sourceId)
@@ -479,7 +553,7 @@ export class EmbeddingRepository {
       sourceId: r.sourceId,
       chunkIndex: r.chunkIndex,
       chunkText: r.chunkText,
-      metadata: r.metadata as Record<string, unknown> | null,
+      metadata: parseEmbeddingMetadata(r.metadata),
       score: Number(r.score),
     }));
   }
@@ -528,7 +602,7 @@ export class EmbeddingRepository {
       sourceId: r.sourceId,
       chunkIndex: r.chunkIndex,
       chunkText: r.chunkText,
-      metadata: r.metadata as Record<string, unknown> | null,
+      metadata: parseEmbeddingMetadata(r.metadata),
       score: Number(r.score),
     }));
   }

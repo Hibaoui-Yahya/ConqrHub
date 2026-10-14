@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  isWorkspaceManager,
+  TEMPLATE_DEFAULT_ADMIN_MESSAGE,
+  TEMPLATE_READ_ONLY_MESSAGE,
+  type MeetingActor,
+} from './meeting-access.util';
 import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
@@ -26,6 +32,11 @@ import {
  * - a draft is private to the editor until "Publier", which bumps the version;
  * - a meeting keeps a snapshot of the published spec it was started with;
  * - one default template per base type (the built-in one unless chosen).
+ *
+ * Who may do what (LTC-03, same rule as meetings): every member reads and
+ * uses every template and may start a new one; only its author or an
+ * Owner/Admin edits, publishes or deletes it; and because the default of a
+ * meeting type applies to the whole company, only Owners/Admins change it.
  */
 @Injectable()
 export class MeetingTemplateService {
@@ -77,12 +88,35 @@ export class MeetingTemplateService {
     return out;
   }
 
-  async list(workspaceId: string): Promise<MeetingTemplate[]> {
+  async list(workspaceId: string, actor?: MeetingActor): Promise<MeetingTemplate[]> {
     const [rows, usage] = await Promise.all([this.customRows(workspaceId), this.usage(workspaceId)]);
     const custom = rows.map((r) => this.rowToTemplate(r));
     const defaultsByBase = new Set(custom.filter((t) => t.isDefault).map((t) => t.baseType));
     const builtins = BASE_TYPES.map((id) => builtinTemplate(id, !defaultsByBase.has(id)));
-    return [...custom, ...builtins].map((t) => ({ ...t, usageThisMonth: usage[t.id] ?? 0 }));
+    return [...custom, ...builtins].map((t) => this.withAccess({ ...t, usageThisMonth: usage[t.id] ?? 0 }, actor));
+  }
+
+  /** Additive flags for the gallery: what this person may do. */
+  withAccess<T extends MeetingTemplate>(t: T, actor?: MeetingActor): T & { canEdit?: boolean; canSetDefault?: boolean } {
+    if (!actor) return t;
+    return {
+      ...t,
+      canEdit: !t.builtin && (t.createdBy === actor.id || isWorkspaceManager(actor)),
+      canSetDefault: isWorkspaceManager(actor),
+    };
+  }
+
+  private assertCanEdit(def: TemplateDefinition, actor?: MeetingActor) {
+    if (!actor) return;
+    if (def.createdBy !== actor.id && !isWorkspaceManager(actor)) {
+      throw new ForbiddenException(TEMPLATE_READ_ONLY_MESSAGE);
+    }
+  }
+
+  private assertCanSetDefault(actor?: MeetingActor) {
+    if (actor && !isWorkspaceManager(actor)) {
+      throw new ForbiddenException(TEMPLATE_DEFAULT_ADMIN_MESSAGE);
+    }
   }
 
   async get(workspaceId: string, id: string): Promise<MeetingTemplate> {
@@ -210,8 +244,10 @@ export class MeetingTemplateService {
     userId: string,
     id: string,
     input: { name?: string; description?: string; icon?: string; sensitivity?: TemplateDefinition['sensitivity']; spec?: unknown },
+    actor?: MeetingActor,
   ): Promise<MeetingTemplate> {
     const { def } = await this.customRowOrThrow(workspaceId, id);
+    this.assertCanEdit(def, actor);
     if (input.name !== undefined) {
       const name = input.name.trim();
       if (!name) throw new BadRequestException('A name is required');
@@ -227,8 +263,9 @@ export class MeetingTemplateService {
   }
 
   /** The draft becomes the published spec; new meetings use it from now on. */
-  async publish(workspaceId: string, userId: string, id: string): Promise<MeetingTemplate> {
+  async publish(workspaceId: string, userId: string, id: string, actor?: MeetingActor): Promise<MeetingTemplate> {
     const { def } = await this.customRowOrThrow(workspaceId, id);
+    this.assertCanEdit(def, actor);
     if (!def.draft.sections.some((s) => s.enabled)) {
       throw new BadRequestException('Enable at least one section before publishing.');
     }
@@ -241,7 +278,14 @@ export class MeetingTemplateService {
   }
 
   /** One default per base type: setting one unsets the others. */
-  async setDefault(workspaceId: string, userId: string, id: string, isDefault: boolean): Promise<MeetingTemplate> {
+  async setDefault(
+    workspaceId: string,
+    userId: string,
+    id: string,
+    isDefault: boolean,
+    actor?: MeetingActor,
+  ): Promise<MeetingTemplate> {
+    this.assertCanSetDefault(actor);
     if (isBuiltinId(id)) {
       // The built-in is the default when no custom template of its type is.
       const rows = await this.customRows(workspaceId);
@@ -272,8 +316,9 @@ export class MeetingTemplateService {
     return this.save(id, def);
   }
 
-  async remove(workspaceId: string, id: string): Promise<void> {
-    const { row } = await this.customRowOrThrow(workspaceId, id);
+  async remove(workspaceId: string, id: string, actor?: MeetingActor): Promise<void> {
+    const { row, def } = await this.customRowOrThrow(workspaceId, id);
+    this.assertCanEdit(def, actor);
     await this.db.updateTable('meetingTemplates').set({ enabled: false, updatedAt: new Date() }).where('id', '=', row.id).executeTakeFirst();
   }
 }

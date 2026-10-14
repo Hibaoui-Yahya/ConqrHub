@@ -18,6 +18,7 @@ import {
   embed,
   embedMany,
   generateText,
+  Output,
   streamText,
 } from 'ai';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
@@ -61,6 +62,30 @@ const MISTRAL_DEFAULTS: DriverDefaults = {
   embedding: 'mistral-embed',
   dimension: 1024,
 };
+
+const MISTRAL_OCR_URL = 'https://api.mistral.ai/v1/ocr';
+
+/**
+ * OCR failure. `retryable` marks transient conditions (timeout, network,
+ * 408/409/425/429, 5xx); anything else (bad request, auth, unsupported or
+ * oversized document) will fail the same way on retry and must not be repaid.
+ */
+export class OcrProviderError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'OcrProviderError';
+  }
+}
+
+export interface OcrResult {
+  model: string;
+  pages: Array<{ index: number; markdown: string }>;
+  pagesProcessed: number;
+}
 
 function defaultsForDriver(driver: AiDriver | null): DriverDefaults {
   return driver === 'mistral' ? MISTRAL_DEFAULTS : OPENAI_FLAVOR_DEFAULTS;
@@ -154,6 +179,43 @@ export class AiProviderService implements OnModuleInit {
   }
 
   /**
+   * A completion that must be one JSON value. Uses the provider's JSON
+   * response mode where the SDK supports it (OpenAI, Mistral, Gemini…).
+   * `json` is undefined when the answer did not parse; `text` is always the
+   * raw answer so callers can still recover or report it.
+   */
+  async generateJson(args: {
+    system?: string;
+    prompt: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+  }): Promise<{ text: string; json?: unknown }> {
+    const model = this.requireCompletionModel();
+    try {
+      const result = await generateText({
+        model,
+        system: args.system,
+        prompt: args.prompt,
+        temperature: args.temperature ?? 0.3,
+        maxOutputTokens: args.maxOutputTokens,
+        output: Output.json(),
+      });
+      let json: unknown;
+      try {
+        json = result.output;
+      } catch {
+        json = undefined;
+      }
+      return { text: result.text, json };
+    } catch (err) {
+      // The SDK refuses an answer that is not JSON; hand back its text.
+      const text = (err as { text?: unknown })?.text;
+      if (typeof text === 'string') return { text };
+      throw err;
+    }
+  }
+
+  /**
    * Stream a completion. Returns the AI SDK stream — caller pipes into SSE.
    */
   stream(args: {
@@ -207,6 +269,102 @@ export class AiProviderService implements OnModuleInit {
     const model = this.requireEmbeddingModel();
     const { embeddings } = await embedMany({ model, values: texts });
     return embeddings;
+  }
+
+  /**
+   * OCR runs on Mistral's document OCR endpoint, keyed like speech-to-text by
+   * MISTRAL_API_KEY regardless of AI_DRIVER, and can be switched off with
+   * AI_OCR_ENABLED=false.
+   */
+  isOcrAvailable(): boolean {
+    return this.env.getAiOcrEnabled() && Boolean(this.env.getMistralApiKey());
+  }
+
+  /**
+   * OCR one document or image held in memory. The bytes are sent inline as a
+   * data URI, so the provider never fetches a URL on our behalf. `pages`
+   * (0-based) bounds what is processed — and billed — for PDFs. One attempt
+   * only: the caller owns retries so it can count and cap them.
+   */
+  async ocrDocument(args: {
+    data: Buffer;
+    mimeType: string;
+    pages?: number[];
+    timeoutMs?: number;
+  }): Promise<OcrResult> {
+    const apiKey = this.env.getMistralApiKey();
+    if (!this.env.getAiOcrEnabled() || !apiKey) {
+      throw new OcrProviderError('OCR is not configured', false);
+    }
+    const model = this.env.getAiOcrModel();
+    const dataUri = `data:${args.mimeType};base64,${args.data.toString('base64')}`;
+    const isImage = args.mimeType.startsWith('image/');
+    const body: Record<string, unknown> = {
+      model,
+      document: isImage
+        ? { type: 'image_url', image_url: dataUri }
+        : { type: 'document_url', document_url: dataUri },
+      include_image_base64: false,
+    };
+    if (!isImage && args.pages?.length) body.pages = args.pages;
+
+    let res: Response;
+    try {
+      res = await fetch(MISTRAL_OCR_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(args.timeoutMs ?? 120_000),
+      });
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      throw new OcrProviderError(
+        name === 'TimeoutError' || name === 'AbortError'
+          ? 'OCR request timed out'
+          : `OCR request failed: ${err instanceof Error ? err.message : String(err)}`,
+        true,
+      );
+    }
+
+    const raw = await res.text().catch(() => '');
+    if (!res.ok) {
+      const retryable =
+        res.status >= 500 || [408, 409, 425, 429].includes(res.status);
+      throw new OcrProviderError(
+        `OCR failed with HTTP ${res.status}: ${raw.slice(0, 200)}`,
+        retryable,
+        res.status,
+      );
+    }
+
+    let json: any;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      throw new OcrProviderError(
+        'OCR returned a non-JSON body',
+        true,
+        res.status,
+      );
+    }
+    const pages = Array.isArray(json?.pages)
+      ? json.pages.map((p: any, i: number) => ({
+          index: typeof p?.index === 'number' ? p.index : i,
+          markdown: typeof p?.markdown === 'string' ? p.markdown : '',
+        }))
+      : null;
+    if (!pages) {
+      throw new OcrProviderError('OCR response has no pages', true, res.status);
+    }
+    return {
+      model: typeof json.model === 'string' ? json.model : model,
+      pages,
+      pagesProcessed: Number(json?.usage_info?.pages_processed ?? pages.length),
+    };
   }
 
   private buildCompletionModel(driver: AiDriver): LanguageModel {

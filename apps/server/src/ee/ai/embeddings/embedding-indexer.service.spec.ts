@@ -39,13 +39,17 @@ function makeDbWithPage(
     const c: any = {
       select: () => c,
       where: () => c,
+      forShare: () => c,
       executeTakeFirst: jest.fn().mockResolvedValue(row),
     };
     return c;
   };
-  return {
+  const db: any = {
     selectFrom: (table: string) => chain(rowFor[table]),
-  } as any;
+  };
+  // The pre-write re-check runs in a transaction over the same rows.
+  db.transaction = () => ({ execute: (fn: (trx: any) => any) => fn(db) });
+  return db;
 }
 
 function makeAiProvider(
@@ -105,6 +109,7 @@ function makeRepo(): jest.Mocked<EmbeddingRepository> {
     deleteBySource: jest.fn().mockResolvedValue(undefined),
     deleteBySourceIds: jest.fn().mockResolvedValue(undefined),
     reassignSource: jest.fn().mockResolvedValue(undefined),
+    findReusableVectors: jest.fn().mockResolvedValue(new Map()),
   } as any;
 }
 

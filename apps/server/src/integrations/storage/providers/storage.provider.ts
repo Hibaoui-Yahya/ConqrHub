@@ -23,7 +23,7 @@ export function createStorageDriver(disk: StorageConfig): StorageDriver {
     case StorageOption.S3: {
       const s3 = new S3Driver(disk.config as S3StorageConfig);
       if (!disk.localReadFallback) return s3;
-      new Logger('StorageProvider').warn(
+      new Logger('StorageProvider').log(
         `STORAGE_LOCAL_READ_FALLBACK is ON: objects missing in S3 are read from ${disk.localReadFallback.storagePath}. Disable it once the cutover reconciliation is complete.`,
       );
       return new LocalReadFallbackDriver(
@@ -53,6 +53,7 @@ export const storageDriverConfigProvider = {
       case StorageOption.S3:
         { const s3Config = {
           driver,
+          // Temporary local -> S3 cutover aid, off unless explicitly enabled.
           localReadFallback: environmentService.getStorageLocalReadFallback()
             ? {
                 storagePath:

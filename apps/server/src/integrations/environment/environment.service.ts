@@ -124,7 +124,13 @@ export class EnvironmentService {
   }
 
   getAwsS3ForcePathStyle(): boolean {
-    return this.configService.get<boolean>('AWS_S3_FORCE_PATH_STYLE');
+    // Env values are strings: "false" must not enable path-style addressing.
+    const raw = this.configService.get<string | boolean>(
+      'AWS_S3_FORCE_PATH_STYLE',
+    );
+    if (raw == null || raw === '') return undefined;
+    if (typeof raw === 'boolean') return raw;
+    return ['true', '1', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
   }
 
   /**
@@ -331,6 +337,26 @@ export class EnvironmentService {
     }
     return !['false', '0', 'no', 'off'].includes(
       String(raw).trim().toLowerCase(),
+    );
+  }
+
+  /**
+   * OCR for scanned PDFs and images attached to pages. Defaults to enabled
+   * when a Mistral key is configured, like speech-to-text.
+   */
+  getAiOcrEnabled(): boolean {
+    const raw = this.configService.get<string>('AI_OCR_ENABLED');
+    if (raw == null || raw === '') {
+      return Boolean(this.configService.get<string>('MISTRAL_API_KEY'));
+    }
+    return !['false', '0', 'no', 'off'].includes(
+      String(raw).trim().toLowerCase(),
+    );
+  }
+
+  getAiOcrModel(): string {
+    return (
+      this.configService.get<string>('AI_OCR_MODEL') || 'mistral-ocr-latest'
     );
   }
 

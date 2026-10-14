@@ -46,6 +46,7 @@ export function SearchMobileControl({ onSearch }: SearchMobileControlProps) {
         color="dark"
         onClick={onSearch}
         size="sm"
+        aria-label={t("Search")}
       >
         <IconSearch size={20} stroke={2} />
       </ActionIcon>

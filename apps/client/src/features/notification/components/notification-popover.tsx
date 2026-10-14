@@ -91,7 +91,12 @@ export function NotificationPopover() {
             <Menu position="bottom-end" withArrow withinPortal={false}>
               <Menu.Target>
                 <Tooltip label={t("Filter")} withArrow>
-                  <ActionIcon variant="subtle" color="dark" size="sm">
+                  <ActionIcon
+                    variant="subtle"
+                    color="dark"
+                    size="sm"
+                    aria-label={t("Filter")}
+                  >
                     <IconFilter size={16} />
                   </ActionIcon>
                 </Tooltip>
@@ -120,7 +125,12 @@ export function NotificationPopover() {
             <Menu position="bottom-end" withArrow withinPortal={false}>
               <Menu.Target>
                 <Tooltip label={t("More options")} withArrow>
-                  <ActionIcon variant="subtle" color="dark" size="sm">
+                  <ActionIcon
+                    variant="subtle"
+                    color="dark"
+                    size="sm"
+                    aria-label={t("More options")}
+                  >
                     <IconDots size={16} />
                   </ActionIcon>
                 </Tooltip>

@@ -69,21 +69,40 @@ export class AttachmentRepo {
       .execute();
   }
 
+  /**
+   * The attachment with its extracted text, plus the extraction status and
+   * coverage detail (`partial` text must be presented as partial).
+   */
   async findByIdWithContent(
     attachmentId: string,
     workspaceId: string,
     opts?: {
       trx?: KyselyTransaction;
     },
-  ): Promise<Attachment> {
+  ): Promise<
+    Attachment & {
+      extractionStatus?: string | null;
+      extractionDetail?: string | null;
+    }
+  > {
     const db = dbOrTx(this.db, opts?.trx);
 
     return db
       .selectFrom('attachments')
-      .select([...this.baseFields, 'textContent'])
-      .where('id', '=', attachmentId)
-      .where('workspaceId', '=', workspaceId)
-      .executeTakeFirst();
+      .leftJoin(
+        'attachmentTextExtractions as ate',
+        'ate.attachmentId',
+        'attachments.id',
+      )
+      .select([
+        ...this.baseFields.map((f) => `attachments.${f}` as const),
+        'attachments.textContent',
+        'ate.status as extractionStatus',
+        'ate.detail as extractionDetail',
+      ])
+      .where('attachments.id', '=', attachmentId)
+      .where('attachments.workspaceId', '=', workspaceId)
+      .executeTakeFirst() as any;
   }
 
   async insertAttachment(

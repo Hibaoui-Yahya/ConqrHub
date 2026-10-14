@@ -242,7 +242,12 @@ export function NotificationItem({
         <Group gap={4} wrap="nowrap" align="center" style={{ flexShrink: 0 }}>
           {hovered && isUnread ? (
             <Tooltip label={t("Mark as read")} withArrow>
-              <ActionIcon variant="subtle" size="sm" onClick={handleMarkRead}>
+              <ActionIcon
+                variant="subtle"
+                size="sm"
+                onClick={handleMarkRead}
+                aria-label={t("Mark as read")}
+              >
                 <IconCheck size={14} />
               </ActionIcon>
             </Tooltip>

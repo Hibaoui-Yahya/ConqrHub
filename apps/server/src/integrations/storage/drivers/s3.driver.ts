@@ -13,7 +13,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getMimeType } from '../../../common/helpers';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Logger } from '@nestjs/common';
-import { isS3NotFoundError, StorageObjectNotFoundError } from '../storage.errors';
+import {
+  isS3NotFoundError,
+  StorageObjectNotFoundError,
+} from '../storage.errors';
 
 /**
  * Builds every S3 client this driver uses, so the regular client and the

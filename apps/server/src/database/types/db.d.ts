@@ -118,6 +118,27 @@ export interface Attachments {
   workspaceId: string;
 }
 
+export interface AttachmentTextExtractions {
+  attachmentId: string;
+  attempts: Generated<number>;
+  charCount: Generated<number>;
+  claimToken: string | null;
+  createdAt: Generated<Timestamp>;
+  detail: string | null;
+  extractorVersion: number;
+  lastError: string | null;
+  method: string | null;
+  ocrPages: Generated<number>;
+  pageCount: number | null;
+  sourceSha256: string | null;
+  sourceSize: Int8 | null;
+  sourceUpdatedAt: Timestamp | null;
+  status: string;
+  textSha256: string | null;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
 export interface Audit {
   actorId: string | null;
   actorType: Generated<string>;
@@ -536,6 +557,8 @@ export interface Meetings {
   meetingTypeConfidence: number | null;
   meetingTypeSource: Generated<string>;
   publishedAt: Timestamp | null;
+  processingRunAt: Timestamp | null;
+  processingRunId: string | null;
   retentionUntil: Timestamp | null;
   settings: Generated<Json | null>;
   spaceId: string | null;
@@ -953,6 +976,7 @@ export interface DB {
   aiEmbeddings: AiEmbeddings;
   apiKeys: ApiKeys;
   attachments: Attachments;
+  attachmentTextExtractions: AttachmentTextExtractions;
   audit: Audit;
   authAccounts: AuthAccounts;
   authProviders: AuthProviders;

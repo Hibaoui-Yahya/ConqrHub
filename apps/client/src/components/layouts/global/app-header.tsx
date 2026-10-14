@@ -149,7 +149,7 @@ export function AppHeader() {
               button, same panel, same place in all four apps. */}
           {resolveConqrServiceUrl() && (
             <Tooltip
-              label={CONQR_SERVICE_TRIGGER_TITLE}
+              label={t(CONQR_SERVICE_TRIGGER_TITLE)}
               openDelay={250}
               withArrow
             >
@@ -157,7 +157,7 @@ export function AppHeader() {
                 variant="subtle"
                 color="dark"
                 size="sm"
-                aria-label={CONQR_SERVICE_TRIGGER_LABEL}
+                aria-label={t(CONQR_SERVICE_TRIGGER_LABEL)}
                 onClick={() => toggleConqrService()}
               >
                 <ConqrServiceIcon size={19} />

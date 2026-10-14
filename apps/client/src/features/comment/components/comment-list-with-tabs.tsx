@@ -395,6 +395,7 @@ const PageCommentInput = ({ onSave, isLoading }) => {
           onMouseDown={(e) => e.preventDefault()}
           loading={isLoading}
           style={{ position: "absolute", right: 8, bottom: 30 }}
+          aria-label={t("Send comment")}
         >
           <IconArrowUp size={16} />
         </ActionIcon>

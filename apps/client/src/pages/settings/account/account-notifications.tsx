@@ -260,7 +260,7 @@ export default function AccountNotifications() {
                           w={160}
                           data={SOUND_NAMES.map((s) => ({
                             value: s,
-                            label: t(SOUND_LABELS[s]),
+                            label: t(SOUND_LABELS[s], { context: "sound" }),
                           }))}
                           value={prefs.categories[c.key]}
                           onChange={(v) =>

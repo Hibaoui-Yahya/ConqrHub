@@ -49,6 +49,14 @@ describe("buildTodo", () => {
     ]);
   });
 
+  it("separates speakers to confirm and failed meetings, failed first", () => {
+    const items = buildTodo([], [
+      { id: "s", title: "S", status: "speakers_pending_review", startedAt: "2026-10-13T09:00:00Z" },
+      { id: "f", title: "F", status: "failed", startedAt: "2026-10-12T09:00:00Z" },
+    ]);
+    expect(items.map((i) => i.kind)).toEqual(["meeting-failed", "meeting-speakers"]);
+  });
+
   it("collapses repeated notifications on the same page", () => {
     const items = buildTodo([n({ id: "x" }), n({ id: "y" })], []);
     expect(items).toHaveLength(1);
