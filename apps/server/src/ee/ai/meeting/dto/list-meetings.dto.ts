@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListMeetingsDto {
@@ -14,4 +14,15 @@ export class ListMeetingsDto {
   @IsInt()
   @Min(0)
   offset?: number;
+
+  /** Free text matched against the title and the transcript (unified search). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  q?: string;
+
+  /** "mine": only the caller's own meetings. */
+  @IsOptional()
+  @IsIn(['mine', 'all'])
+  scope?: 'mine' | 'all';
 }

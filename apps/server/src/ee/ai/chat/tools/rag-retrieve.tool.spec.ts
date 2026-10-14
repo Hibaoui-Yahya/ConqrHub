@@ -1,7 +1,10 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Logger } from '@nestjs/common';
 import { MongoAbility } from '@casl/ability';
 import { RagRetrieveTool } from './rag-retrieve.tool';
-import { RagRetrievalService, RetrievedContext } from '../../rag/rag-retrieval.service';
+import {
+  RagRetrievalService,
+  RetrievedContext,
+} from '../../rag/rag-retrieval.service';
 import SpaceAbilityFactory from '../../../../core/casl/abilities/space-ability.factory';
 import {
   SpaceCaslAction,
@@ -37,8 +40,15 @@ function makeContext(empty = false): RetrievedContext {
   return {
     chunks: [
       {
-        kind: 'page', sourceId: 'p1', chunkText: 'Page text here',
-        title: 'Page A', score: 0.8, label: 'P1',
+        kind: 'page',
+        sourceId: 'p1',
+        chunkText: 'Page text here',
+        title: 'Page A',
+        score: 0.8,
+        label: 'P1',
+        chunkIndex: 3,
+        excerpt: 'Page text here',
+        matchedBy: ['lexical'],
       },
     ],
     contextText: '[Pages]\n[P1] Page A\nPage text here',
@@ -46,7 +56,9 @@ function makeContext(empty = false): RetrievedContext {
   };
 }
 
-function makeRetrieval(ctx = makeContext()): jest.Mocked<Pick<RagRetrievalService, 'retrieve'>> {
+function makeRetrieval(
+  ctx = makeContext(),
+): jest.Mocked<Pick<RagRetrievalService, 'retrieve'>> {
   return { retrieve: jest.fn().mockResolvedValue(ctx) } as any;
 }
 
@@ -54,9 +66,9 @@ function makeRegistry(): jest.Mocked<Pick<ChatToolRegistry, 'register'>> {
   return { register: jest.fn() } as any;
 }
 
-function makeSpaceMemberRepo(
-  spaceIds: string[] = ['sp-1', 'sp-2'],
-): { getUserSpaceIds: jest.Mock } {
+function makeSpaceMemberRepo(spaceIds: string[] = ['sp-1', 'sp-2']): {
+  getUserSpaceIds: jest.Mock;
+} {
   return { getUserSpaceIds: jest.fn().mockResolvedValue(spaceIds) };
 }
 
@@ -85,6 +97,22 @@ describe('RagRetrieveTool', () => {
 
       await expect(
         tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException when the ability factory itself rejects', async () => {
+      const spaceAbility = {
+        createForUser: jest.fn().mockRejectedValue(new Error('no such space')),
+      };
+      const tool = new RagRetrieveTool(
+        makeRetrieval() as any,
+        spaceAbility as any,
+        makeSpaceMemberRepo() as any,
+        makeRegistry() as any,
+      );
+
+      await expect(
+        tool.execute({ question: 'Q?', spaceId: 'sp-x' }, CTX),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -142,7 +170,10 @@ describe('RagRetrieveTool', () => {
       expect(spaceAbility.createForUser).not.toHaveBeenCalled();
       expect(memberRepo.getUserSpaceIds).toHaveBeenCalledWith('user-1');
       expect(retrieval.retrieve).toHaveBeenCalledWith(
-        expect.objectContaining({ spaceIds: ['sp-1', 'sp-2'], spaceId: undefined }),
+        expect.objectContaining({
+          spaceIds: ['sp-1', 'sp-2'],
+          spaceId: undefined,
+        }),
       );
     });
 
@@ -163,13 +194,66 @@ describe('RagRetrieveTool', () => {
     });
   });
 
+  describe('limit parameter', () => {
+    it('forwards limit as topK', async () => {
+      const retrieval = makeRetrieval();
+      const tool = new RagRetrieveTool(
+        retrieval as any,
+        makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
+        makeRegistry() as any,
+      );
+
+      await tool.execute({ question: 'Q?', spaceId: 'sp-1', limit: 4 }, CTX);
+
+      expect(retrieval.retrieve).toHaveBeenCalledWith(
+        expect.objectContaining({ topK: 4 }),
+      );
+    });
+
+    it('leaves topK undefined (service default) when limit is omitted', async () => {
+      const retrieval = makeRetrieval();
+      const tool = new RagRetrieveTool(
+        retrieval as any,
+        makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
+        makeRegistry() as any,
+      );
+
+      await tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX);
+
+      expect(retrieval.retrieve.mock.calls[0][0].topK).toBeUndefined();
+    });
+
+    it('rejects a limit outside 1-20 in the zod schema', () => {
+      const tool = makeTool(true);
+      expect(
+        tool.parameters.safeParse({ question: 'q', limit: 0 }).success,
+      ).toBe(false);
+      expect(
+        tool.parameters.safeParse({ question: 'q', limit: 21 }).success,
+      ).toBe(false);
+      expect(
+        tool.parameters.safeParse({ question: 'q', limit: 2.5 }).success,
+      ).toBe(false);
+      expect(
+        tool.parameters.safeParse({ question: 'q', limit: 20 }).success,
+      ).toBe(true);
+      expect(tool.parameters.safeParse({ question: 'q' }).success).toBe(true);
+    });
+  });
+
   describe('result shape', () => {
     it('returns isEmpty=false and a chunks array when context is found', async () => {
       const tool = makeTool(true, makeContext(false));
 
-      const result = await tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX);
+      const result = await tool.execute(
+        { question: 'Q?', spaceId: 'sp-1' },
+        CTX,
+      );
 
       expect(result.isEmpty).toBe(false);
+      expect(result.error).toBeUndefined();
       expect(result.chunks).toHaveLength(1);
       expect(result.chunks[0]).toMatchObject({
         label: 'P1',
@@ -177,13 +261,18 @@ describe('RagRetrieveTool', () => {
         sourceId: 'p1',
         title: 'Page A',
         score: 0.8,
+        chunkIndex: 3,
+        matchedBy: ['lexical'],
       });
     });
 
     it('returns isEmpty=true when no context found', async () => {
       const tool = makeTool(true, makeContext(true));
 
-      const result = await tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX);
+      const result = await tool.execute(
+        { question: 'Q?', spaceId: 'sp-1' },
+        CTX,
+      );
 
       expect(result.isEmpty).toBe(true);
       expect(result.chunks).toHaveLength(0);
@@ -193,18 +282,67 @@ describe('RagRetrieveTool', () => {
       // Longer than the cap, or this asserts nothing about truncation.
       const longText = 'X'.repeat(2500);
       const ctx: RetrievedContext = {
-        chunks: [{
-          kind: 'page', sourceId: 'p1', chunkText: longText,
-          title: 'T', score: 0.9, label: 'P1',
-        }],
+        chunks: [
+          {
+            kind: 'page',
+            sourceId: 'p1',
+            chunkText: longText,
+            title: 'T',
+            score: 0.9,
+            label: 'P1',
+          },
+        ],
         contextText: longText,
         isEmpty: false,
       };
       const tool = makeTool(true, ctx);
 
-      const result = await tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX);
+      const result = await tool.execute(
+        { question: 'Q?', spaceId: 'sp-1' },
+        CTX,
+      );
 
       expect(result.chunks[0].excerpt.length).toBe(2000);
+    });
+  });
+
+  describe('error surfacing', () => {
+    it('logs and returns an error field instead of a silent empty result', async () => {
+      const retrieval = {
+        retrieve: jest
+          .fn()
+          .mockRejectedValue(new Error('embedding provider timeout')),
+      };
+      const tool = new RagRetrieveTool(
+        retrieval as any,
+        makeSpaceAbility(true) as any,
+        makeSpaceMemberRepo() as any,
+        makeRegistry() as any,
+      );
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      const result = await tool.execute(
+        { question: 'Q?', spaceId: 'sp-1' },
+        CTX,
+      );
+
+      expect(result).toEqual({
+        isEmpty: true,
+        chunks: [],
+        error: 'embedding provider timeout',
+      });
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0][0]).toContain('embedding provider timeout');
+      errorSpy.mockRestore();
+    });
+
+    it('does not swallow the permission error into the error field', async () => {
+      const tool = makeTool(false);
+      await expect(
+        tool.execute({ question: 'Q?', spaceId: 'sp-1' }, CTX),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

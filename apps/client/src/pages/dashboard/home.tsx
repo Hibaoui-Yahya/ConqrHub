@@ -1,12 +1,13 @@
-import { Container, Space } from "@mantine/core";
-import HomeTabs from "@/features/home/components/home-tabs";
-import HomeGreeting from "@/features/home/components/home-greeting";
-import HomeAiPrompt from "@/features/home/components/home-ai-prompt";
-import SpaceCarousel from "@/features/space/components/space-carousel.tsx";
+import { Container } from "@mantine/core";
+import HomeWorkspace from "@/features/home/components/home-workspace";
 import { getAppName } from "@/lib/config.ts";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 
+/**
+ * Home: search first, then what waits for me, where I was, what changed in
+ * my spaces (and, for space managers, the state of their knowledge).
+ */
 export default function Home() {
   const { t } = useTranslation();
 
@@ -17,19 +18,8 @@ export default function Home() {
           {t("Home")} - {getAppName()}
         </title>
       </Helmet>
-      <Container size={"900"} pt="xl">
-        {/* Plane-style welcome header (greeting + date), then the AI prompt */}
-        <HomeGreeting />
-
-        <HomeAiPrompt />
-
-        <Space h="xl" />
-
-        <SpaceCarousel />
-
-        <Space h="xl" />
-
-        <HomeTabs />
+      <Container size={1100} pt="xl" pb="xl">
+        <HomeWorkspace />
       </Container>
     </>
   );

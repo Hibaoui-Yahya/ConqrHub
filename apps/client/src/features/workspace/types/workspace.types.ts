@@ -29,6 +29,10 @@ export interface IWorkspace {
   restrictApiToAdmins?: boolean;
   allowMemberTemplates?: boolean;
   aiStt?: boolean;
+  defaultLocale?: string; // used for update
+  defaultTimezone?: string; // used for update
+  mailFromName?: string; // used for update
+  meetSettings?: IWorkspaceMeetSettings; // used for update
 }
 
 export interface IWorkspaceSettings {
@@ -36,6 +40,24 @@ export interface IWorkspaceSettings {
   sharing?: IWorkspaceSharingSettings;
   api?: IWorkspaceApiSettings;
   templates?: IWorkspaceTemplateSettings;
+  general?: IWorkspaceGeneralSettings;
+  meet?: IWorkspaceMeetSettings;
+}
+
+/** Paramètres › Entreprise › Général — defaults for every member. */
+export interface IWorkspaceGeneralSettings {
+  defaultLocale?: string | null;
+  defaultTimezone?: string | null;
+  mailFromName?: string | null;
+}
+
+/** Paramètres › Applications › ConqrMeet — company-wide recording rules. */
+export interface IWorkspaceMeetSettings {
+  consentRequired?: boolean;
+  audioRetentionDays?: number | null;
+  defaultLanguage?: string | null;
+  publishSpaceId?: string | null;
+  autoPublish?: boolean;
 }
 
 export interface IWorkspaceApiSettings {

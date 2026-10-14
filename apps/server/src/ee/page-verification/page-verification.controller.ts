@@ -12,13 +12,16 @@ import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator'
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { PageVerificationService } from './page-verification.service';
 import {
+  BulkVerifyDto,
   CreateVerificationDto,
   DeleteVerificationDto,
   MarkObsoleteDto,
   RejectApprovalDto,
   SubmitForApprovalDto,
+  UnverifiedPagesDto,
   UpdateVerificationDto,
   VerificationInfoDto,
+  VerificationOverviewDto,
   VerificationsListDto,
   VerifyPageDto,
 } from './dto/page-verification.dto';
@@ -111,6 +114,39 @@ export class PageVerificationController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     await this.verificationService.markObsolete(dto.pageId, user, workspace);
+  }
+
+  /** Verification coverage counts over the caller's accessible spaces (or one space). */
+  @HttpCode(HttpStatus.OK)
+  @Post('verification-overview')
+  async verificationOverview(
+    @Body() dto: VerificationOverviewDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.verificationService.getVerificationOverview(dto, user, workspace);
+  }
+
+  /** Pages invisible to rag_retrieve, paged (keyset cursor on updatedAt|id). */
+  @HttpCode(HttpStatus.OK)
+  @Post('unverified')
+  async unverifiedPages(
+    @Body() dto: UnverifiedPagesDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.verificationService.listUnverifiedPagesPaged(dto, user, workspace);
+  }
+
+  /** Verify up to 100 pages in one call; per-page failures are collected, never thrown. */
+  @HttpCode(HttpStatus.OK)
+  @Post('bulk-verify')
+  async bulkVerify(
+    @Body() dto: BulkVerifyDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.verificationService.bulkVerify(dto, user, workspace);
   }
 
   @HttpCode(HttpStatus.OK)

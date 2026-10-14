@@ -43,6 +43,23 @@ export function isCloud(): boolean {
   return castToBoolean(getConfigValue("CLOUD"));
 }
 
+/** Public URLs of the other suite applications deployed next to this Hub. */
+export function getSuiteAppUrls(): {
+  meet?: string;
+  plane?: string;
+  service?: string;
+} {
+  const read = (key: string) => {
+    const value = getConfigValue(key);
+    return value && /^https?:\/\//.test(value) ? value : undefined;
+  };
+  return {
+    meet: read("MEET_APP_URL"),
+    plane: read("PLANE_APP_URL"),
+    service: read("SERVICE_APP_URL"),
+  };
+}
+
 export function getAvatarUrl(
   avatarUrl: string,
   type: AvatarIconType = AvatarIconType.AVATAR,

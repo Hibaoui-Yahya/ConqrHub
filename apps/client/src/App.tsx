@@ -8,8 +8,12 @@ import Page from "@/pages/page/page";
 import AccountSettings from "@/pages/settings/account/account-settings";
 import WorkspaceMembers from "@/pages/settings/workspace/workspace-members";
 import WorkspaceSettings from "@/pages/settings/workspace/workspace-settings";
-import Groups from "@/pages/settings/group/groups";
 import GroupInfo from "./pages/settings/group/group-info";
+import AccountMeetings from "@/pages/settings/account/account-meetings.tsx";
+import AccountNotifications from "@/pages/settings/account/account-notifications.tsx";
+import HubAppSettings from "@/pages/settings/apps/hub-app-settings.tsx";
+import MeetAppSettings from "@/pages/settings/apps/meet-app-settings.tsx";
+import Connections from "@/pages/settings/connections/connections.tsx";
 import Spaces from "@/pages/settings/space/spaces.tsx";
 import { Error404 } from "@/components/ui/error-404.tsx";
 import AccountPreferences from "@/pages/settings/account/account-preferences.tsx";
@@ -42,6 +46,7 @@ import WorkspaceApiKeys from "@/ee/api-key/pages/workspace-api-keys";
 import AiSettings from "@/ee/ai/pages/ai-settings.tsx";
 import AuditLogs from "@/ee/audit/pages/audit-logs.tsx";
 import VerifiedPages from "@/ee/page-verification/pages/verified-pages.tsx";
+import KnowledgeBasePage from "@/ee/page-verification/pages/knowledge-base.tsx";
 import DocHealthPage from "@/features/doc-health/pages/doc-health-page.tsx";
 import TemplateList from "@/ee/template/pages/template-list";
 import TemplateEditor from "@/ee/template/pages/template-editor";
@@ -113,23 +118,39 @@ export default function App() {
 
 
           <Route path={"/settings"}>
+            {/* One settings page for the whole suite: /settings lands on the
+                profile; ConqrMeet sends people here with ?from=meet. */}
+            <Route index element={<Navigate to="/settings/account/profile" replace />} />
             <Route path={"account/profile"} element={<AccountSettings />} />
             <Route
               path={"account/preferences"}
               element={<AccountPreferences />}
             />
+            <Route path={"account/meetings"} element={<AccountMeetings />} />
+            <Route
+              path={"account/notifications"}
+              element={<AccountNotifications />}
+            />
             <Route path={"account/api-keys"} element={<UserApiKeys />} />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />
             <Route path={"api-keys"} element={<WorkspaceApiKeys />} />
-            <Route path={"groups"} element={<Groups />} />
+            {/* Groups became a tab of "Members and groups". */}
+            <Route
+              path={"groups"}
+              element={<Navigate to="/settings/members?tab=groups" replace />}
+            />
             <Route path={"groups/:groupId"} element={<GroupInfo />} />
+            <Route path={"apps/hub"} element={<HubAppSettings />} />
+            <Route path={"apps/meet"} element={<MeetAppSettings />} />
+            <Route path={"connections"} element={<Connections />} />
             <Route path={"spaces"} element={<Spaces />} />
             <Route path={"sharing"} element={<Shares />} />
             <Route path={"security"} element={<Security />} />
             <Route path={"ai"} element={<AiSettings />} />
             <Route path={"ai/mcp"} element={<AiSettings />} />
             <Route path={"audit"} element={<AuditLogs />} />
+            <Route path={"knowledge-base"} element={<KnowledgeBasePage />} />
             <Route path={"verifications"} element={<VerifiedPages />} />
             <Route path={"health"} element={<DocHealthPage />} />
             <Route path={"integrations"} element={<IntegrationsSettings />} />

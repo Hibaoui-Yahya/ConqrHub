@@ -4,8 +4,10 @@ import {
   IconChevronDown,
   IconLoader2,
 } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 import type { AiChatToolCall } from "../types/ai-chat.types";
-import ChatToolResult, { TOOL_LABELS } from "./chat-tool-result";
+import ChatToolResult from "./chat-tool-result";
+import { getToolLabel, getToolMainArg } from "../utils/tool-labels";
 import classes from "../styles/chat-message.module.css";
 
 type Props = {
@@ -14,6 +16,7 @@ type Props = {
 };
 
 export default function ChatToolGroup({ toolCalls, isStreaming }: Props) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   if (!toolCalls || toolCalls.length === 0) return null;
@@ -23,9 +26,12 @@ export default function ChatToolGroup({ toolCalls, isStreaming }: Props) {
       ? [...toolCalls].reverse().find((tc) => tc.result === undefined)
       : undefined;
 
-  const activeLabel = activeCall
-    ? TOOL_LABELS[activeCall.name] || activeCall.name
-    : null;
+  let activeLabel: string | null = null;
+  if (activeCall) {
+    const label = getToolLabel(activeCall.name, t);
+    const arg = getToolMainArg(activeCall);
+    activeLabel = arg ? t("{{label}}: “{{arg}}”", { label, arg }) : label;
+  }
 
   return (
     <div className={classes.toolGroup}>
@@ -41,7 +47,9 @@ export default function ChatToolGroup({ toolCalls, isStreaming }: Props) {
           <IconChevronRight size={12} />
         )}
         <span className={classes.toolGroupLabel}>
-          {activeLabel ? `${activeLabel}…` : `Steps ${toolCalls.length}`}
+          {activeLabel
+            ? `${activeLabel}…`
+            : t("{{count}} steps", { count: toolCalls.length })}
         </span>
       </div>
       {expanded && (

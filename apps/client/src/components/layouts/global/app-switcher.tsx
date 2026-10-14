@@ -31,13 +31,13 @@ import { getSpacePlaneTarget } from "@/features/integration/services/integration
 const PLANE_URL =
   process.env.PLANE_APP_URL ||
   (import.meta as any)?.env?.VITE_PLANE_URL ||
-  "http://localhost";
+  (import.meta.env.DEV ? "http://localhost" : "");
 
 /** ConqrMeet base URL (build-time), then legacy Vite var, then dev default. */
 const MEET_URL =
   process.env.MEET_APP_URL ||
   (import.meta as any)?.env?.VITE_MEET_URL ||
-  "http://localhost:5273";
+  (import.meta.env.DEV ? "http://localhost:5273" : "");
 
 /**
  * ConqrService base URL (build-time), then legacy Vite var, then dev default.
@@ -45,7 +45,7 @@ const MEET_URL =
 const SERVICE_URL =
   process.env.SERVICE_APP_URL ||
   (import.meta as any)?.env?.VITE_SERVICE_URL ||
-  "http://localhost:5175";
+  (import.meta.env.DEV ? "http://localhost:5175" : "");
 
 type SuiteApp = {
   key: string;
@@ -56,6 +56,7 @@ type SuiteApp = {
   current?: boolean;
   icon: typeof IconNotebook;
   color: string;
+  logo?: string;
 };
 
 interface UseSuiteAppsProps {
@@ -71,7 +72,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
   const { data: target } = useQuery({
     queryKey: ["space-plane-target", space?.id],
     queryFn: () => getSpacePlaneTarget(space!.id),
-    enabled: Boolean(space?.id),
+    enabled: Boolean(space?.id && PLANE_URL),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -88,6 +89,7 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       current: true,
       icon: IconNotebook,
       color: "var(--brand-default)",
+      logo: "/branding/conqrhub-mark.svg",
     },
     {
       key: "plane",
@@ -104,32 +106,39 @@ function useSuiteApps({ t }: UseSuiteAppsProps): SuiteApp[] {
       key: "meet",
       name: t("ConqrMeet"),
       desc: t("Meeting intelligence"),
-      href: MEET_URL,
+      href: MEET_URL
+        ? `${MEET_URL.replace(/\/+$/, "")}/auth/login?returnTo=%2F`
+        : "",
       external: true,
       icon: IconMicrophone,
       color: "var(--extended-color-teal-500, #12b886)",
+      logo: "/branding/conqrmeet-mark.svg",
     },
   ];
 
   apps.push({
-      key: "service",
-      name: t("ConqrService"),
-      desc: t("Service management"),
-      href: SERVICE_URL,
-      external: true,
-      icon: IconClipboardList,
-      color: "var(--extended-color-orange-500, #e8590c)",
+    key: "service",
+    name: t("ConqrService"),
+    desc: t("Service management"),
+    href: SERVICE_URL,
+    external: true,
+    icon: IconClipboardList,
+    color: "var(--extended-color-orange-500, #e8590c)",
   });
 
-  return apps;
+  return apps.filter((app) => !app.external || Boolean(app.href));
 }
 
-function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void }) {
+function AppTile({ app }: { app: SuiteApp }) {
   const inner = (
     <>
-      <Box className={classes.tileIcon} style={{ background: app.color }}>
-        <app.icon size={17} stroke={2} color="#fff" />
-      </Box>
+      {app.logo ? (
+        <img className={classes.tileIcon} src={app.logo} alt="" />
+      ) : (
+        <Box className={classes.tileIcon} style={{ background: app.color }}>
+          <app.icon size={17} stroke={2} color="#fff" />
+        </Box>
+      )}
       <div className={classes.tileText}>
         <Group gap={6} wrap="nowrap">
           <Text className={classes.tileName}>{app.name}</Text>
@@ -143,29 +152,31 @@ function AppTile({ app, onNavigate }: { app: SuiteApp; onNavigate: () => void })
     </>
   );
 
-  const cls = `${classes.tile} ${app.current ? classes.tileCurrent : ""}`;
+  const cls = `${classes.menuItemReset} ${classes.tile} ${app.current ? classes.tileCurrent : ""}`;
 
   if (app.external) {
     return (
-      <UnstyledButton
+      <Menu.Item
         component="a"
         href={app.href}
         className={cls}
-        onClick={onNavigate}
+        styles={{
+          itemLabel: { display: "flex", alignItems: "center", gap: 12 },
+        }}
       >
         {inner}
-      </UnstyledButton>
+      </Menu.Item>
     );
   }
   return (
-    <UnstyledButton
+    <Menu.Item
       component={Link}
       to={app.href}
       className={cls}
-      onClick={onNavigate}
+      styles={{ itemLabel: { display: "flex", alignItems: "center", gap: 12 } }}
     >
       {inner}
-    </UnstyledButton>
+    </Menu.Item>
   );
 }
 
@@ -183,7 +194,10 @@ export default function AppSwitcher() {
     >
       <Menu.Target>
         <Tooltip label={t("Switch apps")} openDelay={300} withArrow>
-          <UnstyledButton className={classes.trigger} aria-label={t("Switch apps")}>
+          <UnstyledButton
+            className={classes.trigger}
+            aria-label={t("Switch apps")}
+          >
             <IconLayoutGrid size={19} stroke={2} />
           </UnstyledButton>
         </Tooltip>
@@ -191,9 +205,7 @@ export default function AppSwitcher() {
       <Menu.Dropdown className={classes.dropdown}>
         <Text className={classes.dropdownLabel}>{t("Conqr suite")}</Text>
         {suiteApps.map((app) => (
-          <Menu.Item key={app.key} component="div" className={classes.menuItemReset}>
-            <AppTile app={app} onNavigate={() => {}} />
-          </Menu.Item>
+          <AppTile key={app.key} app={app} />
         ))}
       </Menu.Dropdown>
     </Menu>

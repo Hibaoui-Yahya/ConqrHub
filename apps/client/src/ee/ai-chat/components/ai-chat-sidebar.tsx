@@ -137,7 +137,7 @@ export default function AiChatSidebar() {
 
       <TextInput
         className={classes.searchInput}
-        placeholder="Search chats..."
+        placeholder={t("Search chats...")}
         leftSection={<IconSearch size={14} />}
         size="xs"
         value={search}

@@ -51,6 +51,12 @@ function makeMessageRepo(messages: AiChatMessage[] = []): jest.Mocked<AiChatMess
     insert: jest.fn().mockResolvedValue({ id: 'msg-1' }),
     countByChat: jest.fn().mockResolvedValue(0),
     searchByWorkspace: jest.fn().mockResolvedValue([]),
+    // Workspace-scoped like the real repo: a message from another workspace
+    // is invisible.
+    findById: jest.fn().mockImplementation(async (id, wsId) =>
+      messages.find((m) => m.id === id && m.workspaceId === wsId),
+    ),
+    updateMetadata: jest.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -191,5 +197,61 @@ describe('AiChatService.search()', () => {
     const results = await svc.search({ query: 'nothing' }, USER_A);
 
     expect(results).toEqual([]);
+  });
+});
+
+describe('AiChatService.setMessageFeedback()', () => {
+  const assistantMsg = (overrides: Partial<AiChatMessage> = {}): AiChatMessage =>
+    ({
+      id: 'msg-1',
+      chatId: 'chat-1',
+      workspaceId: WS_A,
+      role: 'assistant',
+      ...overrides,
+    }) as AiChatMessage;
+
+  it('merges a feedback block into the message metadata for the chat owner', async () => {
+    const repo = makeChatRepo(makeChat());
+    const msgRepo = makeMessageRepo([assistantMsg()]);
+    const svc = makeSvc(repo, msgRepo);
+
+    const out = await svc.setMessageFeedback('msg-1', USER_A, 'down', '  wrong page  ');
+
+    expect(out).toEqual({ ok: true });
+    expect(msgRepo.updateMetadata).toHaveBeenCalledTimes(1);
+    const [id, ws, patch] = (msgRepo.updateMetadata as jest.Mock).mock.calls[0];
+    expect(id).toBe('msg-1');
+    expect(ws).toBe(WS_A);
+    expect(patch.feedback).toMatchObject({ rating: 'down', comment: 'wrong page', userId: USER_A.id });
+    expect(typeof patch.feedback.at).toBe('string');
+  });
+
+  it('stores comment as null when omitted or blank', async () => {
+    const repo = makeChatRepo(makeChat());
+    const msgRepo = makeMessageRepo([assistantMsg()]);
+    const svc = makeSvc(repo, msgRepo);
+
+    await svc.setMessageFeedback('msg-1', USER_A, 'up', '   ');
+
+    const patch = (msgRepo.updateMetadata as jest.Mock).mock.calls[0][2];
+    expect(patch.feedback.comment).toBeNull();
+  });
+
+  it('throws NotFoundException when the message does not exist in the workspace', async () => {
+    const repo = makeChatRepo(makeChat());
+    const msgRepo = makeMessageRepo([assistantMsg({ workspaceId: WS_B })]);
+    const svc = makeSvc(repo, msgRepo);
+
+    await expect(svc.setMessageFeedback('msg-1', USER_A, 'up')).rejects.toThrow(NotFoundException);
+    expect(msgRepo.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException when the chat belongs to another user', async () => {
+    const repo = makeChatRepo(makeChat({ creatorId: USER_A.id }));
+    const msgRepo = makeMessageRepo([assistantMsg()]);
+    const svc = makeSvc(repo, msgRepo);
+
+    await expect(svc.setMessageFeedback('msg-1', USER_B, 'up')).rejects.toThrow(NotFoundException);
+    expect(msgRepo.updateMetadata).not.toHaveBeenCalled();
   });
 });

@@ -39,6 +39,12 @@ export interface AiEmbeddings {
   dim: number;
   contentHash: string;
   metadata: Json | null;
+  /**
+   * Generated tsvector over f_unaccent(chunk_text) with the 'simple' config
+   * (migration 20261013T120000-ai-embeddings-lexical). Never written by the
+   * application; read only through EmbeddingRepository.lexicalSearch.
+   */
+  tsv: Generated<string>;
   createdAt: Generated<Timestamp>;
   updatedAt: Generated<Timestamp>;
 }

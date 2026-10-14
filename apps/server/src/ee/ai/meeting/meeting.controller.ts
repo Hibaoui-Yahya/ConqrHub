@@ -29,6 +29,12 @@ import { ListMeetingsDto } from './dto/list-meetings.dto';
 import { AiOutputDto } from './dto/ai-output.dto';
 import { ProcessMeetingDto } from './dto/process-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
+import { SaveMarkersDto } from './dto/save-markers.dto';
+import { PublishBundleDto } from './dto/publish-bundle.dto';
+import { MeetingAccessGuard } from './meeting-access.guard';
+import { isWorkspaceManager } from './meeting-access.util';
+import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
+import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
@@ -38,13 +44,18 @@ import { ApproveProposalDto } from './dto/approve-proposal.dto';
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
 
-@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard)
+// MeetingAccessGuard: every /:id route answers 404 unless the caller may
+// read that meeting (author, member of its space, workspace manager).
+@UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
 @RequireAiFeature('stt')
 @Controller('ai/meeting')
 export class MeetingController {
   private readonly logger = new Logger(MeetingController.name);
 
-  constructor(private readonly meetingService: MeetingService) {}
+  constructor(
+    private readonly meetingService: MeetingService,
+    private readonly spaceMembers: SpaceMemberRepo,
+  ) {}
 
   // ──────────── POST /start ────────────
 
@@ -60,6 +71,7 @@ export class MeetingController {
       consent: dto.consent,
       meetingType: dto.meetingType,
       languageConfig: dto.languageConfig,
+      templateId: dto.templateId,
     });
   }
 
@@ -100,6 +112,7 @@ export class MeetingController {
       consent: fields.consent?.value === 'true',
       title: fields.title?.value,
       meetingType: fields.meetingType?.value,
+      templateId: fields.templateId?.value,
       languageConfig: fields.languageConfig
         ? JSON.parse(fields.languageConfig.value)
         : undefined,
@@ -162,11 +175,20 @@ export class MeetingController {
   @Get()
   async list(
     @Query() query: ListMeetingsDto,
+    @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
+    const isManager = isWorkspaceManager(user.role);
     return this.meetingService.list(workspace.id, {
       limit: query.limit,
       offset: query.offset,
+      q: query.q,
+      mine: query.scope === 'mine',
+      viewer: {
+        id: user.id,
+        isManager,
+        spaceIds: isManager ? [] : await this.spaceMembers.getUserSpaceIds(user.id),
+      },
     });
   }
 
@@ -174,24 +196,52 @@ export class MeetingController {
 
   @HttpCode(HttpStatus.OK)
   @Get(':id')
-  async get(@Param('id') id: string) {
-    return this.meetingService.getDetail(id);
+  async get(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getDetail(id, { id: user.id, role: user.role, workspaceId: workspace.id });
   }
 
   // ──────────── PATCH /:id (editable metadata) ────────────
 
   @HttpCode(HttpStatus.OK)
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateMeetingDto) {
-    return this.meetingService.update(id, { title: dto.title });
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateMeetingDto,
+    @AuthUser() user: User,
+  ) {
+    return this.meetingService.update(id, { title: dto.title, spaceId: dto.spaceId, user });
+  }
+
+  // ──────────── POST /:id/markers (moments marked while recording) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/markers')
+  async saveMarkers(
+    @Param('id') id: string,
+    @Body() dto: SaveMarkersDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveMarkers(workspace.id, id, dto.markers);
   }
 
   // ──────────── DELETE /:id ────────────
 
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    await this.meetingService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @Query('hubPages') hubPages: string | undefined,
+    @AuthUser() user: User,
+  ) {
+    // 204 by default; the Hub pages outcome is not needed by the caller.
+    await this.meetingService.delete(id, {
+      hubPages: hubPages === 'trash' ? 'trash' : 'keep',
+      user,
+    });
   }
 
   // ──────────── POST /:id/ai-output ────────────
@@ -285,11 +335,60 @@ export class MeetingController {
     @Param('id') id: string,
     @Param('docId') docId: string,
     @Body() dto: PublishDocumentDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
   ) {
+    await this.meetingService.assertMeetingInWorkspace(id, workspace.id);
+    await this.meetingService.assertCanPublishIn(user, workspace.id, dto.spaceId);
     return this.meetingService.publishDocument(id, docId, {
       spaceId: dto.spaceId,
       parentPageId: dto.parentPageId,
     });
+  }
+
+  // ──────────── POST /:id/publish-bundle ("Publier dans Hub") ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/publish-bundle')
+  async publishBundle(
+    @Param('id') id: string,
+    @Body() dto: PublishBundleDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.publishBundle(
+      workspace.id,
+      id,
+      {
+        spaceId: dto.spaceId,
+        parentPageId: dto.parentPageId,
+        includeTranscript: dto.includeTranscript,
+      },
+      user,
+    );
+  }
+
+  // ──────────── competency evaluation (recruitment interviews) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/evaluation/generate')
+  async generateEvaluation(
+    @Param('id') id: string,
+    @Body() dto: GenerateEvaluationDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.generateEvaluation(workspace.id, id, dto.criteria);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/evaluation')
+  async saveEvaluation(
+    @Param('id') id: string,
+    @Body() dto: SaveEvaluationDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveEvaluation(workspace.id, id, dto, user.id);
   }
 
   // ──────────── GET /:id/proposals ────────────

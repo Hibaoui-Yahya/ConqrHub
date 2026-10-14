@@ -1,0 +1,33 @@
+.accountChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 2px 10px 2px 2px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle, var(--mantine-color-default-border));
+  max-width: 240px;
+
+  @mixin hover {
+    background-color: var(--bg-layer-transparent-hover, var(--mantine-color-default-hover));
+  }
+}
+
+.accountText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 170px;
+  text-align: left;
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .accountChip {
+    padding: 2px;
+    border-color: transparent;
+  }
+}

@@ -26,12 +26,19 @@ import useAuth from "@/features/auth/hooks/use-auth.ts";
 import { CustomAvatar } from "@/components/ui/custom-avatar.tsx";
 import { useTranslation } from "react-i18next";
 import { AvatarIconType } from "@/features/attachments/types/attachment.types.ts";
+import { useConqrTheme } from "@/features/user/theme/use-conqr-theme.ts";
+import classes from "./top-menu.module.css";
 
 export default function TopMenu() {
   const { t } = useTranslation();
   const [currentUser] = useAtom(currentUserAtom);
   const { logout } = useAuth();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const [, setPreference] = useConqrTheme();
+  const chooseScheme = (scheme: "light" | "dark" | "auto") => {
+    setColorScheme(scheme);
+    setPreference({ theme: scheme === "auto" ? "system" : scheme });
+  };
 
   const user = currentUser?.user;
   const workspace = currentUser?.workspace;
@@ -43,15 +50,27 @@ export default function TopMenu() {
   return (
     <Menu width={250} position="bottom-end" withArrow shadow={"lg"}>
       <Menu.Target>
-        {/* Avatar-only trigger — Plane's top-right user menu is a lone user
-            avatar; the workspace identity lives in the sidebar-bottom menu. */}
-        <UnstyledButton aria-label={t("Account menu")}>
+        {/* Account chip: photo + name + company, so people see who is
+            signed in. Below 1024px only the avatar remains. */}
+        <UnstyledButton
+          aria-label={t("Account menu") + " — " + user.name}
+          className={classes.accountChip}
+        >
           <CustomAvatar
             avatarUrl={user.avatarUrl}
             name={user.name}
             variant="filled"
             size="sm"
           />
+          <span className={classes.accountText}>
+            <Text size="xs" fw={600} lineClamp={1} lh={1.2}>
+              {user.name}
+            </Text>
+            <Text size="xs" c="dimmed" lineClamp={1} lh={1.2} fz={11}>
+              {workspace.name}
+            </Text>
+          </span>
+          <IconChevronDown size={14} className={classes.accountText} />
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
@@ -119,7 +138,7 @@ export default function TopMenu() {
 
           <Menu.Sub.Dropdown>
             <Menu.Item
-              onClick={() => setColorScheme("light")}
+              onClick={() => chooseScheme("light")}
               leftSection={<IconSun size={16} />}
               rightSection={
                 colorScheme === "light" ? <IconCheck size={16} /> : null
@@ -128,7 +147,7 @@ export default function TopMenu() {
               {t("Light")}
             </Menu.Item>
             <Menu.Item
-              onClick={() => setColorScheme("dark")}
+              onClick={() => chooseScheme("dark")}
               leftSection={<IconMoon size={16} />}
               rightSection={
                 colorScheme === "dark" ? <IconCheck size={16} /> : null
@@ -137,7 +156,7 @@ export default function TopMenu() {
               {t("Dark")}
             </Menu.Item>
             <Menu.Item
-              onClick={() => setColorScheme("auto")}
+              onClick={() => chooseScheme("auto")}
               leftSection={<IconDeviceDesktop size={16} />}
               rightSection={
                 colorScheme === "auto" ? <IconCheck size={16} /> : null

@@ -20,6 +20,8 @@ import { useState } from "react";
 import { useMarkReadMutation } from "../queries/notification-query";
 import { buildPageUrl } from "@/features/page/page.utils";
 import { formatRelativeTime } from "../notification.utils";
+import { isMeetingNotification, notificationText } from "../notification-text";
+import { MeetingNotificationIcon } from "./meeting-notification-icon";
 import classes from "../notification.module.css";
 
 type NotificationItemProps = {
@@ -63,6 +65,8 @@ export function NotificationItem({
         return "Page verification expires soon";
       case "page.verification_expired":
         return "Page verification has expired";
+      case "page.verification_invalidated":
+        return "<bold>{{name}}</bold> edited “{{page}}”: the page leaves the knowledge base until it is verified again";
       default:
         return "";
     }
@@ -76,6 +80,10 @@ export function NotificationItem({
           notification.page.title,
         )
       : undefined;
+
+  const meeting = isMeetingNotification(notification.type)
+    ? notificationText(notification, t)
+    : null;
 
   const markReadIfNeeded = () => {
     if (isUnread) {
@@ -93,6 +101,82 @@ export function NotificationItem({
     e.stopPropagation();
     markReadIfNeeded();
   };
+
+  if (meeting) {
+    const content = (
+      <Group wrap="nowrap" align="flex-start" gap="sm">
+        <MeetingNotificationIcon type={notification.type} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text size="sm" fw={600} lineClamp={2}>
+            {meeting.title}
+          </Text>
+          {meeting.detail && (
+            <Text size="xs" c="dimmed" lineClamp={2} mt={2}>
+              {meeting.detail}
+            </Text>
+          )}
+          <Text
+            size="xs"
+            c="var(--mantine-primary-color-filled)"
+            fw={600}
+            mt={2}
+          >
+            {notification.type === "meeting.published"
+              ? "ConqrMeet → ConqrHub"
+              : "ConqrMeet"}
+          </Text>
+        </div>
+        <Group gap={4} wrap="nowrap" align="center" style={{ flexShrink: 0 }}>
+          {hovered && isUnread ? (
+            <Tooltip label={t("Mark as read")} withArrow>
+              <ActionIcon variant="subtle" size="sm" onClick={handleMarkRead}>
+                <IconCheck size={14} />
+              </ActionIcon>
+            </Tooltip>
+          ) : (
+            <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+              {formatRelativeTime(notification.createdAt)}
+            </Text>
+          )}
+          {isUnread && (
+            <IconPointFilled
+              size={12}
+              color="var(--mantine-color-blue-filled)"
+              style={{ flexShrink: 0 }}
+            />
+          )}
+        </Group>
+      </Group>
+    );
+    if (!pageUrl && meeting.href) {
+      return (
+        <UnstyledButton
+          component="a"
+          href={meeting.href}
+          onClick={handleClick}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          w="100%"
+          className={classes.notificationItem}
+        >
+          {content}
+        </UnstyledButton>
+      );
+    }
+    return (
+      <UnstyledButton
+        component={Link}
+        to={pageUrl ?? ""}
+        onClick={handleClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        w="100%"
+        className={classes.notificationItem}
+      >
+        {content}
+      </UnstyledButton>
+    );
+  }
 
   return (
     <UnstyledButton
@@ -124,7 +208,10 @@ export function NotificationItem({
           <Text size="sm" lineClamp={2}>
             <Trans
               i18nKey={getNotificationMessageKey()}
-              values={{ name: notification.actor?.name }}
+              values={{
+                name: notification.actor?.name,
+                page: notification.page?.title || t("Untitled"),
+              }}
               components={{ bold: <Text span fw={600} /> }}
             />
           </Text>
@@ -139,7 +226,10 @@ export function NotificationItem({
                 <IconFileDescription
                   size={14}
                   stroke={1.5}
-                  style={{ flexShrink: 0, color: "var(--mantine-color-dimmed)" }}
+                  style={{
+                    flexShrink: 0,
+                    color: "var(--mantine-color-dimmed)",
+                  }}
                 />
               )}
               <Text size="xs" c="dimmed" lineClamp={1}>
@@ -152,11 +242,7 @@ export function NotificationItem({
         <Group gap={4} wrap="nowrap" align="center" style={{ flexShrink: 0 }}>
           {hovered && isUnread ? (
             <Tooltip label={t("Mark as read")} withArrow>
-              <ActionIcon
-                variant="subtle"
-                size="sm"
-                onClick={handleMarkRead}
-              >
+              <ActionIcon variant="subtle" size="sm" onClick={handleMarkRead}>
                 <IconCheck size={14} />
               </ActionIcon>
             </Tooltip>

@@ -18,6 +18,18 @@ import { getPageTitle } from '../../../common/helpers';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 
+/**
+ * Payload of QueueJob.PAGE_VERIFICATION_INVALIDATED, enqueued by
+ * PageVerificationService.invalidateOnContentChange when a content save
+ * resets a valid verification to draft (and drops the page from RAG).
+ */
+export interface IVerificationInvalidatedNotificationJob {
+  pageId: string;
+  spaceId: string;
+  workspaceId: string;
+  verificationId: string;
+}
+
 @Injectable()
 export class VerificationNotificationService {
   constructor(
@@ -203,6 +215,83 @@ export class VerificationNotificationService {
           pageUrl: basePageUrl,
         }),
       );
+    }
+  }
+
+  /**
+   * A content save reset a valid verification to draft: the page silently
+   * left the knowledge base. Tell its verifiers (in-app only; no email
+   * template exists for this yet) so someone re-verifies it. The editor is
+   * skipped when they are a verifier themselves, and each verifier is told
+   * once per verification cycle (no repeat for every subsequent save until
+   * the page is verified again).
+   */
+  async processVerificationInvalidated(
+    data: IVerificationInvalidatedNotificationJob,
+  ) {
+    const verification = await this.db
+      .selectFrom('pageVerifications')
+      .selectAll()
+      .where('id', '=', data.verificationId)
+      .executeTakeFirst();
+
+    if (!verification) return;
+    // Re-verified or obsoleted between enqueue and processing: stale job.
+    if (verification.status !== 'draft') return;
+
+    const verifierRows = await this.db
+      .selectFrom('pageVerifiers')
+      .select('userId')
+      .where('pageVerificationId', '=', verification.id)
+      .execute();
+    const verifierIds = verifierRows.map((r) => r.userId);
+    if (verifierIds.length === 0) return;
+
+    const page = await this.db
+      .selectFrom('pages')
+      .select(['lastUpdatedById'])
+      .where('id', '=', verification.pageId)
+      .executeTakeFirst();
+    const actorId = page?.lastUpdatedById ?? null;
+
+    const candidates = verifierIds.filter((id) => id !== actorId);
+    if (candidates.length === 0) return;
+
+    const accessible = await this.filterAccessibleRecipients(
+      candidates,
+      verification.pageId,
+      verification.spaceId,
+    );
+    if (accessible.length === 0) return;
+
+    // One notice per verification cycle: anything created after the last
+    // successful verify belongs to the current draft period.
+    let dedupe = this.db
+      .selectFrom('notifications')
+      .select('userId')
+      .where('pageVerificationId', '=', verification.id)
+      .where('type', '=', NotificationType.PAGE_VERIFICATION_INVALIDATED);
+    if (verification.verifiedAt) {
+      dedupe = dedupe.where('createdAt', '>', verification.verifiedAt);
+    }
+    const alreadyNotified = new Set(
+      (await dedupe.execute()).map((r) => r.userId),
+    );
+    const recipients = accessible.filter((id) => !alreadyNotified.has(id));
+    if (recipients.length === 0) return;
+
+    const invalidatedAt = new Date().toISOString();
+    for (const userId of recipients) {
+      await this.notificationService.create({
+        userId,
+        workspaceId: verification.workspaceId,
+        type: NotificationType.PAGE_VERIFICATION_INVALIDATED,
+        actorId,
+        pageId: verification.pageId,
+        spaceId: verification.spaceId,
+        pageVerificationId: verification.id,
+        data: { invalidatedAt },
+      });
     }
   }
 

@@ -20,7 +20,13 @@ export default function AccountSettings() {
           {t("My Profile")} - {getAppName()}
         </title>
       </Helmet>
-      <SettingsTitle title={t("My Profile")} />
+      <SettingsTitle
+        title={t("My Profile")}
+        description={t(
+          "Your name, your photo and the security of your account, for the whole suite.",
+        )}
+        scope="account"
+      />
 
       <AccountAvatar />
 

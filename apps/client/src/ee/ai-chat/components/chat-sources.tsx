@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Badge } from "@mantine/core";
+import { Badge, Tooltip } from "@mantine/core";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -11,13 +11,17 @@ import {
 import { useTranslation } from "react-i18next";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import type { AiChatSource } from "../types/ai-chat.types";
+import { sourceLabels } from "../utils/citations";
 import classes from "../styles/chat-message.module.css";
 
-function fmtDate(iso?: string): string {
+/** Sources lists with at most this many entries start expanded. */
+const AUTO_EXPAND_MAX = 4;
+
+function fmtDate(iso: string | undefined, locale: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -28,6 +32,10 @@ type Props = {
   sources?: AiChatSource[];
   confidence?: number | null;
   groundedSourceCount?: number;
+  /** Increment to force the list open (e.g. after a citation click). */
+  expandRequest?: number;
+  /** Citation label to flash after a citation click. */
+  highlightLabel?: string | null;
 };
 
 // Maps a 0–1 confidence into a labelled, colour-coded bucket. Tuned so that
@@ -42,26 +50,42 @@ export default function ChatSources({
   sources,
   confidence,
   groundedSourceCount,
+  expandRequest = 0,
+  highlightLabel,
 }: Props) {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-
+  const { t, i18n } = useTranslation();
   const hasSources = !!sources && sources.length > 0;
+  const [expanded, setExpanded] = useState(
+    hasSources && sources!.length <= AUTO_EXPAND_MAX,
+  );
+
+  useEffect(() => {
+    if (expandRequest > 0) setExpanded(true);
+  }, [expandRequest]);
+
   const hasConfidence = confidence != null && (groundedSourceCount ?? 0) > 0;
 
   if (!hasSources && !hasConfidence) return null;
 
-  const count = groundedSourceCount ?? sources?.length ?? 0;
+  const count = sources?.length ?? groundedSourceCount ?? 0;
   const bucket = hasConfidence ? confidenceBucket(confidence as number) : null;
+  const locale = i18n.language || undefined;
 
   return (
     <div className={classes.sourcesBlock}>
       <div className={classes.sourcesHeader}>
         {bucket && (
-          <Badge color={bucket.color} variant="light" size="sm" radius="sm">
-            {t(bucket.label)}
-            {confidence != null ? ` · ${Math.round(confidence * 100)}%` : ""}
-          </Badge>
+          <Tooltip
+            label={t("Confidence: {{percent}}%", {
+              percent: Math.round((confidence as number) * 100),
+            })}
+            withArrow
+            openDelay={300}
+          >
+            <Badge color={bucket.color} variant="light" size="sm" radius="sm">
+              {t(bucket.label)}
+            </Badge>
+          </Tooltip>
         )}
         {hasSources && (
           <button
@@ -83,6 +107,9 @@ export default function ChatSources({
       {hasSources && expanded && (
         <ul className={classes.sourcesList}>
           {sources!.map((s) => {
+            const labels = sourceLabels(s);
+            const isHighlighted =
+              !!highlightLabel && labels.includes(highlightLabel);
             const icon =
               s.kind === "expert_insight" ? (
                 <IconSparkles size={13} className={classes.sourceIcon} />
@@ -90,23 +117,24 @@ export default function ChatSources({
                 <IconFileText size={13} className={classes.sourceIcon} />
               );
             const title = s.title || t("Untitled");
-            const score = (
-              <span className={classes.sourceScore}>
-                {Math.round(s.score * 100)}%
-              </span>
-            );
             // Deep-link with a relative in-app path (stays on the current host)
             // when we know the page's space + slug; otherwise plain text.
-            const linkable =
-              s.kind === "page" && s.spaceSlug && s.slugId;
-            const hasMeta =
-              s.spaceName || s.author || s.updatedAt || s.verifiedBy;
+            const linkable = s.kind === "page" && s.spaceSlug && s.slugId;
+            const verified = s.verified ?? (!!s.verifiedAt || !!s.verifiedBy);
+            const updated = fmtDate(s.updatedAt, locale);
+            const hasMeta = s.spaceName || updated;
+
             return (
-              <li key={s.sourceId} className={classes.sourceItem}>
+              <li
+                key={`${s.sourceId}-${labels[0] ?? ""}`}
+                className={`${classes.sourceItem} ${isHighlighted ? classes.sourceItemHighlight : ""}`}
+              >
                 <div className={classes.sourceRow}>
                   {icon}
-                  {s.label && (
-                    <span className={classes.sourceLabel}>{s.label}</span>
+                  {labels.length > 0 && (
+                    <span className={classes.sourceLabels}>
+                      {labels.join(" · ")}
+                    </span>
                   )}
                   {linkable ? (
                     <Link
@@ -118,27 +146,40 @@ export default function ChatSources({
                   ) : (
                     <span className={classes.sourceTitle}>{title}</span>
                   )}
-                  {score}
+                  {s.kind === "page" &&
+                    (verified ? (
+                      <Tooltip
+                        label={
+                          s.verifiedBy
+                            ? `${t("Verified by {{name}}", { name: s.verifiedBy })}${
+                                s.verifiedAt ? ` · ${fmtDate(s.verifiedAt, locale)}` : ""
+                              }`
+                            : t("Verified")
+                        }
+                        withArrow
+                        openDelay={300}
+                      >
+                        <span className={classes.sourceVerifiedBadge}>
+                          <IconCircleCheck size={11} />
+                          {t("Verified")}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <span className={classes.sourceUnverifiedBadge}>
+                        {t("Not verified")}
+                      </span>
+                    ))}
                 </div>
                 {hasMeta && (
                   <div className={classes.sourceMeta}>
                     {s.spaceName && <span>{s.spaceName}</span>}
-                    {s.author && (
-                      <span>{t("by {{name}}", { name: s.author })}</span>
-                    )}
-                    {s.updatedAt && (
-                      <span>
-                        {t("updated {{date}}", { date: fmtDate(s.updatedAt) })}
-                      </span>
-                    )}
-                    {s.verifiedBy && (
-                      <span className={classes.sourceVerified}>
-                        <IconCircleCheck size={12} />
-                        {t("Verified by {{name}}", { name: s.verifiedBy })}
-                        {s.verifiedAt ? ` · ${fmtDate(s.verifiedAt)}` : ""}
-                      </span>
+                    {updated && (
+                      <span>{t("updated {{date}}", { date: updated })}</span>
                     )}
                   </div>
+                )}
+                {s.excerpt && (
+                  <div className={classes.sourceExcerpt}>{s.excerpt}</div>
                 )}
               </li>
             );

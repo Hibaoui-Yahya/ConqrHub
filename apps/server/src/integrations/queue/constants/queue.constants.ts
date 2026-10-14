@@ -80,6 +80,7 @@ export enum QueueJob {
   PAGE_UPDATE_DIGEST = 'page-update-digest',
   PAGE_VERIFICATION_EXPIRING = 'page-verification-expiring',
   PAGE_VERIFICATION_EXPIRED = 'page-verification-expired',
+  PAGE_VERIFICATION_INVALIDATED = 'page-verification-invalidated',
   VERIFICATION_RECONCILE = 'verification-reconcile',
   PAGE_VERIFIED_NOTIFICATION = 'page-verified-notification',
   PAGE_APPROVAL_REQUESTED_NOTIFICATION = 'page-approval-requested-notification',

@@ -102,3 +102,65 @@ export type IVerificationListParams = {
   limit?: number;
   query?: string;
 };
+
+/** POST /pages/verification-overview */
+export type IVerificationOverviewSpace = {
+  spaceId: string;
+  spaceName: string;
+  spaceSlug: string;
+  total: number;
+  verified: number;
+  unverified: number;
+};
+
+export type IVerificationOverview = {
+  verified: number;
+  expiring: number;
+  expired: number;
+  draft: number;
+  inApproval: number;
+  obsolete: number;
+  none: number;
+  total: number;
+  unverified: number;
+  spaces: IVerificationOverviewSpace[];
+  lastIndexedAt?: string | null;
+};
+
+/** POST /pages/unverified */
+export type IUnverifiedPagesParams = {
+  spaceId?: string;
+  query?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export type IUnverifiedPageItem = {
+  id: string;
+  title: string | null;
+  slugId: string;
+  icon: string | null;
+  spaceId: string;
+  spaceName: string;
+  spaceSlug: string;
+  status: VerificationStatus | null;
+  updatedAt: string | null;
+  lastVerifiedAt: string | null;
+  updatedByName?: string | null;
+};
+
+export type IUnverifiedPagesResponse = {
+  items: IUnverifiedPageItem[];
+  nextCursor?: string | null;
+};
+
+/** POST /pages/bulk-verify */
+export type IBulkVerifyParams = {
+  pageIds: string[];
+  expiresInDays?: number;
+};
+
+export type IBulkVerifyResult = {
+  verified: string[];
+  failed: { pageId: string; reason: string }[];
+};

@@ -3,7 +3,6 @@ import {
   Badge,
   Box,
   Group,
-  Text,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
@@ -52,7 +51,7 @@ export function AppHeader() {
 
   return (
     <>
-      <Group h="100%" px="md" justify="space-between" wrap={"nowrap"}>
+      <Group h="100%" className={classes.suiteHeader} wrap={"nowrap"}>
         <Group wrap="nowrap">
           {/* Mobile keeps its hamburger here; the desktop toggle lives in the
               sidebar's top row (Plane parity). */}
@@ -69,22 +68,28 @@ export function AppHeader() {
           <AppSwitcher />
 
           <Link to="/home" className={classes.brand} aria-label="ConqrHub">
-            <Box hiddenFrom="sm" className={classes.brandIcon}>
+            <Box className={classes.brandIcon}>
               <img
-                src="/icons/favicon-32x32.png"
-                alt="ConqrHub"
+                src="/branding/conqrhub-mark.svg"
+                alt=""
+                aria-hidden="true"
                 width={22}
                 height={22}
               />
             </Box>
-            <Text
-              size="lg"
-              fw={700}
-              style={{ userSelect: "none", letterSpacing: "-0.02em" }}
-              visibleFrom="sm"
-            >
-              Conqr<span style={{ color: "var(--brand-default)" }}>Hub</span>
-            </Text>
+            <Box visibleFrom="sm" ml={8}>
+              <img
+                className="conqr-wordmark conqr-wordmark--light"
+                src="/branding/conqrhub-wordmark-light.png"
+                alt="ConqrHub"
+              />
+              <img
+                className="conqr-wordmark conqr-wordmark--dark"
+                src="/branding/conqrhub-wordmark-dark.png"
+                alt=""
+                aria-hidden="true"
+              />
+            </Box>
           </Link>
         </Group>
 
@@ -97,7 +102,7 @@ export function AppHeader() {
           </Group>
         </div>
 
-        <Group px={"xl"} wrap="nowrap">
+        <Group className={classes.headerEnd} gap={8} wrap="nowrap">
           <UnstyledButton
             component={Link}
             to="/ai"
@@ -113,7 +118,10 @@ export function AppHeader() {
               }
             }}
           >
-            <IconSparkles size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
+            <IconSparkles
+              size={16}
+              style={{ marginRight: 4, verticalAlign: "middle" }}
+            />
             {t("AI Chat")}
           </UnstyledButton>
           <Tooltip label={t("AI Chat")} openDelay={250} withArrow>
@@ -141,7 +149,11 @@ export function AppHeader() {
           {/* ConqrService — the suite's help & requests entry point. Same
               button, same panel, same place in all four apps. */}
           {resolveConqrServiceUrl() && (
-            <Tooltip label={CONQR_SERVICE_TRIGGER_TITLE} openDelay={250} withArrow>
+            <Tooltip
+              label={CONQR_SERVICE_TRIGGER_TITLE}
+              openDelay={250}
+              withArrow
+            >
               <ActionIcon
                 variant="subtle"
                 color="dark"

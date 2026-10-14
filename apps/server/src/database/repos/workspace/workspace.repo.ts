@@ -199,6 +199,55 @@ export class WorkspaceRepo {
       .executeTakeFirst();
   }
 
+  /**
+   * settings.general.* and settings.meet.* — the keys are a closed TypeScript
+   * union, so no caller-supplied string reaches the SQL layer. Values are
+   * stored as JSON (strings, numbers, booleans or null).
+   */
+  setGeneralSetting(
+    workspaceId: string,
+    key: 'defaultLocale' | 'defaultTimezone' | 'mailFromName',
+    value: string | null,
+    trx?: KyselyTransaction,
+  ) {
+    return this.updateSettingsJson(workspaceId, 'general', key, value, trx);
+  }
+
+  setMeetSetting(
+    workspaceId: string,
+    key:
+      | 'consentRequired'
+      | 'audioRetentionDays'
+      | 'defaultLanguage'
+      | 'publishSpaceId'
+      | 'autoPublish',
+    value: string | number | boolean | null,
+    trx?: KyselyTransaction,
+  ) {
+    return this.updateSettingsJson(workspaceId, 'meet', key, value, trx);
+  }
+
+  private updateSettingsJson(
+    workspaceId: string,
+    section: 'general' | 'meet',
+    key: string,
+    value: string | number | boolean | null,
+    trx?: KyselyTransaction,
+  ) {
+    const db = dbOrTx(this.db, trx);
+    return db
+      .updateTable('workspaces')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(section)}, COALESCE(settings->${sql.lit(section)}, '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(key)}, ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', workspaceId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
   // api.*
   setApiRestrictToAdmins(
     workspaceId: string,

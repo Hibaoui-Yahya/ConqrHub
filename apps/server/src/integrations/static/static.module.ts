@@ -49,6 +49,12 @@ export class StaticModule implements OnModuleInit {
           : undefined,
         POSTHOG_HOST: this.environmentService.getPostHogHost(),
         POSTHOG_KEY: this.environmentService.getPostHogKey(),
+        // Suite applications reachable from this deployment (Paramètres ›
+        // Connexions, and the "Retour à ConqrMeet" button of the settings).
+        MEET_APP_URL: this.environmentService.getMeetAppUrl() || undefined,
+        PLANE_APP_URL: this.environmentService.getPlaneAppUrl() || undefined,
+        SERVICE_APP_URL:
+          this.environmentService.getServiceAppUrl() || undefined,
       };
 
       const windowScriptContent = `<script>window.CONFIG=${JSON.stringify(configString)};</script>`;

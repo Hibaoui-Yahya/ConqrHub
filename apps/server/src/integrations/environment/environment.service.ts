@@ -473,6 +473,20 @@ export class EnvironmentService {
     return api ? api.replace(/\/api(\/.*)?$/, '') : '';
   }
 
+  /** Public URL of ConqrMeet for this deployment ('' when not deployed). */
+  getMeetAppUrl(): string {
+    return this.configService
+      .get<string>('MEET_APP_URL', '')
+      .replace(/\/+$/, '');
+  }
+
+  /** Public URL of ConqrService for this deployment ('' when not deployed). */
+  getServiceAppUrl(): string {
+    return this.configService
+      .get<string>('SERVICE_APP_URL', '')
+      .replace(/\/+$/, '');
+  }
+
   /** Shared secret used to verify Plane webhook HMAC-SHA256 signatures. */
   // -- ConqrPlan MCP routing -------------------------------------------------
   //

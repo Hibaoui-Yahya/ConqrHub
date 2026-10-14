@@ -110,8 +110,38 @@
 }
 
 .emptyStateHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   margin-bottom: var(--mantine-spacing-lg);
+}
+
+/* Centered ConqrAI logo: a small cyan mark above the real wordmark. */
+.emptyStateLogo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+.emptyStateMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: light-dark(#006b94, #00c2ff);
+  background: light-dark(#e5f8ff, #0b2a36);
+  border: 1px solid light-dark(#b8ecff, #124559);
+}
+
+.emptyStateWordmark {
+  display: block;
+  height: 26px;
+  width: auto;
 }
 
 .emptyStateIconWrapper {
@@ -134,19 +164,20 @@
 }
 
 .emptyStateBrand {
+  /* Wordmark in the logo style: "Conqr" in ink, "AI" in the brand cyan.
+     The old gradient-clipped text rendered as a solid bar when another
+     stylesheet reset background-clip. */
+  display: inline-flex;
   font-size: var(--mantine-font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  background: linear-gradient(
-    135deg,
-    light-dark(var(--mantine-color-blue-6), var(--mantine-color-blue-4)),
-    light-dark(var(--mantine-color-violet-6), var(--mantine-color-violet-4))
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: light-dark(var(--mantine-color-gray-9), var(--mantine-color-white));
   margin-bottom: var(--mantine-spacing-xs);
+}
+
+.emptyStateBrandAccent {
+  color: light-dark(#006b94, #00c2ff);
 }
 
 .emptyStateTitle {
@@ -158,7 +189,7 @@
 
 .emptyStateSubtitle {
   font-size: var(--mantine-font-size-sm);
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   margin-top: var(--mantine-spacing-xs);
   line-height: 1.5;
 }
@@ -176,8 +207,8 @@
 
 .suggestionsLabel {
   font-size: var(--mantine-font-size-xs);
-  font-weight: 500;
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  font-weight: 600;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: var(--mantine-spacing-sm);
@@ -222,7 +253,9 @@
 
 .suggestionIcon {
   flex-shrink: 0;
-  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  align-self: flex-start;
+  margin-top: 2px;
+  color: light-dark(#006b94, #00c2ff);
 }
 
 .suggestionText {
@@ -265,4 +298,111 @@
 
 .footerText {
   font-size: var(--mantine-font-size-xs);
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}
+
+/* Knowledge-base status line under the hero */
+.kbStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--mantine-spacing-sm);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  font-size: var(--mantine-font-size-xs);
+  text-decoration: none;
+  transition: color 120ms ease, border-color 120ms ease;
+
+  @mixin hover {
+    color: var(--brand-default, light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-4)));
+    border-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  }
+}
+
+/* Inline stream error with retry */
+.streamError {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--mantine-spacing-lg) var(--mantine-spacing-xs);
+}
+
+/* Conversation toolbar */
+.chatTopBar {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  padding: 8px var(--mantine-spacing-lg);
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+/* Empty knowledge base alert */
+.kbAlert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;
+  margin-bottom: var(--mantine-spacing-md);
+  padding: 12px 14px;
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid light-dark(#f5c26b, #7a4a00);
+  background: light-dark(#fffbeb, #2a1a02);
+}
+
+.kbAlertIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: light-dark(#973c00, #fee685);
+  background: light-dark(#fef3c7, #3d2604);
+}
+
+.kbAlertText {
+  flex: 1;
+  min-width: 0;
+}
+
+.kbAlertTitle {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  color: light-dark(#973c00, #fee685);
+}
+
+.kbAlertBody {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.5;
+  color: light-dark(#7a3100, #f6d98b);
+}
+
+.kbAlertButton {
+  flex-shrink: 0;
+}
+
+.suggestionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestionTag {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}
+
+@media (max-width: 600px) {
+  .kbAlert {
+    flex-wrap: wrap;
+  }
 }

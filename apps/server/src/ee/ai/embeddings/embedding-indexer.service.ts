@@ -29,8 +29,20 @@ function isEffectivelyVerified(
   v: { status: string | null; expiresAt: Date | null } | undefined,
 ): boolean {
   if (!v || (v.status !== 'verified' && v.status !== 'expiring')) return false;
-  if (v.expiresAt && new Date(v.expiresAt).getTime() <= Date.now()) return false;
+  if (v.expiresAt && new Date(v.expiresAt).getTime() <= Date.now())
+    return false;
   return true;
+}
+
+/**
+ * Text handed to the embedding model for a page chunk: the page title on its
+ * own line, then the chunk. Also the input of the page's content hash. A page
+ * without a title embeds the bare chunk, so the hash of a title-less page is
+ * the hash of its text.
+ */
+export function embeddingInput(title: string | null, text: string): string {
+  const t = title?.trim();
+  return t ? `${t}\n\n${text}` : text;
 }
 
 @Injectable()
@@ -90,10 +102,14 @@ export class EmbeddingIndexerService {
       return { pageId, status: 'no_content' };
     }
 
-    const model =
-      this.env.getAiEmbeddingModel() || 'mistral-embed';
+    const model = this.env.getAiEmbeddingModel() || 'mistral-embed';
     const dim = this.aiProvider.getEmbeddingDimension();
-    const contentHash = this.chunking.contentHash(page.textContent);
+    // The title is part of what gets embedded, so it is part of the hash: a
+    // rename must re-embed even when the body is untouched.
+    const title = page.title ?? null;
+    const contentHash = this.chunking.contentHash(
+      embeddingInput(title, page.textContent),
+    );
 
     const unchanged = await this.repo.isContentUnchanged(
       'page',
@@ -119,7 +135,10 @@ export class EmbeddingIndexerService {
       return { pageId, status: 'no_content' };
     }
 
-    const texts = chunks.map((c) => c.chunkText);
+    // Embed the chunk with its page title in front so the vector carries the
+    // page's topic even when the chunk itself never names it. The stored
+    // chunk_text stays raw: it is what gets shown and lexically searched.
+    const texts = chunks.map((c) => embeddingInput(title, c.chunkText));
     const allEmbeddings: number[][] = [];
 
     for (let i = 0; i < texts.length; i += batchSize) {
@@ -134,7 +153,7 @@ export class EmbeddingIndexerService {
       embedding: allEmbeddings[i],
       metadata: {
         pageId,
-        title: page.title ?? null,
+        title,
         spaceId: page.spaceId,
         workspaceId,
       },
@@ -164,10 +183,7 @@ export class EmbeddingIndexerService {
    * updates the tenancy columns from the page's current row. If the page is
    * gone or soft-deleted, its embeddings are removed instead.
    */
-  async reassignPageSpace(
-    pageId: string,
-    workspaceId: string,
-  ): Promise<void> {
+  async reassignPageSpace(pageId: string, workspaceId: string): Promise<void> {
     const page = await (this.db as any)
       .selectFrom('pages')
       .select(['spaceId', 'deletedAt'])

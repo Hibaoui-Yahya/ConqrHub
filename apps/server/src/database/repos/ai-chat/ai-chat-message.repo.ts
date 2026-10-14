@@ -58,6 +58,40 @@ export class AiChatMessageRepo {
       .execute();
   }
 
+  async findById(
+    messageId: string,
+    workspaceId: string,
+  ): Promise<AiChatMessage | undefined> {
+    return this.db
+      .selectFrom('aiChatMessages')
+      .select(this.baseFields)
+      .where('id', '=', messageId)
+      .where('workspaceId', '=', workspaceId)
+      .where('deletedAt', 'is', null)
+      .executeTakeFirst();
+  }
+
+  /**
+   * Shallow-merges `patch` into the message's jsonb metadata
+   * (`metadata || patch`), so unrelated keys such as sources/confidence
+   * are preserved. Top-level keys present in `patch` are replaced.
+   */
+  async updateMetadata(
+    messageId: string,
+    workspaceId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db
+      .updateTable('aiChatMessages')
+      .set({
+        metadata: sql`coalesce(metadata, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', messageId)
+      .where('workspaceId', '=', workspaceId)
+      .execute();
+  }
+
   async countByChat(chatId: string, workspaceId: string): Promise<number> {
     const row = await this.db
       .selectFrom('aiChatMessages')

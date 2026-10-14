@@ -5,6 +5,7 @@ import { ICurrentUser } from "@/features/user/types/user.types";
 export default function useCurrentUser(): UseQueryResult<ICurrentUser> {
   return useQuery({
     queryKey: ["currentUser"],
+    refetchOnWindowFocus: "always",
     queryFn: async () => {
       return await getMyInfo();
     },
