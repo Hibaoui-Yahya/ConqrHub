@@ -69,13 +69,7 @@ export function AppHeader() {
           <span className="conqr-header-sep" aria-hidden="true" />
 
           <Link to="/home" className="conqr-brand" aria-label="ConqrHub">
-            <img
-              className="conqr-brand-mark"
-              src="/branding/conqrhub-mark.svg"
-              alt=""
-              aria-hidden="true"
-            />
-            <Box visibleFrom="sm">
+            <Box>
               <img
                 className="conqr-wordmark conqr-wordmark--light"
                 src="/branding/conqrhub-wordmark-light.png"

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
   <title id="title">ConqrHub</title>
   <rect width="256" height="256" rx="56" fill="#0A0A0A"/>
-  <path fill="#FFFFFF" d="M 46.4 41.6 H 99.2 V 214.4 H 46.4Z M 156.8 41.6 H 209.6 V 214.4 H 156.8Z"/>
-  <path fill="#00C2FF" d="M 99.2 101.6 H 156.8 V 154.4 H 99.2Z"/>
+  <path fill="#FFFFFF" d="M36 36 H120 V76 A44 44 0 0 0 76 120 H36 Z M36 136 H76 A44 44 0 0 0 120 180 V220 H36 Z M136 36 H220 V120 H180 A44 44 0 0 0 136 76 Z M136 180 A44 44 0 0 0 180 136 H220 V220 H136 Z"/>
+  <path fill="#00C2FF" d="M106 128 A22 22 0 1 0 150 128 A22 22 0 1 0 106 128 Z"/>
 </svg>

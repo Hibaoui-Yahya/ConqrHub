@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
   <title id="title">ConqrMeet</title>
   <rect width="256" height="256" rx="56" fill="#0A0A0A"/>
-  <path fill="#FFFFFF" d="M 32.0 41.6 H 84.8 V 214.4 H 32.0Z M 171.2 41.6 H 224.0 V 214.4 H 171.2Z"/>
-  <path fill="#00C2FF" d="M 84.8 41.6 H 92.0 L 120.8 101.1 V 164.0 H 106.4 L 84.8 120.8Z M 171.2 41.6 H 164.0 L 135.2 101.1 V 164.0 H 149.6 L 171.2 120.8Z"/>
+  <path fill="#FFFFFF" d="M78 36 H78 A42 42 0 0 1 120 78 V78 A42 42 0 0 1 78 120 H78 A42 42 0 0 1 36 78 V78 A42 42 0 0 1 78 36 Z"/>
+  <path fill="#00C2FF" d="M178 136 H178 A42 42 0 0 1 220 178 V178 A42 42 0 0 1 178 220 H178 A42 42 0 0 1 136 178 V178 A42 42 0 0 1 178 136 Z"/>
 </svg>
