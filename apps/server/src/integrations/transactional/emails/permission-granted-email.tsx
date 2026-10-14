@@ -1,13 +1,13 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, Details, MailBody, P } from '../partials/partials';
+import { accessLabelFr } from '../utils/utils';
 
 interface Props {
   actorName: string;
   pageTitle: string;
   pageUrl: string;
   accessLabel: string;
+  spaceName?: string;
 }
 
 export const PermissionGrantedEmail = ({
@@ -15,17 +15,27 @@ export const PermissionGrantedEmail = ({
   pageTitle,
   pageUrl,
   accessLabel,
+  spaceName,
 }: Props) => {
+  const access = accessLabelFr(accessLabel);
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> gave you {accessLabel} access to{' '}
-          <strong>{pageTitle}</strong>.
-        </Text>
-      </Section>
-      <EmailButton href={pageUrl}>View Page</EmailButton>
+    <MailBody
+      product="hub"
+      icon="lock-open-success"
+      preview={`Droit : ${access}${spaceName ? ` · Espace ${spaceName}` : ''}`}
+      heading="Vous avez accès à une nouvelle page"
+    >
+      <P>
+        <B>{actorName}</B> vous donne accès à la page <B>« {pageTitle} »</B>.
+      </P>
+      <Details
+        rows={[
+          ['Page', pageTitle],
+          ['Espace', spaceName],
+          ['Votre accès', access],
+        ]}
+      />
+      <Actions href={pageUrl} label="Ouvrir la page" />
     </MailBody>
   );
 };

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { TokenService } from '../auth/services/token.service';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
@@ -10,6 +10,7 @@ import {
   AUDIT_CONTEXT_KEY,
 } from '../../common/middlewares/audit-context.middleware';
 import * as Bowser from 'bowser';
+import { AccountEmailService } from '../../integrations/mail/account-email.service';
 
 const MAX_SESSIONS_PER_USER = 25;
 const RETENTION_DAYS = 7;
@@ -23,6 +24,7 @@ export class SessionService {
     private readonly userSessionRepo: UserSessionRepo,
     private readonly environmentService: EnvironmentService,
     private readonly cls: ClsService,
+    @Optional() private readonly accountEmails?: AccountEmailService,
   ) {}
 
   @Interval('session-cleanup', 24 * 60 * 60 * 1000)
@@ -51,6 +53,19 @@ export class SessionService {
       ipAddress,
       expiresAt,
     });
+
+    if (this.accountEmails && user.email) {
+      // Not awaited: the e-mail must never delay or fail the sign-in.
+      void this.accountEmails.signInIfNewDevice(
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          workspaceId: user.workspaceId,
+        },
+        { id: session.id, deviceName, ipAddress },
+      );
+    }
 
     return this.tokenService.generateAccessToken(user, session.id);
   }

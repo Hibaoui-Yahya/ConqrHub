@@ -159,10 +159,15 @@ export class AuthService {
       resourceId: userId,
     });
 
-    const emailTemplate = ChangePasswordEmail({ username: user.name });
+    const emailTemplate = ChangePasswordEmail({
+      username: user.name,
+      changedAt: new Date(),
+      secureUrl: `${this.domainService.getUrl()}/forgot-password`,
+      recipient: user.email,
+    });
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Your password has been changed',
+      subject: 'Votre mot de passe a été modifié',
       template: emailTemplate,
     });
   }
@@ -206,11 +211,13 @@ export class AuthService {
     const emailTemplate = ForgotPasswordEmail({
       username: user.name,
       resetLink: resetLink,
+      validMinutes: 30,
+      recipient: user.email,
     });
 
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Reset your password',
+      subject: 'Réinitialisez votre mot de passe',
       template: emailTemplate,
     });
   }
@@ -272,10 +279,15 @@ export class AuthService {
       resourceId: user.id,
     });
 
-    const emailTemplate = ChangePasswordEmail({ username: user.name });
+    const emailTemplate = ChangePasswordEmail({
+      username: user.name,
+      changedAt: new Date(),
+      secureUrl: `${this.domainService.getUrl(workspace.hostname)}/forgot-password`,
+      recipient: user.email,
+    });
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Your password has been changed',
+      subject: 'Votre mot de passe a été modifié',
       template: emailTemplate,
     });
 

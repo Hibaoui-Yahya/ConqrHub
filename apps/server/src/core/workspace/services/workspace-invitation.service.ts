@@ -21,6 +21,8 @@ import { MailService } from '../../../integrations/mail/mail.service';
 import InvitationEmail from '@docmost/transactional/emails/invitation-email';
 import { GroupUserRepo } from '@docmost/db/repos/group/group-user.repo';
 import InvitationAcceptedEmail from '@docmost/transactional/emails/invitation-accepted-email';
+import WelcomeEmail from '@docmost/transactional/emails/welcome-email';
+import { roleLabelFr } from '@docmost/transactional/utils/utils';
 import { TokenService } from '../../auth/services/token.service';
 import { SessionService } from '../../session/session.service';
 import { nanoIdGen } from '../../../common/helpers';
@@ -187,6 +189,7 @@ export class WorkspaceInvitationService {
           invitation.token,
           authUser.name,
           workspace.hostname,
+          { role: invitation.role, workspaceName: workspace.name },
         );
       });
 
@@ -310,17 +313,41 @@ export class WorkspaceInvitationService {
       workspace.id,
     );
 
+    const appUrl = this.domainService.getUrl(workspace.hostname);
+    const meetEnabled = Boolean(this.environmentService.getMeetAppUrl());
+
     if (invitedByUser) {
       const emailTemplate = InvitationAcceptedEmail({
         invitedUserName: newUser.name,
         invitedUserEmail: newUser.email,
+        inviterName: invitedByUser.name,
+        workspaceName: workspace.name,
+        roleLabel: roleLabelFr(invitation.role),
+        membersUrl: `${appUrl}/settings/members`,
+        recipient: invitedByUser.email,
       });
 
       await this.mailService.sendToQueue({
         to: invitedByUser.email,
-        subject: `${newUser.name} has accepted your ConqrAI Wiki invite`,
+        subject: `${newUser.name || newUser.email} a rejoint ${workspace.name || 'votre espace'}`,
         template: emailTemplate,
       });
+    }
+
+    try {
+      await this.mailService.sendToQueue({
+        to: newUser.email,
+        subject: `Bienvenue sur ConqrAI${newUser.name ? `, ${newUser.name.trim().split(' ')[0]}` : ''}`,
+        template: WelcomeEmail({
+          userName: newUser.name,
+          workspaceName: workspace.name,
+          appUrl,
+          meetEnabled,
+          recipient: newUser.email,
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(`welcome email not queued: ${err}`);
     }
 
     this.auditService.log({
@@ -380,8 +407,9 @@ export class WorkspaceInvitationService {
       invitation.id,
       invitation.email,
       invitation.token,
-      invitedByUser.name,
+      invitedByUser?.name,
       workspace.hostname,
+      { role: invitation.role, workspaceName: workspace.name },
     );
 
     this.auditService.log({
@@ -454,6 +482,7 @@ export class WorkspaceInvitationService {
     inviteToken: string,
     invitedByName: string,
     hostname?: string,
+    opts: { role?: string; workspaceName?: string } = {},
   ): Promise<void> {
     const inviteLink = await this.buildInviteLink({
       invitationId,
@@ -463,11 +492,19 @@ export class WorkspaceInvitationService {
 
     const emailTemplate = InvitationEmail({
       inviteLink,
+      invitedByName,
+      workspaceName: opts.workspaceName,
+      roleLabel: opts.role ? roleLabelFr(opts.role) : undefined,
+      meetEnabled: Boolean(this.environmentService.getMeetAppUrl()),
+      recipient: inviteeEmail,
     });
 
+    const space = opts.workspaceName || 'votre équipe';
     await this.mailService.sendToQueue({
       to: inviteeEmail,
-      subject: `${invitedByName} invited you to ConqrAI Wiki`,
+      subject: invitedByName
+        ? `${invitedByName} vous invite à rejoindre ${space} sur ConqrAI`
+        : `Invitation à rejoindre ${space} sur ConqrAI`,
       template: emailTemplate,
     });
   }

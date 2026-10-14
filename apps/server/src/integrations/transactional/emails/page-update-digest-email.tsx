@@ -1,12 +1,18 @@
-import { Link, Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, link, paragraph } from '../css/styles';
-import { getGreetingName, MailBody } from '../partials/partials';
+import {
+  Actions,
+  ItemList,
+  MailBody,
+  P,
+  appOrigin,
+  greeting,
+} from '../partials/partials';
 
 interface PageUpdate {
   title: string;
   url: string;
   updatedBy: string[];
+  spaceName?: string;
 }
 
 interface Props {
@@ -20,57 +26,37 @@ export const PageUpdateDigestEmail = ({
   pageUpdates,
   totalUpdates,
 }: Props) => {
+  const first = pageUpdates.slice(0, 2).map((p) => p.title);
+  const rest = Math.max(0, pageUpdates.length - first.length);
+  const origin = appOrigin();
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>
-          Hi {getGreetingName(userName)},
-        </Text>
-        <Text style={paragraph}>
-          There {totalUpdates === 1 ? 'has' : 'have'} been{' '}
-          <strong>
-            {totalUpdates} update{totalUpdates === 1 ? '' : 's'}
-          </strong>{' '}
-          since your last update.
-        </Text>
-
-        {pageUpdates.map((page, i) => (
-          <Section key={i} style={pageCard}>
-            <Text style={pageTitle}>
-              <Link href={page.url} style={link}>
-                {page.title}
-              </Link>
-            </Text>
-            {page.updatedBy.length > 0 && (
-              <Text style={updatedByText}>
-                Edited by {page.updatedBy.join(', ')}
-              </Text>
-            )}
-          </Section>
-        ))}
-      </Section>
+    <MailBody
+      product="hub"
+      icon="newspaper-brand"
+      preview={`${first.join(', ')}${rest ? ` et ${rest} autre${rest > 1 ? 's' : ''}` : ''}`}
+      heading="Votre résumé des mises à jour"
+    >
+      <P>{greeting(userName)}</P>
+      <P>
+        {totalUpdates === 1
+          ? 'Une page que vous suivez a changé depuis votre dernier résumé.'
+          : `${totalUpdates} modifications ont eu lieu sur les pages que vous suivez depuis votre dernier résumé.`}
+      </P>
+      <ItemList
+        items={pageUpdates.map((p) => ({
+          title: p.title,
+          href: p.url,
+          meta: [
+            p.spaceName,
+            p.updatedBy.length ? `par ${p.updatedBy.join(', ')}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        }))}
+      />
+      {origin && <Actions href={origin} label="Tout voir dans ConqrHub" />}
     </MailBody>
   );
-};
-
-const pageCard = {
-  borderLeft: '3px solid #3FC1F2',
-  paddingLeft: '12px',
-  marginBottom: '12px',
-};
-
-const pageTitle = {
-  ...paragraph,
-  margin: '0 0 2px 0',
-  fontSize: 14,
-  fontWeight: 'bold' as const,
-};
-
-const updatedByText = {
-  ...paragraph,
-  margin: '0',
-  fontSize: 13,
-  color: '#666',
 };
 
 export default PageUpdateDigestEmail;

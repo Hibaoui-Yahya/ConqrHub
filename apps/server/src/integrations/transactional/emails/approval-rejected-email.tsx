@@ -1,7 +1,5 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, MailBody, P, Quote } from '../partials/partials';
 
 interface Props {
   actorName: string;
@@ -19,21 +17,25 @@ export const ApprovalRejectedEmail = ({
   comment,
 }: Props) => {
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> returned{' '}
-          <strong>{pageTitle}</strong> in the{' '}
-          <strong>{spaceName}</strong> space for revision.
-        </Text>
-        {comment && (
-          <Text style={{ ...paragraph, fontStyle: 'italic' }}>
-            &ldquo;{comment}&rdquo;
-          </Text>
-        )}
-      </Section>
-      <EmailButton href={pageUrl}>View page</EmailButton>
+    <MailBody
+      product="hub"
+      icon="circle-x-danger"
+      preview={
+        comment
+          ? `${actorName} : « ${comment} »`
+          : `${actorName} demande des modifications.`
+      }
+      heading="Des modifications sont demandées"
+      reason="Vous recevez cet e-mail parce que vous avez soumis cette page à approbation."
+    >
+      <P>
+        <B>{actorName}</B> n'a pas approuvé la page <B>« {pageTitle} »</B>
+        {spaceName ? ` (espace ${spaceName})` : ''}
+        {comment ? ' et a laissé ce commentaire :' : '.'}
+      </P>
+      {comment && <Quote author={actorName}>{comment}</Quote>}
+      <P>Modifiez la page, puis soumettez-la de nouveau.</P>
+      <Actions href={pageUrl} label="Modifier la page" />
     </MailBody>
   );
 };

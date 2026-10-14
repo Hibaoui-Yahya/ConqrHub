@@ -251,7 +251,7 @@ export class HealthAlertsService {
       args.spaceId,
     );
     const dashboardUrl = await this.resolveDashboardUrl(args.workspaceId);
-    const subject = `Documentation health for ${scopeLabel} dropped to ${args.score}`;
+    const subject = `Santé documentaire de ${scopeLabel} : ${args.score}/100`;
 
     await this.notificationService.queueEmail(
       args.userId,
@@ -278,14 +278,14 @@ export class HealthAlertsService {
         .select('name')
         .where('id', '=', workspaceId)
         .executeTakeFirst();
-      return ws?.name ?? 'your workspace';
+      return ws?.name ?? 'votre espace';
     }
     const space = await this.db
       .selectFrom('spaces')
       .select(['name', 'slug'])
       .where('id', '=', spaceId)
       .executeTakeFirst();
-    return space?.name ?? space?.slug ?? 'a space';
+    return space?.name ?? space?.slug ?? 'un espace';
   }
 
   private async resolveDashboardUrl(workspaceId: string): Promise<string> {

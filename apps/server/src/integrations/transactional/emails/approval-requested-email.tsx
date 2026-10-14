@@ -1,13 +1,12 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, Details, MailBody, P } from '../partials/partials';
 
 interface Props {
   actorName: string;
   pageTitle: string;
   spaceName: string;
   pageUrl: string;
+  submittedAt?: string;
 }
 
 export const ApprovalRequestedEmail = ({
@@ -15,18 +14,28 @@ export const ApprovalRequestedEmail = ({
   pageTitle,
   spaceName,
   pageUrl,
+  submittedAt,
 }: Props) => {
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> submitted{' '}
-          <strong>{pageTitle}</strong> in the{' '}
-          <strong>{spaceName}</strong> space for your approval.
-        </Text>
-      </Section>
-      <EmailButton href={pageUrl}>Review page</EmailButton>
+    <MailBody
+      product="hub"
+      icon="clipboard-check-brand"
+      preview={`${actorName} attend votre décision${spaceName ? ` · Espace ${spaceName}` : ''}`}
+      heading="Une page attend votre approbation"
+      reason="Vous recevez cet e-mail parce que vous approuvez les pages de cet espace."
+    >
+      <P>
+        <B>{actorName}</B> soumet la page <B>« {pageTitle} »</B> à votre
+        approbation.
+      </P>
+      <Details
+        rows={[
+          ['Page', pageTitle],
+          ['Espace', spaceName],
+          ['Soumise le', submittedAt],
+        ]}
+      />
+      <Actions href={pageUrl} label="Examiner la page" />
     </MailBody>
   );
 };

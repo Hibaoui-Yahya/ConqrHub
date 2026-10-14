@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { LicenseCheckService } from '../../../integrations/environment/license-check.service';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
@@ -34,6 +35,7 @@ import { v4 } from 'uuid';
 import { InjectQueue } from '@nestjs/bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { Queue } from 'bullmq';
+import { AccountEmailService } from '../../../integrations/mail/account-email.service';
 import {
   generateRandomSuffixNumbers,
   diffAuditTrackedFields,
@@ -72,6 +74,7 @@ export class WorkspaceService {
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
+    @Optional() private readonly accountEmails?: AccountEmailService,
   ) {}
 
   async findById(workspaceId: string) {
@@ -673,6 +676,13 @@ export class WorkspaceService {
         after: { role: newRole },
       },
     });
+
+    await this.accountEmails?.roleChanged(
+      user,
+      authUser.name,
+      user.role,
+      newRole,
+    );
   }
 
   async generateHostname(
@@ -768,6 +778,8 @@ export class WorkspaceService {
       );
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+
+    await this.accountEmails?.accessRemoved(user);
 
     this.auditService.log({
       event: AuditEvent.USER_DEACTIVATED,
@@ -888,6 +900,9 @@ export class WorkspaceService {
 
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+
+    // `user` still holds the address the deletion just overwrote.
+    await this.accountEmails?.accessRemoved(user, true);
 
     this.auditService.log({
       event: AuditEvent.USER_DELETED,

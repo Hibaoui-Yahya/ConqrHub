@@ -346,10 +346,15 @@ export class PageVerificationService {
 
     const verifiers = await this.getVerifiers(verification.id);
     const otherIds = verifiers.map((v: any) => v.userId).filter((id: string) => id !== user.id);
-    if (otherIds.length > 0) {
+    // The author of an approval request learns that it was approved.
+    const approvedRequesterId =
+      newStatus === 'approved' && verification.requestedById && verification.requestedById !== user.id
+        ? verification.requestedById
+        : undefined;
+    if (otherIds.length > 0 || approvedRequesterId) {
       await this.notificationQueue.add(QueueJob.PAGE_VERIFIED_NOTIFICATION, {
         pageId: verification.pageId, spaceId: verification.spaceId, workspaceId: verification.workspaceId,
-        actorId: user.id, verifierIds: otherIds,
+        actorId: user.id, verifierIds: otherIds, approvedRequesterId,
       });
     }
 

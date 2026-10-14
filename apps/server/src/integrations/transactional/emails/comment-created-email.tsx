@@ -1,29 +1,38 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, MailBody, P, Quote } from '../partials/partials';
 
 interface Props {
   actorName: string;
   pageTitle: string;
   pageUrl: string;
+  excerpt?: string;
+  /** True for a reply in a thread the recipient took part in. */
+  isReply?: boolean;
 }
 
 export const CommentCreateEmail = ({
   actorName,
   pageTitle,
   pageUrl,
+  excerpt,
+  isReply,
 }: Props) => {
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> commented on{' '}
-          <strong>{pageTitle}</strong>.
-        </Text>
-      </Section>
-      <EmailButton href={pageUrl}>View Comment</EmailButton>
+    <MailBody
+      product="hub"
+      icon="message-square-brand"
+      preview={
+        excerpt ? `${actorName} : « ${excerpt} »` : `Sur « ${pageTitle} »`
+      }
+      heading={isReply ? 'Nouvelle réponse' : 'Nouveau commentaire'}
+    >
+      <P>
+        <B>{actorName}</B>{' '}
+        {isReply ? 'a répondu à une discussion sur' : 'a commenté'} la page{' '}
+        <B>« {pageTitle} »</B>.
+      </P>
+      {excerpt && <Quote author={actorName}>{excerpt}</Quote>}
+      <Actions href={pageUrl} label="Voir le commentaire" />
     </MailBody>
   );
 };

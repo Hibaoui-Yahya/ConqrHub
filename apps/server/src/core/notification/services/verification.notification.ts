@@ -14,6 +14,8 @@ import { VerificationExpiringEmail } from '@docmost/transactional/emails/verific
 import { VerificationExpiredEmail } from '@docmost/transactional/emails/verification-expired-email';
 import { ApprovalRequestedEmail } from '@docmost/transactional/emails/approval-requested-email';
 import { ApprovalRejectedEmail } from '@docmost/transactional/emails/approval-rejected-email';
+import { ApprovalApprovedEmail } from '@docmost/transactional/emails/approval-approved-email';
+import { formatDateFr } from '@docmost/transactional/partials/partials';
 import { getPageTitle } from '../../../common/helpers';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
@@ -129,7 +131,7 @@ export class VerificationNotificationService {
         data: { expiresAt: expiresAtIso },
       });
 
-      const subject = `"${pageTitle}" needs to be re-verified soon`;
+      const subject = `La vérification de « ${pageTitle} » arrive à échéance`;
 
       await this.notificationService.queueEmail(
         userId,
@@ -139,7 +141,7 @@ export class VerificationNotificationService {
           pageTitle,
           spaceName,
           pageUrl: basePageUrl,
-          expiresAt: new Date(verification.expiresAt).toLocaleDateString(),
+          expiresAt: formatDateFr(verification.expiresAt).split(' à ')[0],
         }),
       );
     }
@@ -203,7 +205,7 @@ export class VerificationNotificationService {
         pageVerificationId: verification.id,
       });
 
-      const subject = `"${pageTitle}" verification has expired`;
+      const subject = `La vérification de « ${pageTitle} » a expiré`;
 
       await this.notificationService.queueEmail(
         userId,
@@ -295,16 +297,13 @@ export class VerificationNotificationService {
     }
   }
 
-  async processPageVerified(data: IPageVerifiedNotificationJob) {
-    const { verifierIds, pageId, spaceId, workspaceId, actorId } = data;
-    if (verifierIds.length === 0) return;
+  async processPageVerified(data: IPageVerifiedNotificationJob, appUrl?: string) {
+    const { verifierIds, pageId, spaceId, workspaceId, actorId, approvedRequesterId } =
+      data;
 
-    const accessibleVerifierIds = await this.filterAccessibleRecipients(
-      verifierIds,
-      pageId,
-      spaceId,
-    );
-    if (accessibleVerifierIds.length === 0) return;
+    const accessibleVerifierIds = verifierIds.length
+      ? await this.filterAccessibleRecipients(verifierIds, pageId, spaceId)
+      : [];
 
     for (const userId of accessibleVerifierIds) {
       await this.notificationService.create({
@@ -316,6 +315,43 @@ export class VerificationNotificationService {
         spaceId,
       });
     }
+
+    if (!approvedRequesterId || accessibleVerifierIds.includes(approvedRequesterId)) {
+      return;
+    }
+    const [requester] = await this.filterAccessibleRecipients(
+      [approvedRequesterId],
+      pageId,
+      spaceId,
+    );
+    if (!requester || !appUrl) return;
+
+    const context = await this.getPageContext(pageId, spaceId, appUrl);
+    if (!context) return;
+    const { pageTitle, spaceName, basePageUrl } = context;
+
+    const notification = await this.notificationService.create({
+      userId: requester,
+      workspaceId,
+      type: NotificationType.PAGE_VERIFIED,
+      actorId,
+      pageId,
+      spaceId,
+    });
+    if (!notification) return;
+
+    await this.notificationService.queueEmail(
+      requester,
+      notification.id,
+      `« ${pageTitle} » est approuvée`,
+      ApprovalApprovedEmail({
+        userName: await this.getUserName(requester),
+        actorName: await this.getUserName(actorId),
+        pageTitle,
+        spaceName,
+        pageUrl: basePageUrl,
+      }),
+    );
   }
 
   async processApprovalRequested(
@@ -348,7 +384,7 @@ export class VerificationNotificationService {
         spaceId,
       });
 
-      const subject = `"${pageTitle}" needs your approval`;
+      const subject = `Approbation demandée : « ${pageTitle} »`;
 
       await this.notificationService.queueEmail(
         userId,
@@ -393,7 +429,7 @@ export class VerificationNotificationService {
       spaceId,
     });
 
-    const subject = `"${pageTitle}" was returned for revision`;
+    const subject = `Modifications demandées sur « ${pageTitle} »`;
 
     await this.notificationService.queueEmail(
       requestedById,
@@ -415,7 +451,7 @@ export class VerificationNotificationService {
       .select('name')
       .where('id', '=', userId)
       .executeTakeFirst();
-    return user?.name ?? 'Someone';
+    return user?.name ?? 'Un membre';
   }
 
   private async getPageContext(

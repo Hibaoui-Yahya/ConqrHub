@@ -143,6 +143,7 @@ export class NotificationProcessor
         case QueueJob.PAGE_VERIFIED_NOTIFICATION: {
           await this.verificationNotificationService.processPageVerified(
             job.data as IPageVerifiedNotificationJob,
+            appUrl,
           );
           break;
         }

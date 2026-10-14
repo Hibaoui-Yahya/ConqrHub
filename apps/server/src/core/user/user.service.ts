@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -19,12 +20,14 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { AccountEmailService } from '../../integrations/mail/account-email.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private userRepo: UserRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    @Optional() private readonly accountEmails?: AccountEmailService,
   ) {}
 
   async findById(userId: string, workspaceId: string) {
@@ -194,6 +197,19 @@ export class UserService {
         resourceId: userId,
         changes,
       });
+    }
+
+    if (userBefore.email && user.email !== userBefore.email) {
+      await this.accountEmails?.emailChanged(
+        {
+          id: userId,
+          name: user.name,
+          email: user.email,
+          workspaceId: workspace.id,
+        },
+        userBefore.email,
+        user.email,
+      );
     }
 
     return user;

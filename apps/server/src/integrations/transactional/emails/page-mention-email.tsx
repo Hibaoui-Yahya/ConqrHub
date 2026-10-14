@@ -1,25 +1,35 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, MailBody, P, Quote } from '../partials/partials';
 
 interface Props {
   actorName: string;
   pageTitle: string;
   pageUrl: string;
+  spaceName?: string;
+  /** Text around the mention, when known. */
+  excerpt?: string;
 }
 
-export const PageMentionEmail = ({ actorName, pageTitle, pageUrl }: Props) => {
+export const PageMentionEmail = ({
+  actorName,
+  pageTitle,
+  pageUrl,
+  spaceName,
+  excerpt,
+}: Props) => {
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> mentioned you in{' '}
-          <strong>{pageTitle}</strong>.
-        </Text>
-      </Section>
-      <EmailButton href={pageUrl}>View Page</EmailButton>
+    <MailBody
+      product="hub"
+      icon="at-sign-brand"
+      preview={spaceName ? `Espace ${spaceName}` : `Dans « ${pageTitle} »`}
+      heading="Nouvelle mention dans une page"
+    >
+      <P>
+        <B>{actorName}</B> vous mentionne dans la page <B>« {pageTitle} »</B>
+        {spaceName ? `, espace ${spaceName}` : ''}.
+      </P>
+      {excerpt && <Quote author={pageTitle}>{excerpt}</Quote>}
+      <Actions href={pageUrl} label="Ouvrir la page" />
     </MailBody>
   );
 };

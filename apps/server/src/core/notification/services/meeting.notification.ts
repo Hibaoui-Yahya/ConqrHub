@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { NotificationService } from '../notification.service';
 import { NotificationType } from '../notification.constants';
+import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import { MeetingReadyEmail } from '@docmost/transactional/emails/meeting-ready-email';
+import { MeetingFailedEmail } from '@docmost/transactional/emails/meeting-failed-email';
+import { formatDateFr } from '@docmost/transactional/partials/partials';
 
 /** Pipeline statuses after which the person who recorded can act. */
 const READY_STATUSES = new Set(['awaiting_review']);
@@ -23,6 +27,7 @@ export class MeetingNotificationService {
   constructor(
     @InjectKysely() private readonly db: KyselyDB,
     private readonly notificationService: NotificationService,
+    @Optional() private readonly environmentService?: EnvironmentService,
   ) {}
 
   /** Called on every pipeline transition; picks the ones worth telling. */
@@ -66,7 +71,7 @@ export class MeetingNotificationService {
         .where('id', '=', meetingId)
         .executeTakeFirst();
       if (!meeting?.userId) return;
-      await this.notificationService.create({
+      const notification = await this.notificationService.create({
         userId: meeting.userId,
         workspaceId: meeting.workspaceId,
         type,
@@ -84,11 +89,123 @@ export class MeetingNotificationService {
             : {}),
         } as any,
       });
+      if (
+        notification &&
+        (type === NotificationType.MEETING_READY ||
+          type === NotificationType.MEETING_FAILED)
+      ) {
+        await this.email(meeting.id, notification.id, extra.status as string);
+      }
     } catch (error) {
       // A notification must never break the meeting pipeline.
       this.logger.warn(
         `Meeting notification ${type} for ${meetingId} failed: ${(error as Error).message}`,
       );
     }
+  }
+
+  /** Link to the meeting in ConqrMeet, or to Hub when Meet is not deployed. */
+  private meetingUrl(meetingId: string): string {
+    const meet = this.environmentService?.getMeetAppUrl() ?? '';
+    if (meet) return `${meet}/meetings/${meetingId}`;
+    return this.environmentService?.getAppUrl() ?? '';
+  }
+
+  /**
+   * E-mail for a finished recording: "ready" (with the action proposals
+   * waiting for a decision), "transcript only" when the report step failed,
+   * or "failed".
+   */
+  private async email(meetingId: string, notificationId: string, status: string) {
+    const meeting = await this.db
+      .selectFrom('meetings')
+      .innerJoin('users', 'users.id', 'meetings.userId')
+      .select([
+        'meetings.id',
+        'meetings.title',
+        'meetings.userId',
+        'meetings.startedAt',
+        'meetings.durationMs',
+        'meetings.failureReason',
+        'users.name as userName',
+      ])
+      .where('meetings.id', '=', meetingId)
+      .executeTakeFirst();
+    if (!meeting) return;
+
+    const meetingUrl = this.meetingUrl(meeting.id);
+    if (!meetingUrl) return;
+    const title = meeting.title || 'Réunion sans titre';
+    const startedAt = meeting.startedAt ? formatDateFr(meeting.startedAt) : undefined;
+    const minutes = meeting.durationMs ? Math.max(1, Math.round(Number(meeting.durationMs) / 60000)) : 0;
+    const durationLabel = minutes
+      ? minutes >= 60
+        ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`
+        : `${minutes} min`
+      : undefined;
+
+    if (status === 'failed') {
+      await this.notificationService.queueEmail(
+        meeting.userId,
+        notificationId,
+        `Le traitement de « ${title} » a échoué`,
+        MeetingFailedEmail({
+          userName: meeting.userName ?? undefined,
+          meetingTitle: title,
+          meetingUrl,
+          startedAt,
+          failureReason: meeting.failureReason,
+          reference: `MTG-${meeting.id.slice(0, 8).toUpperCase()}`,
+        }),
+        NotificationType.MEETING_FAILED,
+      );
+      return;
+    }
+
+    const proposals = await this.db
+      .selectFrom('meetingActionProposals')
+      .select(['title', 'payload'])
+      .where('meetingId', '=', meeting.id)
+      .where((eb) => eb.or([eb('status', '=', 'proposed'), eb('status', '=', 'draft')]))
+      .orderBy('createdAt', 'asc')
+      .execute()
+      .catch(() => []);
+    const items = proposals.map((p) => {
+      let payload: Record<string, unknown> = {};
+      try {
+        payload =
+          typeof p.payload === 'string' ? JSON.parse(p.payload) : ((p.payload as any) ?? {});
+      } catch {
+        payload = {};
+      }
+      const owner = typeof payload.owner === 'string' ? payload.owner : '';
+      const due = typeof payload.dueDate === 'string' ? payload.dueDate : '';
+      const dueLabel = due ? formatDateFr(`${due}T12:00:00Z`).split(' à ')[0] : '';
+      return {
+        title: p.title,
+        meta: [owner, dueLabel ? `échéance ${dueLabel}` : 'sans échéance'].filter(Boolean).join(' · '),
+      };
+    });
+    const n = items.length;
+    const partial = status === 'partially_failed';
+    await this.notificationService.queueEmail(
+      meeting.userId,
+      notificationId,
+      n
+        ? `${n} action${n > 1 ? 's' : ''} à valider après « ${title} »`
+        : partial
+          ? `Transcription prête : ${title}`
+          : `Compte rendu prêt : ${title}`,
+      MeetingReadyEmail({
+        userName: meeting.userName ?? undefined,
+        meetingTitle: title,
+        meetingUrl,
+        startedAt,
+        durationLabel,
+        proposals: items,
+        partial,
+      }),
+      partial ? NotificationType.MEETING_FAILED : NotificationType.MEETING_READY,
+    );
   }
 }

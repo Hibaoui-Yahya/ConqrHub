@@ -1,30 +1,47 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import {
+  Actions,
+  FallbackLink,
+  MailBody,
+  Note,
+  P,
+  greeting,
+} from '../partials/partials';
 
 interface Props {
   username: string;
   resetLink: string;
+  /** Lifetime of the link, in minutes. */
+  validMinutes?: number;
+  recipient?: string;
 }
 
-export const ForgotPasswordEmail = ({ username, resetLink }: Props) => {
+export const ForgotPasswordEmail = ({
+  username,
+  resetLink,
+  validMinutes = 30,
+  recipient,
+}: Props) => {
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi {username},</Text>
-        <Text style={paragraph}>
-          We received a request to reset your password. Click the button below to
-          choose a new one.
-        </Text>
-      </Section>
-      <EmailButton href={resetLink}>Reset Password</EmailButton>
-      <Section style={content}>
-        <Text style={{ ...paragraph, fontSize: '13px', color: '#64748b' }}>
-          This link expires in 30 minutes. If you did not request a password
-          reset, please ignore this email — your account is safe.
-        </Text>
-      </Section>
+    <MailBody
+      product="ai"
+      icon="key-round-brand"
+      preview={`Ce lien est valable ${validMinutes} minutes et ne sert qu'une fois.`}
+      heading="Réinitialisez votre mot de passe"
+      recipient={recipient}
+    >
+      <P>{greeting(username)}</P>
+      <P>
+        Nous avons reçu une demande de réinitialisation du mot de passe de votre
+        compte. Choisissez-en un nouveau avec le bouton ci-dessous. Ce lien est
+        valable {validMinutes} minutes et ne sert qu'une fois.
+      </P>
+      <Actions href={resetLink} label="Choisir un nouveau mot de passe" />
+      <FallbackLink href={resetLink} />
+      <Note>
+        Vous n'avez rien demandé ? Ignorez cet e-mail : votre mot de passe
+        actuel reste valable. Ne transférez jamais ce lien.
+      </Note>
     </MailBody>
   );
 };

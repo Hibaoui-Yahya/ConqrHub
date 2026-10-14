@@ -13,6 +13,7 @@ import { WatcherRepo } from '@docmost/db/repos/watcher/watcher.repo';
 import { CommentMentionEmail } from '@docmost/transactional/emails/comment-mention-email';
 import { CommentCreateEmail } from '@docmost/transactional/emails/comment-created-email';
 import { CommentResolvedEmail } from '@docmost/transactional/emails/comment-resolved-email';
+import { proseMirrorExcerpt } from '@docmost/transactional/utils/utils';
 import { getPageTitle } from '../../../common/helpers';
 
 @Injectable()
@@ -48,7 +49,7 @@ export class CommentNotificationService {
     );
     if (!context) return;
 
-    const { actor, pageTitle, pageUrl } = context;
+    const { actor, pageTitle, pageUrl, excerpt } = context;
     const notifiedUserIds = new Set<string>();
     notifiedUserIds.add(actorId);
 
@@ -91,8 +92,8 @@ export class CommentNotificationService {
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        `${actor.name} mentioned you in a comment`,
-        CommentMentionEmail({ actorName: actor.name, pageTitle, pageUrl }),
+        `${actor.name} vous mentionne dans un commentaire`,
+        CommentMentionEmail({ actorName: actor.name, pageTitle, pageUrl, excerpt }),
         NotificationType.COMMENT_USER_MENTION,
       );
 
@@ -117,8 +118,16 @@ export class CommentNotificationService {
       await this.notificationService.queueEmail(
         recipientId,
         notification.id,
-        `${actor.name} commented on ${pageTitle}`,
-        CommentCreateEmail({ actorName: actor.name, pageTitle, pageUrl }),
+        parentCommentId
+          ? `${actor.name} a répondu sur « ${pageTitle} »`
+          : `Nouveau commentaire sur « ${pageTitle} »`,
+        CommentCreateEmail({
+          actorName: actor.name,
+          pageTitle,
+          pageUrl,
+          excerpt,
+          isReply: Boolean(parentCommentId),
+        }),
         NotificationType.COMMENT_CREATED,
       );
     }
@@ -145,7 +154,7 @@ export class CommentNotificationService {
     );
     if (!context) return;
 
-    const { actor, pageTitle, pageUrl } = context;
+    const { actor, pageTitle, pageUrl, excerpt } = context;
 
     const roles = await this.spaceMemberRepo.getUserSpaceRoles(
       commentCreatorId,
@@ -177,13 +186,13 @@ export class CommentNotificationService {
     });
     if (!notification) return;
 
-    const subject = `${actor.name} resolved a comment on ${pageTitle}`;
+    const subject = `Votre commentaire sur « ${pageTitle} » a été résolu`;
 
     await this.notificationService.queueEmail(
       commentCreatorId,
       notification.id,
       subject,
-      CommentResolvedEmail({ actorName: actor.name, pageTitle, pageUrl }),
+      CommentResolvedEmail({ actorName: actor.name, pageTitle, pageUrl, excerpt }),
       NotificationType.COMMENT_RESOLVED,
     );
   }
@@ -212,7 +221,7 @@ export class CommentNotificationService {
     commentId: string,
     appUrl: string,
   ) {
-    const [actor, page, space] = await Promise.all([
+    const [actor, page, space, comment] = await Promise.all([
       this.db
         .selectFrom('users')
         .select(['id', 'name'])
@@ -228,6 +237,11 @@ export class CommentNotificationService {
         .select(['id', 'slug'])
         .where('id', '=', spaceId)
         .executeTakeFirst(),
+      this.db
+        .selectFrom('comments')
+        .select(['content'])
+        .where('id', '=', commentId)
+        .executeTakeFirst(),
     ]);
 
     if (!actor || !page || !space) {
@@ -236,6 +250,10 @@ export class CommentNotificationService {
 
     const pageUrl = `${appUrl}/s/${space.slug}/p/${page.slugId}`;
 
-    return { actor, pageTitle: getPageTitle(page.title), pageUrl };
+    const excerpt = comment?.content
+      ? proseMirrorExcerpt(comment.content) || undefined
+      : undefined;
+
+    return { actor, pageTitle: getPageTitle(page.title), pageUrl, excerpt };
   }
 }
