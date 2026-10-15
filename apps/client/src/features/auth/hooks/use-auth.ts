@@ -31,6 +31,16 @@ import { exchangeTokenRedirectUrl, getHostnameUrl } from "@/ee/utils.ts";
 
 export default function useAuth() {
   const { t } = useTranslation();
+  // Server errors arrive in English; show them in the interface language.
+  const serverError = (err: any): string => {
+    const raw = err?.response?.data?.message;
+    const msg = Array.isArray(raw) ? raw[0] : raw;
+    return t(
+      typeof msg === "string" && msg
+        ? msg
+        : "An error occurred. Please try again.",
+    );
+  };
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const [, setCurrentUser] = useAtom(currentUserAtom);
@@ -63,7 +73,7 @@ export default function useAuth() {
       }
 
       notifications.show({
-        message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -89,7 +99,7 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -128,7 +138,7 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -157,7 +167,7 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -181,7 +191,7 @@ export default function useAuth() {
       console.log(err);
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
 
@@ -199,7 +209,7 @@ export default function useAuth() {
       console.log(err);
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }

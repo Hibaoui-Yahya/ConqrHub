@@ -1716,5 +1716,19 @@
   "tool": "outil",
   "tools": "outils",
   "In ConqrMeet · names suggested by the AI": "Dans ConqrMeet · noms proposés par l’IA",
-  "Your pages, spaces and meetings.": "Vos pages, espaces et réunions."
+  "Your pages, spaces and meetings.": "Vos pages, espaces et réunions.",
+  "Email or password does not match": "L’adresse e-mail ou le mot de passe est incorrect.",
+  "Invalid or expired token": "Ce lien n’est plus valide. Demandez-en un nouveau.",
+  "User not found": "Aucun compte actif ne correspond.",
+  "Current password is incorrect": "Le mot de passe actuel est incorrect.",
+  "Invitation not found": "Cette invitation n’existe plus. Demandez-en une nouvelle à un administrateur.",
+  "Invalid invitation token": "Ce lien d’invitation n’est pas valide.",
+  "Invitation already accepted": "Cette invitation a déjà été acceptée. Connectez-vous avec votre adresse e-mail.",
+  "Failed to accept invitation. An error occurred.": "L’invitation n’a pas pu être acceptée. Réessayez dans un instant.",
+  "A user with this email already exists": "Un compte existe déjà avec cette adresse e-mail.",
+  "This workspace has enforced SSO login.": "Cet espace impose la connexion unique (SSO).",
+  "OIDC login is not configured": "La connexion unique n’est pas configurée.",
+  "Workspace does not match": "Ce compte n’appartient pas à cet espace.",
+  "ThrottlerException: Too Many Requests": "Trop de tentatives. Patientez une minute avant de réessayer.",
+  "An error occurred. Please try again.": "Une erreur est survenue. Réessayez."
 }
