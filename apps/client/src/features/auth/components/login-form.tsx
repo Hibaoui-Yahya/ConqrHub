@@ -2,17 +2,8 @@ import { z } from "zod/v4";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import useAuth from "@/features/auth/hooks/use-auth";
-import {
-  Container,
-  Title,
-  TextInput,
-  Button,
-  PasswordInput,
-  Box,
-  Anchor,
-  Group,
-} from "@mantine/core";
-import classes from "./auth.module.css";
+import { TextInput, Button, PasswordInput, Anchor, Text } from "@mantine/core";
+import { IconArrowRight, IconMail } from "@tabler/icons-react";
 import { useRedirectIfAuthenticated } from "@/features/auth/hooks/use-redirect-if-authenticated.ts";
 import { Link } from "react-router-dom";
 import APP_ROUTE from "@/lib/app-route.ts";
@@ -22,13 +13,16 @@ import { ConqrSsoButton } from "@/features/auth/components/conqr-sso-button.tsx"
 import { useWorkspacePublicDataQuery } from "@/features/workspace/queries/workspace-query.ts";
 import { Error404 } from "@/components/ui/error-404.tsx";
 import React from "react";
-import { AuthLayout } from "./auth-layout.tsx";
+import {
+  AuthApps,
+  AuthHeading,
+  AuthLayout,
+  authClasses as classes,
+} from "./auth-layout.tsx";
 
 const formSchema = z.object({
-  email: z
-    .email()
-    .min(1, { message: "email is required" }),
-  password: z.string().min(1, { message: "Password is required" }),
+  email: z.email({ message: "Enter a valid email address" }),
+  password: z.string().min(1, { message: "Enter your password" }),
 });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -56,7 +50,7 @@ export function LoginForm() {
   }
 
   if (isDataLoading) {
-   return null;
+    return null;
   }
 
   if (isError && error?.["response"]?.status === 404) {
@@ -65,54 +59,79 @@ export function LoginForm() {
 
   return (
     <AuthLayout>
-      <Container size={420} className={classes.container}>
-        <Box p="xl" className={classes.containerBox}>
-          <Title order={2} ta="center" fw={500} mb="md">
-            {t("Login")}
-          </Title>
+      <AuthHeading
+        title={t("Welcome back")}
+        subtitle={
+          data?.name
+            ? t("Sign in to the {{name}} workspace.", { name: data.name })
+            : t("Sign in to your workspace.")
+        }
+      />
 
-          <ConqrSsoButton />
-          <SsoLogin />
+      <ConqrSsoButton />
+      <SsoLogin />
 
-          {!data?.enforceSso && (
-            <>
-              <form onSubmit={form.onSubmit(onSubmit)}>
-                <TextInput
-                  id="email"
-                  type="email"
-                  label={t("Email")}
-                  placeholder="email@example.com"
-                  variant="filled"
-                  {...form.getInputProps("email")}
-                />
+      {!data?.enforceSso && (
+        <form onSubmit={form.onSubmit(onSubmit)} noValidate>
+          <TextInput
+            id="email"
+            type="email"
+            autoComplete="username"
+            label={t("Email address")}
+            placeholder={t("Your work email address")}
+            size="md"
+            leftSection={<IconMail size={16} />}
+            {...form.getInputProps("email")}
+            error={form.errors.email ? t(String(form.errors.email)) : undefined}
+          />
 
-                <PasswordInput
-                  label={t("Password")}
-                  placeholder={t("Your password")}
-                  variant="filled"
-                  mt="md"
-                  {...form.getInputProps("password")}
-                />
+          <div className={classes.labelRow} style={{ marginTop: 16 }}>
+            <label htmlFor="password" className={classes.label}>
+              {t("Password")}
+            </label>
+            <Anchor
+              to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
+              component={Link}
+              underline="never"
+              size="sm"
+              fw={600}
+            >
+              {t("Forgot your password?")}
+            </Anchor>
+          </div>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            aria-label={t("Password")}
+            placeholder={t("Your password")}
+            size="md"
+            {...form.getInputProps("password")}
+            error={
+              form.errors.password ? t(String(form.errors.password)) : undefined
+            }
+          />
 
-                <Group justify="flex-end" mt="sm">
-                  <Anchor
-                    to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
-                    component={Link}
-                    underline="never"
-                    size="sm"
-                  >
-                    {t("Forgot your password?")}
-                  </Anchor>
-                </Group>
+          <Button
+            type="submit"
+            fullWidth
+            size="md"
+            mt={24}
+            loading={isLoading}
+            className={classes.primary}
+            rightSection={<IconArrowRight size={16} />}
+          >
+            {t("Sign In")}
+          </Button>
+        </form>
+      )}
 
-                <Button type="submit" fullWidth mt="md" loading={isLoading}>
-                  {t("Sign In")}
-                </Button>
-              </form>
-            </>
-          )}
-        </Box>
-      </Container>
+      <AuthApps />
+
+      <Text className={classes.help}>
+        {t(
+          "No account yet? Use the invitation link you received by email. Trouble signing in? Contact an administrator of your workspace.",
+        )}
+      </Text>
     </AuthLayout>
   );
 }

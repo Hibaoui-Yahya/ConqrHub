@@ -2,11 +2,17 @@ import { z } from "zod/v4";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import useAuth from "@/features/auth/hooks/use-auth";
-import { Box, Button, Container, PasswordInput, Title } from "@mantine/core";
-import classes from "./auth.module.css";
+import { Button, PasswordInput, Text } from "@mantine/core";
+import { IconKey } from "@tabler/icons-react";
 import { useRedirectIfAuthenticated } from "@/features/auth/hooks/use-redirect-if-authenticated.ts";
 import { useTranslation } from "react-i18next";
-import { AuthLayout } from "./auth-layout.tsx";
+import {
+  AuthHeading,
+  AuthLayout,
+  BackToLogin,
+  PasswordStrength,
+  authClasses as classes,
+} from "./auth-layout.tsx";
 
 const formSchema = z.object({
   newPassword: z
@@ -40,27 +46,46 @@ export function PasswordResetForm({ resetToken }: PasswordResetFormProps) {
 
   return (
     <AuthLayout>
-    <Container size={420} className={classes.container}>
-      <Box p="xl" className={classes.containerBox}>
-        <Title order={2} ta="center" fw={500} mb="md">
-          {t("Password reset")}
-        </Title>
+      <AuthHeading
+        icon={<IconKey size={22} />}
+        title={t("Choose a new password")}
+        subtitle={t(
+          "Your other sessions will be signed out. You will stay signed in here.",
+        )}
+      />
 
-        <form onSubmit={form.onSubmit(onSubmit)}>
-          <PasswordInput
-            label={t("New password")}
-            placeholder={t("Your new password")}
-            variant="filled"
-            mt="md"
-            {...form.getInputProps("newPassword")}
-          />
+      <form onSubmit={form.onSubmit(onSubmit)} noValidate>
+        <PasswordInput
+          id="newPassword"
+          autoComplete="new-password"
+          label={t("New password")}
+          placeholder={t("Your new password")}
+          size="md"
+          {...form.getInputProps("newPassword")}
+          error={
+            form.errors.newPassword
+              ? t(String(form.errors.newPassword))
+              : undefined
+          }
+        />
+        <PasswordStrength value={form.values.newPassword} />
+        <Text size="xs" c="dimmed" mt={8}>
+          {t("At least 8 characters. Avoid reusing a password.")}
+        </Text>
 
-          <Button type="submit" fullWidth mt="xl" loading={isLoading}>
-            {t("Set password")}
-          </Button>
-        </form>
-      </Box>
-    </Container>
+        <Button
+          type="submit"
+          fullWidth
+          size="md"
+          mt={24}
+          loading={isLoading}
+          className={classes.primary}
+        >
+          {t("Set password")}
+        </Button>
+      </form>
+
+      <BackToLogin />
     </AuthLayout>
   );
 }

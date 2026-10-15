@@ -55,6 +55,8 @@ export class StaticModule implements OnModuleInit {
         PLANE_APP_URL: this.environmentService.getPlaneAppUrl() || undefined,
         SERVICE_APP_URL:
           this.environmentService.getServiceAppUrl() || undefined,
+        // Client identity on the sign-in pages (e.g. "ltc"); unset = ConqrAI.
+        CLIENT_BRAND: process.env.CLIENT_BRAND || undefined,
       };
 
       const windowScriptContent = `<script>window.CONFIG=${JSON.stringify(configString)};</script>`;
