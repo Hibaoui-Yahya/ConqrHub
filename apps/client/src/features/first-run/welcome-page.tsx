@@ -74,9 +74,15 @@ export default function WelcomePage({
   const first = (user.name || "").trim().split(/\s+/)[0];
   const track = trackFor(jobTitle, user.role);
 
-  const finish = async (target: "hub" | "meet") => {
+  /** skipped: the person declined guidance, so the tour does not follow
+   *  (it stays in the account menu). */
+  const finish = async (target: "hub" | "meet", skipped = false) => {
     try {
-      await save({ onboarded: true, jobTitle: jobTitle.trim() });
+      await save({
+        onboarded: true,
+        jobTitle: jobTitle.trim(),
+        ...(skipped ? { hubTourSeen: true } : {}),
+      });
     } catch {
       // the next visit offers the welcome again; never block the user here
     }
@@ -99,7 +105,7 @@ export default function WelcomePage({
           jobTitle={jobTitle}
           track={track}
           onStart={() => setPhase(1)}
-          onSkip={() => finish("hub")}
+          onSkip={() => finish("hub", true)}
         />
       </>
     );

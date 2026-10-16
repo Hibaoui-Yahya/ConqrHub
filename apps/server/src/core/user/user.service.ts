@@ -99,6 +99,7 @@ export class UserService {
       const value: Record<string, unknown> = {};
       if (incoming.onboarded === true) value.onboardedAt = now;
       if (incoming.hubTourSeen === true) value.hubTourSeenAt = now;
+      if (incoming.meetTourSeen === true) value.meetTourSeenAt = now;
       if (typeof incoming.jobTitle === 'string') {
         value.jobTitle = incoming.jobTitle.replace(/\s+/g, ' ').trim();
       }

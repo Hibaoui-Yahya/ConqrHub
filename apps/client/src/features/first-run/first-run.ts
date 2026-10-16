@@ -10,6 +10,7 @@ import { getClientBrand } from "@/lib/client-brand.ts";
 export interface FirstRunState {
   onboardedAt?: string;
   hubTourSeenAt?: string;
+  meetTourSeenAt?: string;
   jobTitle?: string;
 }
 
