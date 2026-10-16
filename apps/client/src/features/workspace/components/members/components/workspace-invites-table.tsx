@@ -1,4 +1,4 @@
-import { Group, Table, Avatar, Text, Alert } from "@mantine/core";
+import { Group, Table, Avatar, Text, Alert, Badge } from "@mantine/core";
 import { useWorkspaceInvitationsQuery } from "@/features/workspace/queries/workspace-query.ts";
 import React from "react";
 import { getUserRoleLabel } from "@/features/workspace/types/user-role-data.ts";
@@ -9,6 +9,29 @@ import useUserRole from "@/hooks/use-user-role.tsx";
 import { useTranslation } from "react-i18next";
 import Paginate from "@/components/common/paginate.tsx";
 import { useCursorPaginate } from "@/hooks/use-cursor-paginate";
+
+function InvitationExpiry({
+  expiresAt,
+}: {
+  expiresAt?: Date | string | null;
+}) {
+  const { t, i18n } = useTranslation();
+  if (!expiresAt) return <Text fz="sm">—</Text>;
+  const at = new Date(expiresAt);
+  if (Number.isNaN(at.getTime())) return <Text fz="sm">—</Text>;
+  if (at.getTime() <= Date.now()) {
+    return (
+      <Badge color="red" variant="light">
+        {t("Expired")}
+      </Badge>
+    );
+  }
+  const date = at.toLocaleDateString(i18n.language || undefined, {
+    day: "numeric",
+    month: "short",
+  });
+  return <Text fz="sm">{t("Until {{date}}", { date })}</Text>;
+}
 
 export default function WorkspaceInvitesTable() {
   const { t } = useTranslation();
@@ -24,6 +47,9 @@ export default function WorkspaceInvitesTable() {
       <Alert variant="light" color="blue" icon={<IconInfoCircle />}>
         {t(
           "Invited members who are yet to accept their invitation will appear here.",
+        )}{" "}
+        {t(
+          "An invitation link is valid for 7 days; resending the invitation or copying its link gives it 7 more days.",
         )}
       </Alert>
 
@@ -34,6 +60,7 @@ export default function WorkspaceInvitesTable() {
               <Table.Th>{t("Email")}</Table.Th>
               <Table.Th>{t("Role")}</Table.Th>
               <Table.Th>{t("Date")}</Table.Th>
+              <Table.Th>{t("Expiry")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
 
@@ -54,6 +81,10 @@ export default function WorkspaceInvitesTable() {
                 <Table.Td>{t(getUserRoleLabel(invitation.role))}</Table.Td>
 
                 <Table.Td>{timeAgo(invitation.createdAt)}</Table.Td>
+
+                <Table.Td>
+                  <InvitationExpiry expiresAt={invitation.expiresAt} />
+                </Table.Td>
 
                 <Table.Td>
                   {isAdmin && <InviteActionMenu invitationId={invitation.id} />}

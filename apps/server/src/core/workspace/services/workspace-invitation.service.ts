@@ -44,6 +44,11 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
+import {
+  INVITATION_EXPIRED_MESSAGE,
+  invitationExpiresAt,
+  isInvitationExpired,
+} from '../invitation-expiry';
 
 @Injectable()
 export class WorkspaceInvitationService {
@@ -64,7 +69,7 @@ export class WorkspaceInvitationService {
   async getInvitations(workspaceId: string, pagination: PaginationOptions) {
     let query = this.db
       .selectFrom('workspaceInvitations')
-      .select(['id', 'email', 'role', 'workspaceId', 'createdAt'])
+      .select(['id', 'email', 'role', 'workspaceId', 'createdAt', 'expiresAt'])
       .where('workspaceId', '=', workspaceId);
 
     if (pagination.query) {
@@ -89,7 +94,7 @@ export class WorkspaceInvitationService {
   async getInvitationById(invitationId: string, workspace: Workspace) {
     const invitation = await this.db
       .selectFrom('workspaceInvitations')
-      .select(['id', 'email', 'createdAt'])
+      .select(['id', 'email', 'createdAt', 'expiresAt'])
       .where('id', '=', invitationId)
       .where('workspaceId', '=', workspace.id)
       .executeTakeFirst();
@@ -98,7 +103,11 @@ export class WorkspaceInvitationService {
       throw new NotFoundException('Invitation not found');
     }
 
-    return { ...invitation, enforceSso: workspace.enforceSso };
+    return {
+      ...invitation,
+      expired: isInvitationExpired(invitation.expiresAt),
+      enforceSso: workspace.enforceSso,
+    };
   }
 
   async getInvitationTokenById(invitationId: string, workspaceId: string) {
@@ -161,10 +170,12 @@ export class WorkspaceInvitationService {
             .execute();
         }
 
+        const expiresAt = invitationExpiresAt();
         const invitesToInsert = inviteEmails.map((email) => ({
           email: email,
           role: role,
           token: nanoIdGen(16),
+          expiresAt,
           workspaceId: workspace.id,
           invitedById: authUser.id,
           groupIds: validGroups?.map((group: Partial<Group>) => group.id),
@@ -242,6 +253,10 @@ export class WorkspaceInvitationService {
 
     if (dto.token !== invitation.token) {
       throw new BadRequestException('Invalid invitation token');
+    }
+
+    if (isInvitationExpired(invitation.expiresAt)) {
+      throw new BadRequestException(INVITATION_EXPIRED_MESSAGE);
     }
 
     validateSsoEnforcement(workspace);
@@ -406,6 +421,9 @@ export class WorkspaceInvitationService {
       throw new BadRequestException('Invitation not found');
     }
 
+    // Resending gives the same link a fresh week.
+    await this.renewInvitation(invitation.id, workspace.id);
+
     const invitedByUser = await this.userRepo.findById(
       invitation.invitedById,
       workspace.id,
@@ -468,11 +486,26 @@ export class WorkspaceInvitationService {
     workspace: Workspace,
   ): Promise<string> {
     const token = await this.getInvitationTokenById(invitationId, workspace.id);
+    // An administrator copying the link is about to share it: it gets a
+    // fresh week, like a resend.
+    await this.renewInvitation(invitationId, workspace.id);
     return this.buildInviteLink({
       invitationId,
       inviteToken: token.token,
       hostname: workspace.hostname,
     });
+  }
+
+  private async renewInvitation(
+    invitationId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    await this.db
+      .updateTable('workspaceInvitations')
+      .set({ expiresAt: invitationExpiresAt(), updatedAt: new Date() })
+      .where('id', '=', invitationId)
+      .where('workspaceId', '=', workspaceId)
+      .execute();
   }
 
   async buildInviteLink(opts: {

@@ -8,6 +8,7 @@ import {
   Note,
   P,
 } from '../partials/partials';
+import { INVITATION_VALIDITY_DAYS } from '../../../core/workspace/invitation-expiry';
 
 interface Props {
   inviteLink: string;
@@ -74,6 +75,11 @@ export const InvitationEmail = ({
       )}
       <Actions href={inviteLink} label="Accepter l'invitation" />
       <FallbackLink href={inviteLink} />
+      <P>
+        Ce lien est valable <B>{INVITATION_VALIDITY_DAYS} jours</B>. En
+        acceptant l'invitation, vous choisissez vous-même votre mot de passe :
+        personne d'autre ne le connaît.
+      </P>
       <Note>
         Vous ne connaissez pas {invitedByName || "l'expéditeur"} ou n'attendiez
         pas cette invitation ? Ignorez cet e-mail : aucun compte ne sera créé.

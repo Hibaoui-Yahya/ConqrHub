@@ -1940,5 +1940,10 @@
   "Create & link": "Créer et lier",
   "Could not sign you out. Please try again.": "Impossible de vous déconnecter. Réessayez.",
   "Sign out everywhere": "Se déconnecter partout",
-  "End every session, including this one, in ConqrHub and ConqrMeet": "Ferme toutes les sessions, y compris celle-ci, dans ConqrHub et ConqrMeet"
+  "End every session, including this one, in ConqrHub and ConqrMeet": "Ferme toutes les sessions, y compris celle-ci, dans ConqrHub et ConqrMeet",
+  "Expiry": "Expiration",
+  "Until {{date}}": "Jusqu’au {{date}}",
+  "This invitation has expired": "Cette invitation a expiré",
+  "Invitation links are valid for 7 days. Ask an administrator to send it again: you will receive a new link valid for 7 days.": "Les liens d’invitation sont valables 7 jours. Demandez à un administrateur de vous la renvoyer : vous recevrez un nouveau lien, valable 7 jours.",
+  "An invitation link is valid for 7 days; resending the invitation or copying its link gives it 7 more days.": "Un lien d’invitation est valable 7 jours ; renvoyer l’invitation ou copier son lien lui redonne 7 jours."
 }
