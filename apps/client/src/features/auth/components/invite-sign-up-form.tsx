@@ -80,6 +80,21 @@ export function InviteSignUpForm() {
     return <div></div>;
   }
 
+  if (invitation.expired) {
+    return (
+      <AuthLayout>
+        <AuthHeading
+          icon={<IconLinkOff size={22} />}
+          title={t("This invitation has expired")}
+          subtitle={t(
+            "Invitation links are valid for 7 days. Ask an administrator to send it again: you will receive a new link valid for 7 days.",
+          )}
+        />
+        <BackToLogin />
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout>
       <AuthHeading

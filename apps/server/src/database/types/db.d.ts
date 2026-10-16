@@ -906,6 +906,7 @@ export interface Watchers {
 export interface WorkspaceInvitations {
   createdAt: Generated<Timestamp>;
   email: string | null;
+  expiresAt: Generated<Timestamp | null>;
   groupIds: string[] | null;
   id: Generated<string>;
   invitedById: string | null;

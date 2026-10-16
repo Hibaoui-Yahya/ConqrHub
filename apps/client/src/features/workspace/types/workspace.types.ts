@@ -93,6 +93,10 @@ export interface IInvitation {
   workspaceId: string;
   invitedById: string;
   createdAt: Date;
+  /** The link stops working at this date; resending or copying it renews it. */
+  expiresAt?: Date | string | null;
+  /** Set on the public invitation lookup. */
+  expired?: boolean;
   enforceSso: boolean;
 }
 
