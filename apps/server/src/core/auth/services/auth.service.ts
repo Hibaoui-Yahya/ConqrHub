@@ -134,24 +134,35 @@ export class AuthService {
     }
 
     const newPasswordHash = await hashPassword(dto.newPassword);
-    await this.userRepo.updateUser(
-      {
-        password: newPasswordHash,
-        hasGeneratedPassword: false,
-      },
-      userId,
-      workspaceId,
-    );
-
-    if (currentSessionId) {
-      await this.userSessionRepo.deleteAllExceptCurrent(
-        currentSessionId,
+    // The new password and the end of every other session commit together:
+    // a stolen session must not outlive the password change, even briefly.
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUser(
+        {
+          password: newPasswordHash,
+          hasGeneratedPassword: false,
+        },
         userId,
         workspaceId,
+        trx,
       );
-    } else {
-      await this.userSessionRepo.deleteByUserId(userId, workspaceId);
-    }
+
+      if (currentSessionId) {
+        await this.userSessionRepo.deleteAllExceptCurrent(
+          currentSessionId,
+          userId,
+          workspaceId,
+          trx,
+        );
+      } else {
+        await this.userSessionRepo.deleteByUserId(userId, workspaceId, trx);
+      }
+    });
+    this.sessionService.notifyRevoked(
+      currentSessionId
+        ? { userId, workspaceId, allExcept: currentSessionId }
+        : { userId, workspaceId, all: true },
+    );
 
     this.auditService.log({
       event: AuditEvent.USER_PASSWORD_CHANGED,
@@ -270,6 +281,11 @@ export class AuthService {
         .execute();
 
       await this.userSessionRepo.deleteByUserId(user.id, workspace.id, trx);
+    });
+    this.sessionService.notifyRevoked({
+      userId: user.id,
+      workspaceId: workspace.id,
+      all: true,
     });
 
     this.auditService.setActorId(user.id);
