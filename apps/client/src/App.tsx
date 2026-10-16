@@ -30,6 +30,7 @@ import { isCloud } from "@/lib/config.ts";
 import { useTranslation } from "react-i18next";
 import Security from "@/ee/security/pages/security.tsx";
 import License from "@/ee/licence/pages/license.tsx";
+import { isFeatureUnavailable, UNAVAILABLE } from "@/ee/unavailable-features";
 import { useRedirectToCloudSelect } from "@/ee/hooks/use-redirect-to-cloud-select.tsx";
 import SharedPage from "@/pages/share/shared-page.tsx";
 import PdfRenderPage from "@/ee/pdf-export/pdf-render-page.tsx";
@@ -164,7 +165,9 @@ export default function App() {
             <Route path={"verifications"} element={<VerifiedPages />} />
             <Route path={"health"} element={<DocHealthPage />} />
             <Route path={"integrations"} element={<IntegrationsSettings />} />
-            {!isCloud() && <Route path={"license"} element={<License />} />}
+            {!isCloud() && !isFeatureUnavailable(UNAVAILABLE.LICENSE) && (
+              <Route path={"license"} element={<License />} />
+            )}
             {isCloud() && <Route path={"billing"} element={<Billing />} />}
           </Route>
         </Route>

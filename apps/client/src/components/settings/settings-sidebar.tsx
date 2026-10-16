@@ -41,7 +41,6 @@ import {
   prefetchApiKeys,
   prefetchBilling,
   prefetchGroups,
-  prefetchSsoProviders,
   prefetchSpaces,
   prefetchWorkspaceMembers,
   prefetchAuditLogs,
@@ -55,6 +54,11 @@ import {
   readSettingsReturn,
 } from "@/components/settings/settings-return.ts";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
+import {
+  isFeatureUnavailable,
+  UNAVAILABLE,
+  withoutUnavailable,
+} from "@/ee/unavailable-features";
 
 type DataItem = {
   label: string;
@@ -88,7 +92,7 @@ const groupedData: DataGroup[] = [
         label: "Profile",
         icon: IconUser,
         path: "/settings/account/profile",
-        keywords: "name email password 2fa two-factor sessions avatar photo",
+        keywords: "name email password sessions avatar photo",
       },
       {
         label: "Preferences",
@@ -143,11 +147,9 @@ const groupedData: DataGroup[] = [
         label: "Security and sign-in",
         icon: IconLock,
         path: "/settings/security",
-        keywords:
-          "sso saml oidc mfa 2fa domains trash retention public sharing",
+        keywords: "trash retention public sharing",
         feature: Feature.SECURITY_SETTINGS,
         role: "admin",
-        prefetch: prefetchSsoProviders,
       },
       {
         label: "Billing",
@@ -161,6 +163,7 @@ const groupedData: DataGroup[] = [
         label: "License",
         icon: IconLicense,
         path: "/settings/license",
+        feature: UNAVAILABLE.LICENSE,
         role: "admin",
         env: "selfhosted",
       },
@@ -252,9 +255,11 @@ export default function SettingsSidebar() {
   const origin = readSettingsReturn();
 
   const hasFeature = (f: string) =>
-    entitlements?.features?.includes(f) ?? false;
+    withoutUnavailable(entitlements?.features).includes(f);
 
   const canShowItem = (item: DataItem) => {
+    // Not built in this edition: hidden, not shown as an upgrade.
+    if (item.feature && isFeatureUnavailable(item.feature)) return false;
     if (item.env === "cloud" && !isCloud()) return false;
     if (item.env === "selfhosted" && isCloud()) return false;
     if (item.role === "admin" && !isAdmin) return false;

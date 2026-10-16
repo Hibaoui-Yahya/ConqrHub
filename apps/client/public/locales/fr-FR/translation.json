@@ -1776,5 +1776,6 @@
   "Activate my account": "Activer mon compte",
   "Enter a valid email address": "Saisissez une adresse e-mail valide",
   "Enter your name": "Saisissez votre nom",
-  "Password must contain at least 8 characters": "Le mot de passe doit contenir au moins 8 caractères"
+  "Password must contain at least 8 characters": "Le mot de passe doit contenir au moins 8 caractères",
+  "Rules that apply to every member of the company.": "Règles qui s’appliquent à tous les membres de l’entreprise."
 }

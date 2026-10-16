@@ -8,6 +8,7 @@ import { getAppName } from "@/lib/config.ts";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { AccountMfaSection } from "@/features/user/components/account-mfa-section";
+import { isFeatureUnavailable, UNAVAILABLE } from "@/ee/unavailable-features";
 import SessionList from "@/features/session/components/session-list";
 
 export default function AccountSettings() {
@@ -42,9 +43,12 @@ export default function AccountSettings() {
 
       <Divider my="lg" />
 
-      <AccountMfaSection />
-
-      <Divider my="lg" />
+      {!isFeatureUnavailable(UNAVAILABLE.MFA) && (
+        <>
+          <AccountMfaSection />
+          <Divider my="lg" />
+        </>
+      )}
 
       <SessionList />
     </>
