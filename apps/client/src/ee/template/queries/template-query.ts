@@ -18,6 +18,7 @@ import { ITemplate } from "@/ee/template/types/template.types";
 import { IPagination } from "@/lib/types.ts";
 import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
+import { invalidateOnCreatePage } from "@/features/page/queries/page-query";
 
 export function useGetTemplatesQuery(params?: { spaceId?: string }) {
   const { spaceId } = params ?? {};
@@ -156,6 +157,10 @@ export function useUseTemplateMutation() {
       spaceId: string;
       parentPageId?: string;
     }) => applyTemplate(data),
+    onSuccess: (page) => {
+      // The new page shows up in the space tree straight away.
+      if (page?.id) invalidateOnCreatePage(page);
+    },
     onError: (error) => {
       const errorMessage = error["response"]?.data?.message;
       notifications.show({
