@@ -205,6 +205,10 @@ export class UserService {
       user.locale = updateUserDto.locale;
     }
 
+    if (typeof updateUserDto.department !== 'undefined') {
+      user.department = updateUserDto.department;
+    }
+
     delete updateUserDto.confirmPassword;
 
     await this.userRepo.updateUser(updateUserDto, userId, workspace.id);

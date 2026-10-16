@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollArea, Text, Divider, Modal } from "@mantine/core";
 import {
+  IconBulb,
   IconHome,
   IconSparkles,
   IconStar,
@@ -27,6 +28,7 @@ const mainNavItems = [
   { label: "AI Chat", icon: IconSparkles, path: "/ai" },
   { label: "Favorites", icon: IconStar, path: "/favorites" },
   { label: "Spaces", icon: IconLayoutGrid, path: "/spaces" },
+  { label: "Expertise", icon: IconBulb, path: "/expertise" },
 ];
 
 export default function GlobalSidebar() {

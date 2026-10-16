@@ -1,6 +1,7 @@
 import { ActionIcon, Group, Menu, Text, Tooltip } from "@mantine/core";
 import {
   IconArrowRight,
+  IconBulb,
   IconArrowsHorizontal,
   IconDots,
   IconEye,
@@ -139,6 +140,17 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           aria-label={t("Attachments")}
         >
           <IconPaperclip size={20} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Tooltip label={t("Expertise")} openDelay={250} withArrow>
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          onClick={() => toggleAside("expertise")}
+          aria-label={t("Expertise")}
+        >
+          <IconBulb size={20} stroke={2} />
         </ActionIcon>
       </Tooltip>
 

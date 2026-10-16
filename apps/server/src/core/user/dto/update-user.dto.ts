@@ -11,9 +11,10 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { CreateUserDto } from '../../auth/dto/create-user.dto';
 import { NOTIFICATION_SETTING_KEYS } from '../../notification/notification.constants';
 
@@ -133,6 +134,19 @@ export class UpdateUserDto extends PartialType(
   @ValidateNested()
   @Type(() => NotificationSoundsDto)
   notificationSounds: NotificationSoundsDto;
+
+  /**
+   * Department shown with the person's expert insights (users.department).
+   * Blank clears it.
+   */
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() || null : value,
+  )
+  @ValidateIf((o) => o.department !== null)
+  @IsString()
+  @MaxLength(120)
+  department?: string | null;
 
   /** settings.notifications (e-mail) or settings.inAppNotifications (bell). */
   @IsOptional()

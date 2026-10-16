@@ -2,6 +2,7 @@ import React from "react";
 import { Text, Tooltip } from "@mantine/core";
 import {
   IconBell,
+  IconBulb,
   IconHome,
   IconLayoutGrid,
   IconSettings,
@@ -56,6 +57,7 @@ const TOP_LEVEL: [string, Crumb][] = [
   ["/spaces", { label: "Spaces", icon: IconLayoutGrid }],
   ["/favorites", { label: "Favorites", icon: IconStar }],
   ["/notifications", { label: "Notifications", icon: IconBell }],
+  ["/expertise", { label: "Expertise", icon: IconBulb }],
   ["/ai", { label: "AI Chat", icon: IconSparkles }],
 ];
 

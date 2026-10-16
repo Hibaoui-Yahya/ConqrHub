@@ -15,6 +15,7 @@ import { useSpaceMappings } from "@/features/integration/queries/integration-que
 import { RequirementDeliveryPanel } from "@/features/integration/components/requirement-delivery-panel";
 import { KnowledgePanel } from "@/features/integration/components/knowledge-panel.tsx";
 import PageAttachmentsPanel from "@/features/attachments/components/page-attachments-panel.tsx";
+import { PageExpertisePanel } from "@/features/expertise/components/page-expertise-panel";
 
 export default function Aside() {
   const [{ tab }] = useAtom(asideStateAtom);
@@ -53,6 +54,15 @@ export default function Aside() {
     case "attachments":
       component = <PageAttachmentsPanel pageId={currentPage?.id} />;
       title = "Attachments";
+      break;
+    case "expertise":
+      component = (
+        <PageExpertisePanel
+          pageId={currentPage?.id}
+          spaceId={currentPage?.spaceId}
+        />
+      );
+      title = "Expertise";
       break;
     case "links":
       // Requirements first: they are the unit delivery is tracked against, and

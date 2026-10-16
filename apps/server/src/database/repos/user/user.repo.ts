@@ -37,6 +37,7 @@ export class UserRepo {
     'updatedAt',
     'deletedAt',
     'hasGeneratedPassword',
+    'department',
   ];
 
   async findById(
