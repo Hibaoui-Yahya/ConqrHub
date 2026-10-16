@@ -43,6 +43,9 @@ describe('MeetingController actor wiring', () => {
     await controller.saveEvaluation('m1', {} as any, user, workspace);
     await controller.stop('m1', {} as any, user, workspace);
     await controller.capture('m1', user, workspace);
+    await controller.listInsights('m1', {} as any, user, workspace);
+    await controller.saveInsight('m1', { kind: 'qa', question: 'q', content: 'a' } as any, user, workspace);
+    await controller.deleteInsight('m1', 'i1', user, workspace);
     await controller.getAudio('m1', user, workspace);
     await controller.streamAudio('m1', undefined, user, workspace, reply);
     for (const [name, fn] of Object.entries(service)) {

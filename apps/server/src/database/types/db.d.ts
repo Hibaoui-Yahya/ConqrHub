@@ -525,6 +525,18 @@ export interface MeetingDocuments {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface MeetingInsights {
+  content: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  id: Generated<string>;
+  kind: string;
+  meetingId: string;
+  question: string | null;
+  transcriptVersion: number | null;
+  workspaceId: string;
+}
+
 export interface MeetingProcessingEvents {
   actorId: string | null;
   createdAt: Generated<Timestamp>;
@@ -1001,6 +1013,7 @@ export interface DB {
   mcpOauthRefreshTokens: McpOauthRefreshTokens;
   meetingActionProposals: MeetingActionProposals;
   meetingDocuments: MeetingDocuments;
+  meetingInsights: MeetingInsights;
   meetingProcessingEvents: MeetingProcessingEvents;
   meetings: Meetings;
   meetingSegments: MeetingSegments;

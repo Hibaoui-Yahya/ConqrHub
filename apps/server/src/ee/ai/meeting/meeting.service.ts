@@ -94,6 +94,11 @@ import {
   type ManifestChunk,
 } from './meeting-capture.util';
 import {
+  isInsightKind,
+  MAX_INSIGHTS_PER_MEETING,
+  normalizeInsight,
+} from './meeting-insights.util';
+import {
   applyEvaluationEdit,
   buildEvaluationMarkdown,
   buildEvaluationPrompt,
@@ -823,6 +828,147 @@ export class MeetingService {
       .executeTakeFirst();
 
     return this.withAccess(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  // ──────────── saved AI insights (MEET_CONTRACT.md §2) ────────────
+
+  /** Saved analyses and Q&A of a meeting, newest first. Anyone who reads it. */
+  async listInsights(actor: MeetingActor, meetingId: string, kind?: string) {
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    let query = this.db
+      .selectFrom('meetingInsights as i')
+      .leftJoin('users as u', 'u.id', 'i.createdBy')
+      .select([
+        'i.id',
+        'i.kind',
+        'i.question',
+        'i.content',
+        'i.transcriptVersion',
+        'i.createdAt',
+        'i.createdBy',
+        'u.name as authorName',
+        'u.avatarUrl as authorAvatarUrl',
+      ])
+      .where('i.meetingId', '=', meetingId)
+      .where('i.workspaceId', '=', meeting.workspaceId);
+    if (kind !== undefined) {
+      if (!isInsightKind(kind)) {
+        throw new BadRequestException('Type d’élément inconnu : « communication-analysis » ou « qa » attendu.');
+      }
+      query = query.where('i.kind', '=', kind);
+    }
+    const rows = await query
+      .orderBy('i.createdAt', 'desc')
+      .orderBy('i.id', 'desc')
+      .limit(MAX_INSIGHTS_PER_MEETING)
+      .execute();
+    const canEdit = canEditMeeting(meeting, actor);
+    return { items: rows.map((r) => this.toInsight(r, canEdit)) };
+  }
+
+  /** Save an insight: the same edit rule as every other meeting output. */
+  async saveInsight(
+    actor: MeetingActor,
+    meetingId: string,
+    input: { kind?: unknown; question?: unknown; content?: unknown; transcriptVersion?: unknown },
+  ) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    const insight = normalizeInsight(input);
+    if (insight.ok === false) throw new BadRequestException(insight.error);
+    const id = await this.db.transaction().execute(async (trx) => {
+      // The meeting's row lock keeps the per-meeting cap exact.
+      await trx
+        .selectFrom('meetings')
+        .select('id')
+        .where('id', '=', meetingId)
+        .forUpdate()
+        .executeTakeFirst();
+      const existing = await trx
+        .selectFrom('meetingInsights')
+        .select(sql<string>`count(*)::int`.as('n'))
+        .where('meetingId', '=', meetingId)
+        .executeTakeFirst();
+      if (Number(existing?.n ?? 0) >= MAX_INSIGHTS_PER_MEETING) {
+        throw new ConflictException({
+          statusCode: 409,
+          code: 'insight_limit',
+          message: `Cette réunion compte déjà ${MAX_INSIGHTS_PER_MEETING} éléments enregistrés : supprimez-en avant d’en ajouter.`,
+        });
+      }
+      const row = await trx
+        .insertInto('meetingInsights')
+        .values({
+          meetingId,
+          workspaceId: meeting.workspaceId,
+          kind: insight.kind,
+          question: insight.question,
+          content: insight.content,
+          transcriptVersion: insight.transcriptVersion,
+          createdBy: actor.id,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return row.id;
+    });
+    const saved = await this.db
+      .selectFrom('meetingInsights as i')
+      .leftJoin('users as u', 'u.id', 'i.createdBy')
+      .select([
+        'i.id',
+        'i.kind',
+        'i.question',
+        'i.content',
+        'i.transcriptVersion',
+        'i.createdAt',
+        'i.createdBy',
+        'u.name as authorName',
+        'u.avatarUrl as authorAvatarUrl',
+      ])
+      .where('i.id', '=', id)
+      .executeTakeFirstOrThrow();
+    return this.toInsight(saved, true);
+  }
+
+  /** Remove one saved insight (not the meeting): the edit rule again. */
+  async deleteInsight(actor: MeetingActor, meetingId: string, insightId: string) {
+    await this.getEditableMeeting(actor, meetingId);
+    if (!isMeetingId(insightId)) throw new NotFoundException('Élément introuvable.');
+    const deleted = await this.db
+      .deleteFrom('meetingInsights')
+      .where('id', '=', insightId)
+      .where('meetingId', '=', meetingId)
+      .executeTakeFirst();
+    if (Number(deleted?.numDeletedRows ?? 0) === 0) {
+      throw new NotFoundException('Élément introuvable.');
+    }
+  }
+
+  private toInsight(
+    r: {
+      id: string;
+      kind: string;
+      question: string | null;
+      content: string;
+      transcriptVersion: number | null;
+      createdAt: Date | string;
+      createdBy: string | null;
+      authorName: string | null;
+      authorAvatarUrl: string | null;
+    },
+    canDelete: boolean,
+  ) {
+    return {
+      id: r.id,
+      kind: r.kind,
+      question: r.question,
+      content: r.content,
+      transcriptVersion: r.transcriptVersion,
+      createdAt: r.createdAt,
+      author: r.createdBy
+        ? { id: r.createdBy, name: r.authorName ?? null, avatarUrl: r.authorAvatarUrl ?? null }
+        : null,
+      canDelete,
+    };
   }
 
   // ──────────── upload ────────────

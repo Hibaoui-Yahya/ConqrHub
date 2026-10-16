@@ -40,6 +40,7 @@ import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
 import { StopMeetingDto } from './dto/stop-meeting.dto';
+import { ListInsightsDto, SaveInsightDto } from './dto/meeting-insight.dto';
 import { MAX_CHUNK_BYTES } from './meeting-capture.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
@@ -295,6 +296,46 @@ export class MeetingController {
       dto.key,
       dto.value,
     );
+  }
+
+  // ──────────── saved AI insights (communication analysis, Q&A) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/insights')
+  async listInsights(
+    @Param('id') id: string,
+    @Query() query: ListInsightsDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listInsights(actor(user, workspace), id, query?.kind);
+  }
+
+  @HttpCode(HttpStatus.CREATED)
+  @Post(':id/insights')
+  async saveInsight(
+    @Param('id') id: string,
+    @Body() dto: SaveInsightDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveInsight(actor(user, workspace), id, {
+      kind: dto.kind,
+      question: dto.question,
+      content: dto.content,
+      transcriptVersion: dto.transcriptVersion,
+    });
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id/insights/:insightId')
+  async deleteInsight(
+    @Param('id') id: string,
+    @Param('insightId') insightId: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.meetingService.deleteInsight(actor(user, workspace), id, insightId);
   }
 
   // ──────────── POST /:id/process ────────────

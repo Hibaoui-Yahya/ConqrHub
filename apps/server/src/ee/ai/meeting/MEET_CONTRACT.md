@@ -215,3 +215,74 @@ Body, JSON, all optional (old clients send `{}`):
   - Several takes or sources are mixed into `audio/mp4`, as before.
   - Until processing has written the playback, `audioAvailable` stays `false`.
 - The single-file `POST /ai/meeting/upload` path is unchanged.
+
+---
+
+## 2. Saved AI insights
+
+These save the outputs that ConqrMeet produces through `POST /api/ai/generate`
+and that were not kept anywhere before:
+
+- `communication-analysis`, the "AI communication analysis" of the speakers
+  tab;
+- `qa`, an "Ask about this meeting" question and its answer.
+
+They are stored in their own table, `meeting_insights`.
+
+Permissions follow the other meeting outputs. Every member who reads the
+meeting lists its insights. Only the creator or an Owner/Admin saves or
+deletes one, and anyone else gets 403 with the read-only message.
+
+### `GET /ai/meeting/:id/insights?kind=` (new)
+
+`kind` is optional and is either `communication-analysis` or `qa`. Any other
+value gets 400. The response is 200, newest first, with at most 200 items:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "kind": "qa",
+      "question": "Qui envoie le contrat ?",
+      "content": "Paul, lundi prochain.",
+      "transcriptVersion": 2,
+      "createdAt": "2026-10-16T09:12:00.000Z",
+      "author": { "id": "uuid", "name": "Carla Martin", "avatarUrl": null },
+      "canDelete": true
+    }
+  ]
+}
+```
+
+- `question` is `null` for `communication-analysis`.
+- `author` is `null` if the author's account was removed.
+- `canDelete` is the caller's edit right.
+
+Insights are not included in `GET /:id`.
+
+### `POST /ai/meeting/:id/insights` (new)
+
+JSON body:
+
+| field | type | required | rule |
+| --- | --- | --- | --- |
+| `kind` | `communication-analysis` \| `qa` | yes | |
+| `question` | string | for `qa` | ≤ 2000 chars. Ignored and stored as `null` for `communication-analysis` |
+| `content` | string, Markdown | yes | 1–50 000 chars (trimmed). For `qa` this is the answer |
+| `transcriptVersion` | integer ≥ 1 | no | the transcript the insight was produced from |
+
+The response is 201 with one item, in the same shape as the list.
+
+Errors:
+
+- 400 with a French message for an empty content or a `qa` without a
+  question;
+- 403 for read-only callers;
+- 409 `code: "insight_limit"` when the meeting already has 200 insights.
+
+### `DELETE /ai/meeting/:id/insights/:insightId` (new)
+
+The response is 204. The answer is 404 (`Élément introuvable.`) if the item is
+not one of this meeting's insights, and 403 for read-only callers. This
+removes only the saved item, never the meeting.
