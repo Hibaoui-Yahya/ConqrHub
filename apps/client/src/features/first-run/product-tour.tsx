@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Button, Modal } from "@mantine/core";
-import { IconArrowRight, IconCheck } from "@tabler/icons-react";
+import { ActionIcon, Button, Modal } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { IconArrowLeft, IconArrowRight, IconCheck } from "@tabler/icons-react";
 import classes from "./first-run.module.css";
 
 export interface TourStep {
@@ -40,6 +41,8 @@ export function ProductTour({
   const total = steps.length;
   const step = steps[i];
   const last = i === total - 1;
+  // Phones get the whole screen, with the buttons pinned at the bottom.
+  const isPhone = useMediaQuery("(max-width: 36em)") ?? false;
 
   useEffect(() => {
     if (opened) setI(0);
@@ -72,7 +75,9 @@ export function ProductTour({
       withCloseButton={false}
       size={1100}
       padding={0}
-      radius={18}
+      radius={isPhone ? 0 : 18}
+      fullScreen={isPhone}
+      transitionProps={isPhone ? { transition: "slide-up" } : undefined}
       centered
       overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
       classNames={{ body: classes.tourBody, content: classes.tourContent }}
@@ -113,23 +118,42 @@ export function ProductTour({
               ))}
             </div>
             <div className={classes.nav}>
-              <button
-                type="button"
-                className={classes.skip}
-                onClick={() => onClose(false)}
-              >
-                {last ? "Revoir : menu du compte" : "Passer la visite"}
-              </button>
+              {isPhone && last ? (
+                <span />
+              ) : (
+                <button
+                  type="button"
+                  className={classes.skip}
+                  onClick={() => onClose(false)}
+                >
+                  {last
+                    ? "Revoir : menu du compte"
+                    : isPhone
+                      ? "Passer"
+                      : "Passer la visite"}
+                </button>
+              )}
               <div className={classes.navButtons}>
-                {i > 0 && (
-                  <Button
-                    variant="default"
-                    onClick={() => setI(i - 1)}
-                    radius="md"
-                  >
-                    Précédent
-                  </Button>
-                )}
+                {i > 0 &&
+                  (isPhone ? (
+                    <ActionIcon
+                      variant="default"
+                      size={36}
+                      radius="md"
+                      aria-label="Précédent"
+                      onClick={() => setI(i - 1)}
+                    >
+                      <IconArrowLeft size={16} />
+                    </ActionIcon>
+                  ) : (
+                    <Button
+                      variant="default"
+                      onClick={() => setI(i - 1)}
+                      radius="md"
+                    >
+                      Précédent
+                    </Button>
+                  ))}
                 <Button
                   data-autofocus
                   className={classes.primary}

@@ -15,6 +15,11 @@
     flex-direction: column;
     min-height: 0;
   }
+
+  /* Phone: full screen; the text scrolls, the buttons stay in reach. */
+  @media (max-width: $mantine-breakpoint-xs) {
+    height: 100dvh;
+  }
 }
 
 .tourArt {
@@ -40,6 +45,16 @@
       max-height: 260px;
     }
   }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: none;
+    max-height: 28dvh;
+    padding: 12px 12px 0 12px;
+
+    img {
+      max-height: 28dvh;
+    }
+  }
 }
 
 .tourText {
@@ -54,12 +69,26 @@
   @media (max-width: $mantine-breakpoint-sm) {
     padding: 22px 20px 20px 20px;
   }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 14px;
+    padding: 18px 18px calc(14px + env(safe-area-inset-bottom)) 18px;
+  }
 }
 
 .tourTop {
   display: flex;
   flex-direction: column;
   gap: 14px;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    gap: 10px;
+  }
 }
 
 .eyebrow {
@@ -96,6 +125,10 @@
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.18;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    font-size: 22px;
+  }
 }
 
 .tourLead {
@@ -138,6 +171,11 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: none;
+    gap: 12px;
+  }
 }
 
 .progress {
@@ -474,6 +512,10 @@
   justify-content: center;
   padding: 24px;
   background: light-dark(#f4f5f5, var(--mantine-color-dark-8));
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding: 12px;
+  }
 }
 
 .welcomeCard {
@@ -501,6 +543,27 @@
   gap: 10px;
   padding: 30px 22px;
   text-align: center;
+
+  /* Phone: photo beside the name, so the actions stay on screen. */
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex: none;
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    column-gap: 14px;
+    row-gap: 4px;
+    align-items: center;
+    justify-items: start;
+    text-align: left;
+    padding: 18px;
+
+    .photo {
+      grid-row: 1 / span 3;
+      width: 64px;
+      height: 64px;
+      font-size: 20px;
+      margin: 0;
+    }
+  }
 }
 
 .photo {
@@ -548,6 +611,10 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 24px;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding: 20px 18px 18px 18px;
+  }
 }
 
 .numbered {
