@@ -1265,5 +1265,8 @@
   "{{todo}} to handle · {{news}} new in your spaces": "{{todo}} to handle · {{news}} new in your spaces",
   "Notifications ({{count}} unread)": "Notifications ({{count}} unread)",
   "In ConqrMeet · names suggested by the AI": "In ConqrMeet · names suggested by the AI",
-  "Your pages, spaces and meetings.": "Your pages, spaces and meetings."
+  "Your pages, spaces and meetings.": "Your pages, spaces and meetings.",
+  "Could not sign you out. Please try again.": "Could not sign you out. Please try again.",
+  "Sign out everywhere": "Sign out everywhere",
+  "End every session, including this one, in ConqrHub and ConqrMeet": "End every session, including this one, in ConqrHub and ConqrMeet"
 }

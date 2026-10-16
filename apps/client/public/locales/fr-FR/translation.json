@@ -1776,5 +1776,8 @@
   "Activate my account": "Activer mon compte",
   "Enter a valid email address": "Saisissez une adresse e-mail valide",
   "Enter your name": "Saisissez votre nom",
-  "Password must contain at least 8 characters": "Le mot de passe doit contenir au moins 8 caractères"
+  "Password must contain at least 8 characters": "Le mot de passe doit contenir au moins 8 caractères",
+  "Could not sign you out. Please try again.": "Impossible de vous déconnecter. Réessayez.",
+  "Sign out everywhere": "Se déconnecter partout",
+  "End every session, including this one, in ConqrHub and ConqrMeet": "Ferme toutes les sessions, y compris celle-ci, dans ConqrHub et ConqrMeet"
 }
