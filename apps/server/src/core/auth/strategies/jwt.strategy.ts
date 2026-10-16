@@ -131,35 +131,31 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // The session row is authoritative and is checked on every request, cache
     // hit or not: a logout, device revocation, password reset or deactivation
     // must take effect immediately (deactivation revokes the sessions in the
-    // same transaction). Throws 401 when revoked, 503 when unreadable.
-    if (sessionId) {
-      await this.sessionValidator.assertSessionActive({
-        sub: payload.sub,
-        workspaceId: payload.workspaceId,
-        sessionId,
-      });
-    }
+    // same transaction). Throws 401 when revoked, 503 when unreadable. The
+    // cache read runs alongside it; its result is used only if the check passes.
+    const [, cached] = await Promise.all([
+      sessionId
+        ? this.sessionValidator.assertSessionActive({
+            sub: payload.sub,
+            workspaceId: payload.workspaceId,
+            sessionId,
+          })
+        : undefined,
+      this.readCache(key),
+    ]);
 
     // Cache hit → skip the workspace + user lookups. Session-activity
     // tracking is throttled and async (not on the hot path).
-    try {
-      const cached = await this.redis.get(key);
-      if (cached) {
-        const parsed = JSON.parse(cached) as CachedAuthResult;
-        if (sessionId) {
-          req.raw.sessionId = sessionId;
-          this.sessionActivityService.trackActivity(
-            sessionId,
-            payload.sub,
-            payload.workspaceId,
-          );
-        }
-        return parsed;
+    if (cached) {
+      if (sessionId) {
+        req.raw.sessionId = sessionId;
+        this.sessionActivityService.trackActivity(
+          sessionId,
+          payload.sub,
+          payload.workspaceId,
+        );
       }
-    } catch (err) {
-      // Redis unreachable / parse error — fall through to authoritative DB
-      // lookups so auth still works when the cache layer is down.
-      this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
+      return cached;
     }
 
     const { workspace, user } = await this.loadWorkspaceAndUser(payload);
@@ -169,19 +165,35 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       this.sessionActivityService.trackActivity(sessionId, payload.sub, payload.workspaceId);
     }
 
-    // Best-effort cache write; never let a Redis hiccup fail the request.
+    await this.writeCache(key, { user, workspace });
+    return { user, workspace };
+  }
+
+  /** Cached user + workspace, or null. Redis down or bad data is a miss. */
+  private async readCache(key: string): Promise<CachedAuthResult | null> {
+    try {
+      const cached = await this.redis.get(key);
+      return cached ? (JSON.parse(cached) as CachedAuthResult) : null;
+    } catch (err) {
+      // Fall through to the authoritative DB lookups so auth still works
+      // when the cache layer is down.
+      this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Best-effort cache write; never let a Redis hiccup fail the request. */
+  private async writeCache(key: string, value: CachedAuthResult): Promise<void> {
     try {
       await this.redis.set(
         key,
-        JSON.stringify({ user, workspace } satisfies CachedAuthResult),
+        JSON.stringify(value),
         'EX',
         JWT_VALIDATE_CACHE_TTL_SECONDS,
       );
     } catch (err) {
       this.logger.debug(`JWT cache write failed: ${(err as Error).message}`);
     }
-
-    return { user, workspace };
   }
 
   /**
@@ -203,13 +215,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!payload.fid || !epochMatches(payload.ep, suiteTokenEpoch())) {
       throw new UnauthorizedException();
     }
-    let family;
-    try {
-      family = await this.families.findForRequest(payload.fid);
-    } catch (err) {
-      this.logger.error(`Token family lookup failed: ${(err as Error)?.message ?? err}`);
-      throw new AuthStateUnavailableException();
-    }
+    // The family row is authoritative and read on every request (it also
+    // carries the user's disabled state). The user + workspace cache, shared
+    // in shape with Hub sessions, is read alongside it and used only once the
+    // family is known to be live.
+    const key = `jwt:auth:${payload.workspaceId}:suite:${payload.fid}`;
+    const [family, cached] = await Promise.all([
+      this.families.findForRequest(payload.fid).catch((err) => {
+        this.logger.error(`Token family lookup failed: ${(err as Error)?.message ?? err}`);
+        throw new AuthStateUnavailableException();
+      }),
+      this.readCache(key),
+    ]);
     if (
       !familyIsLive(family, {
         userId: payload.sub,
@@ -230,7 +247,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         throw new ForbiddenException('Route not allowed for this client');
       }
     }
-    return this.loadWorkspaceAndUser(payload);
+    if (cached) return cached;
+    const result = await this.loadWorkspaceAndUser(payload);
+    await this.writeCache(key, result);
+    return result;
   }
 
   /**
@@ -243,10 +263,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     let workspace: Workspace | undefined;
     let user: User | undefined;
     try {
-      workspace = await this.workspaceRepo.findById(payload.workspaceId);
-      user = workspace
-        ? await this.userRepo.findById(payload.sub, payload.workspaceId)
-        : undefined;
+      [workspace, user] = await Promise.all([
+        this.workspaceRepo.findById(payload.workspaceId),
+        this.userRepo.findById(payload.sub, payload.workspaceId),
+      ]);
     } catch (err) {
       if (err instanceof HttpException) throw err;
       this.logger.error(`Auth lookup failed: ${(err as Error)?.message ?? err}`);
