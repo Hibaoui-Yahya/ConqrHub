@@ -38,6 +38,11 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { TokenService } from './services/token.service';
+import { JwtType } from './dto/jwt-payload';
+import { AuthStateUnavailableException } from './services/hub-session-validator.service';
+import { clearAuthCookie, setAuthCookie } from './auth-cookie.util';
+import { LogoutDto } from './dto/logout.dto';
 
 @SkipThrottle({ [AI_CHAT_THROTTLER]: true })
 @UseGuards(ThrottlerGuard)
@@ -51,6 +56,7 @@ export class AuthController {
     private environmentService: EnvironmentService,
     private moduleRef: ModuleRef,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private tokenService: TokenService,
   ) {}
 
   @HttpCode(HttpStatus.OK)
@@ -203,40 +209,86 @@ export class AuthController {
     return this.authService.getCollabToken(user, workspace.id);
   }
 
+  /**
+   * Ends this browser's Hub session. It deliberately does not require a valid
+   * session: a cookie whose session was already revoked (another device, a
+   * password reset) must still be cleared, otherwise the browser keeps a
+   * credential the sign-in page and the suite IdP keep tripping over.
+   * Revocation is authoritative: if it cannot be recorded the request fails
+   * with 503 and the cookie is left in place, so the user is never told they
+   * are signed out while the session is still live.
+   */
   @SkipThrottle({ [AUTH_THROTTLER]: true })
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('logout')
   async logout(
-    @AuthUser() user: User,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
+    @Body() body: LogoutDto = {},
   ) {
-    const sessionId = (req.raw as any).sessionId;
-    if (sessionId) {
-      await this.sessionService.revokeSession(
-        sessionId,
-        user.id,
-        user.workspaceId,
-      );
+    const claims = await this.readSessionClaims(req);
+    if (claims && (claims.sessionId || body?.allDevices)) {
+      try {
+        if (body?.allDevices) {
+          await this.sessionService.revokeAllSessions(
+            claims.sub,
+            claims.workspaceId,
+          );
+        } else {
+          await this.sessionService.revokeSession(
+            claims.sessionId,
+            claims.sub,
+            claims.workspaceId,
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          `Logout could not revoke the session: ${(err as Error)?.message ?? err}`,
+        );
+        throw new AuthStateUnavailableException();
+      }
     }
 
-    res.clearCookie('authToken');
+    clearAuthCookie(res, this.environmentService);
 
-    this.auditService.log({
-      event: AuditEvent.USER_LOGOUT,
-      resourceType: AuditResource.USER,
-      resourceId: user.id,
-    });
+    if (claims) {
+      this.auditService.log({
+        event: AuditEvent.USER_LOGOUT,
+        resourceType: AuditResource.USER,
+        resourceId: claims.sub,
+      });
+    }
+  }
+
+  /**
+   * Claims of the session cookie when it is genuinely ours: valid signature,
+   * access type, and minted for the workspace this request resolved to.
+   * Expiry is ignored so an expired cookie can still end its own session.
+   */
+  private async readSessionClaims(
+    req: FastifyRequest,
+  ): Promise<{ sub: string; workspaceId: string; sessionId?: string } | null> {
+    const token = (req as any).cookies?.authToken;
+    if (!token) return null;
+    try {
+      const payload = await this.tokenService.verifyJwt(
+        token,
+        JwtType.ACCESS,
+        { ignoreExpiration: true },
+      );
+      const workspaceId = (req.raw as any).workspaceId;
+      if (!payload?.sub || payload.workspaceId !== workspaceId) return null;
+      return {
+        sub: payload.sub,
+        workspaceId: payload.workspaceId,
+        sessionId: payload.sessionId,
+      };
+    } catch {
+      return null;
+    }
   }
 
   setAuthCookie(res: FastifyReply, token: string) {
-    res.setCookie('authToken', token, {
-      httpOnly: true,
-      sameSite: this.environmentService.getAuthCookieSameSite(),
-      path: '/',
-      expires: this.environmentService.getCookieExpiresIn(),
-      secure: this.environmentService.isHttps(),
-    });
+    setAuthCookie(res, this.environmentService, token);
   }
 }

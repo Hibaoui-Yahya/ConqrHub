@@ -7,8 +7,12 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import type { User } from '@docmost/db/types/entity.types';
+import { HubSessionValidator } from '../services/hub-session-validator.service';
+import { clearAuthCookie, usesAuthCookie } from '../auth-cookie.util';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AI_CHAT_THROTTLER,
@@ -20,7 +24,7 @@ import { TokenService } from '../services/token.service';
 import { JwtType } from '../dto/jwt-payload';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
-import { SuiteIdpService } from './suite-idp.service';
+import { isGrantRefusal, SuiteIdpService } from './suite-idp.service';
 
 /**
  * ConqrHub-as-IdP endpoints for trusted suite clients (the Plane fork).
@@ -42,6 +46,7 @@ export class SuiteIdpController {
     private readonly tokenService: TokenService,
     private readonly userRepo: UserRepo,
     private readonly environment: EnvironmentService,
+    private readonly sessionValidator: HubSessionValidator,
   ) {}
 
   @Public()
@@ -83,9 +88,24 @@ export class SuiteIdpController {
       });
     }
 
-    const session = await this.resolveSession(req);
+    let session: Awaited<ReturnType<SuiteIdpController['resolveSession']>>;
+    try {
+      session = await this.resolveSession(req);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) {
+        // Never issue a code, and never bounce to sign-in, on an outage.
+        return res
+          .code(503)
+          .header('Retry-After', '5')
+          .header('Cache-Control', 'no-store')
+          .send({ error: 'temporarily_unavailable' });
+      }
+      throw err;
+    }
     if (!session) {
-      // Bounce through the Hub login and come straight back here.
+      // A cookie that no longer authenticates is dropped so the sign-in page
+      // starts clean. Then bounce through the Hub login and come back here.
+      if (usesAuthCookie(req)) clearAuthCookie(res, this.environment);
       const appUrl = this.environment.getAppUrl().replace(/\/$/, '');
       const original = `/api/idp/authorize?${new URLSearchParams(
         query as Record<string, string>,
@@ -99,7 +119,12 @@ export class SuiteIdpController {
         .send();
     }
 
-    const code = this.idp.issueCode(session.user, session.workspaceId, client);
+    const code = this.idp.issueCode(
+      session.user,
+      session.workspaceId,
+      client,
+      session.sessionId,
+    );
     return this.redirectBack(res, query.redirect_uri, {
       code,
       state: query.state,
@@ -125,8 +150,8 @@ export class SuiteIdpController {
           .code(200)
           .header('Cache-Control', 'no-store')
           .send(await this.idp.issueTokenPair(userId, workspaceId, client));
-      } catch {
-        return res.code(400).send({ error: 'invalid_grant' });
+      } catch (err) {
+        return this.tokenError(res, err);
       }
     }
     if (body.grant_type === 'refresh_token' && body.refresh_token) {
@@ -135,11 +160,27 @@ export class SuiteIdpController {
           .code(200)
           .header('Cache-Control', 'no-store')
           .send(await this.idp.rotateRefreshToken(body.refresh_token, client));
-      } catch {
-        return res.code(400).send({ error: 'invalid_grant' });
+      } catch (err) {
+        return this.tokenError(res, err);
       }
     }
     return res.code(400).send({ error: 'unsupported_grant_type' });
+  }
+
+  /**
+   * `invalid_grant` only when the grant itself was refused. Anything else —
+   * Redis or Postgres unreachable — is `temporarily_unavailable` (503), so a
+   * client never mistakes an outage for a revoked login and drops its session.
+   */
+  private tokenError(res: FastifyReply, err: unknown) {
+    if (isGrantRefusal(err)) {
+      return res.code(400).send({ error: 'invalid_grant' });
+    }
+    return res
+      .code(503)
+      .header('Retry-After', '5')
+      .header('Cache-Control', 'no-store')
+      .send({ error: 'temporarily_unavailable' });
   }
 
   @Public()
@@ -155,16 +196,25 @@ export class SuiteIdpController {
     if (!token) {
       return res.code(401).send({ error: 'invalid_token' });
     }
+    let claims: { userId: string; workspaceId: string };
     try {
-      const { userId, workspaceId } = await this.idp.verifyAccessToken(token);
-      const user = await this.userRepo.findById(userId, workspaceId);
-      if (!user || (user as any).deletedAt || (user as any).deactivatedAt) {
-        return res.code(401).send({ error: 'invalid_token' });
-      }
-      return res.send(this.idp.userinfo(user));
+      claims = await this.idp.verifyAccessToken(token);
     } catch {
       return res.code(401).send({ error: 'invalid_token' });
     }
+    let user: User | undefined;
+    try {
+      user = await this.userRepo.findById(claims.userId, claims.workspaceId);
+    } catch {
+      return res
+        .code(503)
+        .header('Retry-After', '5')
+        .send({ error: 'temporarily_unavailable' });
+    }
+    if (!user || (user as any).deletedAt || (user as any).deactivatedAt) {
+      return res.code(401).send({ error: 'invalid_token' });
+    }
+    return res.send(this.idp.userinfo(user));
   }
 
   private redirectBack(
@@ -179,8 +229,20 @@ export class SuiteIdpController {
     return res.header('Location', url.toString()).code(302).send();
   }
 
-  /** Same session semantics as the rest of the app: authToken cookie → user. */
-  private async resolveSession(req: FastifyRequest) {
+  /**
+   * The Hub session behind the authToken cookie, checked as strictly as the
+   * API guard: valid signature, a live (not revoked, not expired) session row
+   * owned by the token's user, the workspace this request resolved to, and
+   * an active user. A signed JWT alone is not enough — a revoked device must
+   * never be able to mint a fresh suite login. Legacy tokens without a
+   * session id are refused for the same reason: they cannot be revoked.
+   * Returns null when there is no usable session; throws 503 on an outage.
+   */
+  private async resolveSession(req: FastifyRequest): Promise<{
+    user: User;
+    workspaceId: string;
+    sessionId: string;
+  } | null> {
     const token = (req as any).cookies?.authToken;
     if (!token) return null;
     let payload: any;
@@ -189,10 +251,15 @@ export class SuiteIdpController {
     } catch {
       return null;
     }
-    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
-    if (!user || (user as any).deletedAt || (user as any).deactivatedAt) {
+    try {
+      const { user, session } = await this.sessionValidator.validate(payload, {
+        requireSession: true,
+        expectedWorkspaceId: (req.raw as any).workspaceId,
+      });
+      return { user, workspaceId: payload.workspaceId, sessionId: session.id };
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
       return null;
     }
-    return { user, workspaceId: payload.workspaceId as string };
   }
 }

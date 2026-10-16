@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { TokenService } from './services/token.service';
+import { HubSessionValidator } from './services/hub-session-validator.service';
 
 @Module({
   imports: [
@@ -19,9 +20,9 @@ import { TokenService } from './services/token.service';
       inject: [EnvironmentService],
     }),
   ],
-  providers: [TokenService],
+  providers: [TokenService, HubSessionValidator],
   // JwtModule is re-exported so AuthModule providers (e.g. the suite IdP) can
   // inject JwtService directly for custom-audience tokens.
-  exports: [TokenService, JwtModule],
+  exports: [TokenService, HubSessionValidator, JwtModule],
 })
 export class TokenModule {}

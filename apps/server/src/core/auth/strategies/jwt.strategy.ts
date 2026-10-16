@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
@@ -14,9 +19,14 @@ import { ModuleRef } from '@nestjs/core';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
 import type { User, Workspace } from '@docmost/db/types/entity.types';
+import {
+  AuthStateUnavailableException,
+  HubSessionValidator,
+} from '../services/hub-session-validator.service';
 
-// Short cache TTL. Trades up to N seconds of stale state (e.g., a freshly
-// revoked session) for ~3× fewer DB hits per authenticated request under load.
+// Short cache TTL for the user + workspace objects only. Session validity is
+// never served from this cache: a revoked session must stop working on the
+// very next request, so the user_sessions row is read every time.
 const JWT_VALIDATE_CACHE_TTL_SECONDS = 30;
 
 interface CachedAuthResult {
@@ -37,6 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly environmentService: EnvironmentService,
     private moduleRef: ModuleRef,
     private readonly redisService: RedisService,
+    private readonly sessionValidator: HubSessionValidator,
   ) {
     super({
       jwtFromRequest: (req: FastifyRequest) => {
@@ -98,15 +109,26 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
 
     const key = this.cacheKey(payload);
+    const sessionId = (payload as JwtPayload).sessionId;
 
-    // Cache hit → skip workspace + user + session DB lookups entirely.
-    // We still keep session-activity tracking because that operation is
-    // already throttled and async (not on the hot path).
+    // The session row is authoritative and is checked on every request, cache
+    // hit or not: a logout, device revocation, password reset or deactivation
+    // must take effect immediately (deactivation revokes the sessions in the
+    // same transaction). Throws 401 when revoked, 503 when unreadable.
+    if (sessionId) {
+      await this.sessionValidator.assertSessionActive({
+        sub: payload.sub,
+        workspaceId: payload.workspaceId,
+        sessionId,
+      });
+    }
+
+    // Cache hit → skip the workspace + user lookups. Session-activity
+    // tracking is throttled and async (not on the hot path).
     try {
       const cached = await this.redis.get(key);
       if (cached) {
         const parsed = JSON.parse(cached) as CachedAuthResult;
-        const sessionId = (payload as JwtPayload).sessionId;
         if (sessionId) {
           req.raw.sessionId = sessionId;
           this.sessionActivityService.trackActivity(
@@ -123,23 +145,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
     }
 
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    const { workspace, user } = await this.loadWorkspaceAndUser(payload);
 
-    if (!workspace) {
-      throw new UnauthorizedException();
-    }
-    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
-
-    if (!user || isUserDisabled(user)) {
-      throw new UnauthorizedException();
-    }
-
-    if ((payload as JwtPayload).sessionId) {
-      const sessionId = (payload as JwtPayload).sessionId;
-      const session = await this.userSessionRepo.findActiveById(sessionId);
-      if (!session || session.userId !== payload.sub || session.workspaceId !== payload.workspaceId) {
-        throw new UnauthorizedException();
-      }
+    if (sessionId) {
       req.raw.sessionId = sessionId;
       this.sessionActivityService.trackActivity(sessionId, payload.sub, payload.workspaceId);
     }
@@ -163,11 +171,31 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   private async validateSuiteToken(
     payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
   ): Promise<CachedAuthResult> {
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    return this.loadWorkspaceAndUser(payload);
+  }
+
+  /**
+   * Workspace + active user, read from the database. An unreadable database
+   * is a 503, never a 401: an outage must not look like a revoked login.
+   */
+  private async loadWorkspaceAndUser(
+    payload: { sub: string; workspaceId: string },
+  ): Promise<CachedAuthResult> {
+    let workspace: Workspace | undefined;
+    let user: User | undefined;
+    try {
+      workspace = await this.workspaceRepo.findById(payload.workspaceId);
+      user = workspace
+        ? await this.userRepo.findById(payload.sub, payload.workspaceId)
+        : undefined;
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      this.logger.error(`Auth lookup failed: ${(err as Error)?.message ?? err}`);
+      throw new AuthStateUnavailableException();
+    }
     if (!workspace) {
       throw new UnauthorizedException();
     }
-    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
     if (!user || isUserDisabled(user)) {
       throw new UnauthorizedException();
     }

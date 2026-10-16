@@ -174,9 +174,14 @@ export class TokenService {
     return this.jwtService.sign(payload, { expiresIn: '1h' });
   }
 
-  async verifyJwt(token: string, tokenType: string) {
+  async verifyJwt(
+    token: string,
+    tokenType: string,
+    opts: { ignoreExpiration?: boolean } = {},
+  ) {
     const payload = await this.jwtService.verifyAsync(token, {
       secret: this.environmentService.getAppSecret(),
+      ignoreExpiration: opts.ignoreExpiration ?? false,
     });
 
     if (payload.type !== tokenType) {

@@ -44,7 +44,11 @@ function makeController(raw = LEGACY) {
   const idp = new SuiteIdpService(jwt as any, environment, { getOrThrow: () => redis } as any);
   const tokenService = { verifyJwt: jest.fn() } as any;
   const userRepo = { findById: jest.fn() } as any;
-  return { controller: new SuiteIdpController(idp, tokenService, userRepo, environment), idp };
+  const sessionValidator = { validate: jest.fn() } as any;
+  return {
+    controller: new SuiteIdpController(idp, tokenService, userRepo, environment, sessionValidator),
+    idp,
+  };
 }
 
 describe('SuiteIdpController token endpoint (F28)', () => {

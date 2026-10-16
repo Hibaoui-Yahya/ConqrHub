@@ -67,6 +67,16 @@ export function parseSuiteIdpClients(raw: string | undefined): SuiteIdpClient[] 
   return clients;
 }
 
+/**
+ * True when a token request failed because the grant itself was refused
+ * (expired, replayed, wrong client, revoked). Every refusal in this service is
+ * an UnauthorizedException; anything else is an infrastructure failure the
+ * controller reports as `temporarily_unavailable` instead of `invalid_grant`.
+ */
+export function isGrantRefusal(err: unknown): boolean {
+  return err instanceof UnauthorizedException;
+}
+
 /** Constant-time comparison that is safe for inputs of different length. */
 function secretsEqual(a: string, b: string): boolean {
   const da = createHash('sha256').update(a, 'utf8').digest();
@@ -134,7 +144,16 @@ export class SuiteIdpService {
     return client.redirectUri === redirectUri;
   }
 
-  issueCode(user: User, workspaceId: string, client: SuiteIdpClient): string {
+  /**
+   * One-time code. `sid` records the Hub session that authorized it, so the
+   * tokens it is exchanged for can be tied to that session's lifetime.
+   */
+  issueCode(
+    user: User,
+    workspaceId: string,
+    client: SuiteIdpClient,
+    sessionId?: string,
+  ): string {
     return this.jwtService.sign(
       {
         sub: user.id,
@@ -142,6 +161,7 @@ export class SuiteIdpService {
         aud: CODE_AUD,
         client_id: client.clientId,
         jti: randomUUID(),
+        ...(sessionId ? { sid: sessionId } : {}),
       },
       { expiresIn: CODE_TTL },
     );
