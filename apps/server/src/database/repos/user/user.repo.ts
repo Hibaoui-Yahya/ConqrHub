@@ -292,12 +292,14 @@ export class UserRepo {
     userId: string,
     settingKey: NotificationSettingKey,
     settingValue: boolean,
+    bucket: 'notifications' | 'inAppNotifications' = 'notifications',
   ) {
+    // Both names come from closed sets (validated DTO), never from free text.
     return await this.db
       .updateTable('users')
       .set({
         settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('notifications', COALESCE(settings->'notifications', '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(bucket)}, COALESCE(settings->${sql.lit(bucket)}, '{}'::jsonb)
                 || jsonb_build_object(${sql.lit(settingKey)}, ${sql.lit(settingValue)}))`,
         updatedAt: new Date(),
       })

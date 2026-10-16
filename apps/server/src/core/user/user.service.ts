@@ -8,7 +8,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { NotificationSettingKey } from '../notification/notification.constants';
+import {
+  NOTIFICATION_CHANNEL_SETTINGS,
+  NotificationSettingKey,
+} from '../notification/notification.constants';
 import {
   comparePasswordHash,
   diffAuditTrackedFields,
@@ -131,6 +134,16 @@ export class UserService {
         };
       }
       return this.userRepo.setThemePreference(userId, value);
+    }
+
+    if (typeof updateUserDto.notificationPreference !== 'undefined') {
+      const { key, channel, enabled } = updateUserDto.notificationPreference;
+      return this.userRepo.updateNotificationSetting(
+        userId,
+        key,
+        enabled,
+        NOTIFICATION_CHANNEL_SETTINGS[channel],
+      );
     }
 
     const notificationSettings: Record<string, NotificationSettingKey> = {

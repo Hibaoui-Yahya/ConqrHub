@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateUserDto } from '../../auth/dto/create-user.dto';
+import { NOTIFICATION_SETTING_KEYS } from '../../notification/notification.constants';
 
 /** ConqrPlan's theme keys (packages/constants/src/themes.ts). */
 export const THEME_KEYS = [
@@ -112,6 +113,18 @@ export class FirstRunDto {
   jobTitle?: string;
 }
 
+/** One switch of the notification preferences: a kind, a channel, on or off. */
+export class NotificationPreferenceDto {
+  @IsIn(NOTIFICATION_SETTING_KEYS as unknown as string[])
+  key: (typeof NOTIFICATION_SETTING_KEYS)[number];
+
+  @IsIn(['email', 'inApp'])
+  channel: 'email' | 'inApp';
+
+  @IsBoolean()
+  enabled: boolean;
+}
+
 export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
@@ -120,6 +133,12 @@ export class UpdateUserDto extends PartialType(
   @ValidateNested()
   @Type(() => NotificationSoundsDto)
   notificationSounds: NotificationSoundsDto;
+
+  /** settings.notifications (e-mail) or settings.inAppNotifications (bell). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationPreferenceDto)
+  notificationPreference: NotificationPreferenceDto;
 
   /** Stored as settings.preferences.firstRun (merged key by key). */
   @IsOptional()

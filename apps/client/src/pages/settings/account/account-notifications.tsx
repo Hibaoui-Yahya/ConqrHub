@@ -292,7 +292,7 @@ export default function AccountNotifications() {
           </Card>
           <Text size="xs" c="dimmed" mt="xs">
             {t(
-              "Every notification stays in the bell even when its sound and e-mail are off. These settings apply to your account, in Hub and in Meet.",
+              "Sounds only play for notifications that reach the bell. These settings apply to your account, in Hub and in Meet.",
             )}
           </Text>
         </div>

@@ -143,6 +143,7 @@ export class VerificationNotificationService {
           pageUrl: basePageUrl,
           expiresAt: formatDateFr(verification.expiresAt).split(' à ')[0],
         }),
+        NotificationType.PAGE_VERIFICATION_EXPIRING,
       );
     }
   }
@@ -216,6 +217,7 @@ export class VerificationNotificationService {
           spaceName,
           pageUrl: basePageUrl,
         }),
+        NotificationType.PAGE_VERIFICATION_EXPIRED,
       );
     }
   }
@@ -351,6 +353,7 @@ export class VerificationNotificationService {
         spaceName,
         pageUrl: basePageUrl,
       }),
+      NotificationType.PAGE_VERIFIED,
     );
   }
 
@@ -396,6 +399,7 @@ export class VerificationNotificationService {
           spaceName,
           pageUrl: basePageUrl,
         }),
+        NotificationType.PAGE_APPROVAL_REQUESTED,
       );
     }
   }
@@ -442,6 +446,7 @@ export class VerificationNotificationService {
         pageUrl: basePageUrl,
         comment,
       }),
+      NotificationType.PAGE_APPROVAL_REJECTED,
     );
   }
 

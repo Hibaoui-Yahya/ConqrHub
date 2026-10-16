@@ -173,6 +173,7 @@ export class PageNotificationService {
           accessLabel,
           spaceName,
         }),
+        NotificationType.PAGE_PERMISSION_GRANTED,
       );
     }
   }
@@ -252,7 +253,10 @@ export class PageNotificationService {
           }),
           NotificationType.PAGE_UPDATED,
         );
-      } else {
+      } else if (notification.id) {
+        // The digest is built from stored notifications: with the bell off
+        // for page updates there is none, so the rate-limited e-mail is
+        // simply skipped.
         const isFirst = await this.rateLimiter.addToDigest(
           userId,
           notification.id,

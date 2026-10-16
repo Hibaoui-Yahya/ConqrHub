@@ -35,6 +35,12 @@ export interface IUser {
   themeCustom?: ConqrCustomTheme; // used for update
   meetingDefaults?: IMeetingDefaults; // used for update
   notificationSounds?: Partial<NotificationSoundPrefs>; // used for update
+  notificationPreference?: {
+    key: NotificationSettingKey;
+    channel: NotificationChannel;
+    enabled: boolean;
+  }; // used for update
+  department?: string | null;
   hasGeneratedPassword?: boolean;
 }
 
@@ -62,14 +68,29 @@ export interface IUserSettings {
     meetings?: IMeetingDefaults;
     notificationSounds?: Partial<NotificationSoundPrefs>;
   };
-  notifications?: {
-    "page.updated"?: boolean;
-    "page.userMention"?: boolean;
-    "comment.userMention"?: boolean;
-    "comment.created"?: boolean;
-    "comment.resolved"?: boolean;
-  };
+  /** E-mail switches, by kind. Absent means on. */
+  notifications?: Partial<Record<NotificationSettingKey, boolean>>;
+  /** Bell (in-app) switches, by kind. Absent means on. */
+  inAppNotifications?: Partial<Record<NotificationSettingKey, boolean>>;
 }
+
+/** Mirrors NOTIFICATION_SETTING_KEYS on the server. */
+export type NotificationSettingKey =
+  | "page.updated"
+  | "page.userMention"
+  | "comment.userMention"
+  | "comment.created"
+  | "comment.resolved"
+  | "page.permissionGranted"
+  | "page.verification"
+  | "page.approval"
+  | "docHealth.dropped"
+  | "meeting.ready"
+  | "meeting.failed"
+  | "meeting.reviewNeeded"
+  | "meeting.published";
+
+export type NotificationChannel = "email" | "inApp";
 
 export enum PageEditMode {
   Read = "read",

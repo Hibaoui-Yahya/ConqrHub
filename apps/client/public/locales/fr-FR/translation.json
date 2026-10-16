@@ -1777,5 +1777,22 @@
   "Enter a valid email address": "Saisissez une adresse e-mail valide",
   "Enter your name": "Saisissez votre nom",
   "Password must contain at least 8 characters": "Le mot de passe doit contenir au moins 8 caractères",
-  "Rules that apply to every member of the company.": "Règles qui s’appliquent à tous les membres de l’entreprise."
+  "Rules that apply to every member of the company.": "Règles qui s’appliquent à tous les membres de l’entreprise.",
+  "Delivery by kind": "Réception par type",
+  "Notification": "Notification",
+  "In the app": "Dans l’application",
+  "E-mail": "E-mail",
+  "Pages and comments": "Pages et commentaires",
+  "Access granted": "Accès accordé",
+  "Someone gives you access to a page.": "Quelqu’un vous donne accès à une page.",
+  "A verification you own expires soon, has expired, was invalidated or approved.": "Une vérification dont vous êtes responsable arrive à échéance, a expiré, a été invalidée ou approuvée.",
+  "Approvals": "Approbations",
+  "A page waits for your approval, or yours was returned.": "Une page attend votre approbation, ou la vôtre vous a été renvoyée.",
+  "The health score you follow drops below its threshold.": "Le score de santé que vous suivez passe sous son seuil.",
+  "Transcript and report of your recording are ready.": "La transcription et le compte rendu de votre enregistrement sont prêts.",
+  "The processing of your recording failed.": "Le traitement de votre enregistrement a échoué.",
+  "Speakers or proposals of a meeting wait for you.": "Des intervenants ou des propositions d’une réunion vous attendent.",
+  "Report published": "Compte rendu publié",
+  "The report of your meeting was published in Hub.": "Le compte rendu de votre réunion a été publié dans Hub.",
+  "Sounds only play for notifications that reach the bell. These settings apply to your account, in Hub and in Meet.": "Les sons ne retentissent que pour les notifications qui arrivent dans la cloche. Ces réglages s’appliquent à votre compte, dans Hub comme dans Meet."
 }
