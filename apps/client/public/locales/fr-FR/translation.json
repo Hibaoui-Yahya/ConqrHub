@@ -1945,5 +1945,6 @@
   "Until {{date}}": "Jusqu’au {{date}}",
   "This invitation has expired": "Cette invitation a expiré",
   "Invitation links are valid for 7 days. Ask an administrator to send it again: you will receive a new link valid for 7 days.": "Les liens d’invitation sont valables 7 jours. Demandez à un administrateur de vous la renvoyer : vous recevrez un nouveau lien, valable 7 jours.",
-  "An invitation link is valid for 7 days; resending the invitation or copying its link gives it 7 more days.": "Un lien d’invitation est valable 7 jours ; renvoyer l’invitation ou copier son lien lui redonne 7 jours."
+  "An invitation link is valid for 7 days; resending the invitation or copying its link gives it 7 more days.": "Un lien d’invitation est valable 7 jours ; renvoyer l’invitation ou copier son lien lui redonne 7 jours.",
+  "Each person receives a personal link, valid for 7 days. They choose their own password: you have nothing to send them.": "Chaque personne reçoit un lien personnel, valable 7 jours. Elle choisit elle-même son mot de passe : vous n’avez rien à lui transmettre."
 }
