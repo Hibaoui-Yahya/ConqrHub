@@ -36,7 +36,7 @@ import { MeetingAccessGuard } from './meeting-access.guard';
 import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
-import { ReviewSpeakersDto } from './dto/review-speakers.dto';
+import { LinkableMembersDto, ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
 import { StopMeetingDto } from './dto/stop-meeting.dto';
@@ -438,6 +438,22 @@ export class MeetingController {
       userLinks: dto.userLinks,
       reassign: dto.reassign,
       confirm: dto.confirm,
+    });
+  }
+
+  // ──────────── GET /:id/linkable-members (speaker ↔ member links) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/linkable-members')
+  async linkableMembers(
+    @Param('id') id: string,
+    @Query() query: LinkableMembersDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listLinkableMembers(actor(user, workspace), id, {
+      q: query?.q,
+      limit: query?.limit,
     });
   }
 

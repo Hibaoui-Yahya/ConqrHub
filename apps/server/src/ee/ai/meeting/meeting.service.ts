@@ -1427,8 +1427,104 @@ export class MeetingService {
     meetingId: string,
     version: number | string = 'latest',
   ) {
-    await this.getReadableMeeting(actor, meetingId);
-    return this.readTranscript(meetingId, version);
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    const transcript = await this.readTranscript(meetingId, version);
+    // Additive: who the linked speakers are (id, name, avatar only), for
+    // members of this meeting's company still active.
+    const linked = Object.values(transcript.speakers as Record<string, { userId?: unknown }>)
+      .map((s) => s?.userId)
+      .filter((id): id is string => typeof id === 'string' && isMeetingId(id));
+    const members = linked.length
+      ? await this.db
+          .selectFrom('users')
+          .select(['id', 'name', 'avatarUrl'])
+          .where('id', 'in', [...new Set(linked)])
+          .where('workspaceId', '=', meeting.workspaceId)
+          .where('deletedAt', 'is', null)
+          .execute()
+      : [];
+    return {
+      ...transcript,
+      linkedUsers: Object.fromEntries(
+        members.map((m) => [m.id, { id: m.id, name: m.name ?? null, avatarUrl: m.avatarUrl ?? null }]),
+      ),
+    };
+  }
+
+  // ──────────── speakers ↔ members (MEET_CONTRACT.md §6) ────────────
+
+  /**
+   * The members a speaker of this meeting may be linked to: active members
+   * of the meeting's company, id / name / avatar only. Needs the edit right
+   * (only editors link speakers).
+   */
+  async listLinkableMembers(
+    actor: MeetingActor,
+    meetingId: string,
+    opts: { q?: string; limit?: number } = {},
+  ) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    const limit = Math.min(Math.max(Math.floor(Number(opts.limit) || 20), 1), 50);
+    const q = (opts.q ?? '').trim().slice(0, 100);
+    let query = this.db
+      .selectFrom('users')
+      .select(['id', 'name', 'avatarUrl'])
+      .where('workspaceId', '=', meeting.workspaceId)
+      .where('deletedAt', 'is', null)
+      .where('deactivatedAt', 'is', null);
+    if (q) {
+      const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      // Matches the name or the e-mail; the e-mail is never returned.
+      query = query.where((eb) => eb.or([eb('name', 'ilike', pattern), eb('email', 'ilike', pattern)]));
+    }
+    const rows = await query
+      .orderBy(sql`lower(coalesce(name, ''))`)
+      .orderBy('id')
+      .limit(limit + 1)
+      .execute();
+    return {
+      items: rows.slice(0, limit).map((u) => ({ id: u.id, name: u.name ?? null, avatarUrl: u.avatarUrl ?? null })),
+      hasMore: rows.length > limit,
+    };
+  }
+
+  /**
+   * The members named by a speaker review's userLinks, by id. Refuses the
+   * whole review (nothing applied) when one is not an active member of the
+   * meeting's company: a speaker is never linked to a stranger.
+   */
+  private async linkableMembersById(workspaceId: string, values: unknown[]) {
+    const ids = [
+      ...new Set(
+        values
+          .filter((v) => v !== null && v !== undefined && v !== '')
+          .map((v) => (typeof v === 'string' ? v.trim() : v)),
+      ),
+    ];
+    const malformed = ids.filter((id) => typeof id !== 'string' || !isMeetingId(id));
+    const wellFormed = ids.filter((id): id is string => typeof id === 'string' && isMeetingId(id));
+    const rows = wellFormed.length
+      ? await this.db
+          .selectFrom('users')
+          .select(['id', 'name'])
+          .where('id', 'in', wellFormed)
+          .where('workspaceId', '=', workspaceId)
+          .where('deletedAt', 'is', null)
+          .where('deactivatedAt', 'is', null)
+          .execute()
+      : [];
+    const found = new Map(rows.map((r) => [r.id, r]));
+    const invalid = [...malformed.map(String), ...wellFormed.filter((id) => !found.has(id))];
+    if (invalid.length) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'invalid_user_links',
+        message:
+          'Un intervenant ne peut être associé qu’à un membre actif de l’entreprise. Choisissez la personne dans la liste des membres.',
+        invalid,
+      });
+    }
+    return found;
   }
 
   /** A transcript version of a meeting the caller already checked. */
@@ -1484,7 +1580,7 @@ export class MeetingService {
       baseVersion: number;
       renames?: Record<string, string>;
       merges?: [string, string][];
-      userLinks?: Record<string, string>;
+      userLinks?: Record<string, string | null>;
       reassign?: Record<string, string>;
       confirm?: boolean;
     },
@@ -1576,11 +1672,21 @@ export class MeetingService {
       if (!inUse.has(label)) delete speakers[label];
     }
 
-    // Apply user links
+    // Apply user links: only active members of the meeting's company may
+    // be named (validated before anything is applied); null / "" unlinks.
+    // A linked speaker with no name yet takes the member's name.
+    let namedByLink = 0;
     if (req.userLinks) {
+      const members = await this.linkableMembersById(meeting.workspaceId, Object.values(req.userLinks));
       for (const [label, userId] of Object.entries(req.userLinks)) {
-        if (speakers[label]) {
-          speakers[label].userId = userId;
+        if (!speakers[label]) continue;
+        const id = typeof userId === 'string' && userId.trim() ? userId.trim() : null;
+        speakers[label].userId = id;
+        const name = id ? members.get(id)?.name?.trim() : null;
+        if (name && !speakers[label].displayName) {
+          speakers[label].displayName = name.slice(0, MAX_SPEAKER_NAME_CHARS);
+          speakers[label].confidence = 1;
+          namedByLink += 1;
         }
       }
     }
@@ -1614,6 +1720,7 @@ export class MeetingService {
 
       const edited =
         Object.keys(req.renames ?? {}).length > 0 ||
+        namedByLink > 0 ||
         (req.merges ?? []).length > 0 ||
         reassigned.length > 0 ||
         transcript.status === 'attributed';

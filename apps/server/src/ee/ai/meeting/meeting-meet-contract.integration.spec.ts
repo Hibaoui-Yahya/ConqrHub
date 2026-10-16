@@ -330,6 +330,94 @@ suite('ConqrMeet contract routes', () => {
     });
   });
 
+  describe('speakers linked to members', () => {
+    async function twoSpeakerMeeting() {
+      const id = await addMeeting({ by: creator });
+      const segments = [
+        { id: 'a', speaker: 'Speaker 1', text: 'Bonjour.', startMs: 0, endMs: 900 },
+        { id: 'b', speaker: 'Speaker 2', text: 'Bonjour à vous.', startMs: 1000, endMs: 2000 },
+      ];
+      const speakers = {
+        'Speaker 1': { label: 'Speaker 1', displayName: 'Alice', userId: null, confidence: 1 },
+        'Speaker 2': { label: 'Speaker 2', displayName: null, userId: null, confidence: 0 },
+      };
+      await db
+        .insertInto('meetingTranscripts')
+        .values({
+          meetingId: id,
+          version: 1,
+          kind: 'live',
+          status: 'transcribed',
+          provider: 'mistral',
+          segments: sql`${JSON.stringify(segments)}::jsonb`,
+          speakers: sql`${JSON.stringify(speakers)}::jsonb`,
+        })
+        .execute();
+      return id;
+    }
+    const versions = async (id: string) =>
+      Number(
+        (await db.selectFrom('meetingTranscripts').select(sql<number>`count(*)::int`.as('n')).where('meetingId', '=', id).executeTakeFirst())?.n,
+      );
+
+    it('links a member, names an unnamed speaker after them, persists it and returns who they are', async () => {
+      const { service } = build();
+      const id = await twoSpeakerMeeting();
+      const result = await service.reviewSpeakers(creator, id, {
+        baseVersion: 1,
+        userLinks: { 'Speaker 1': owner.id, 'Speaker 2': coworker.id },
+        confirm: true,
+      });
+      expect(result).toMatchObject({ confirmed: true, version: 2, edited: true });
+      const transcript = await service.getTranscript(coworker, id);
+      expect(transcript.version).toBe(2);
+      expect(transcript.speakers).toMatchObject({
+        'Speaker 1': { userId: owner.id, displayName: 'Alice' }, // a reviewed name is kept
+        'Speaker 2': { userId: coworker.id, displayName: 'Colin Coworker' },
+      });
+      expect(transcript.linkedUsers).toEqual({
+        [owner.id]: { id: owner.id, name: 'Odile Owner', avatarUrl: null },
+        [coworker.id]: { id: coworker.id, name: 'Colin Coworker', avatarUrl: null },
+      });
+      // Unlinking with null.
+      await service.reviewSpeakers(creator, id, { baseVersion: 2, userLinks: { 'Speaker 1': null }, confirm: true });
+      expect((await service.getTranscript(creator, id)).speakers['Speaker 1']).toMatchObject({ userId: null });
+    });
+
+    it('refuses another company\'s member, a deactivated member and garbage, without writing a version', async () => {
+      const { service } = build();
+      const id = await twoSpeakerMeeting();
+      const gone = await addUser(ws1, 'member', 'Gaston Gone');
+      await db.updateTable('users').set({ deactivatedAt: new Date() }).where('id', '=', gone.id).execute();
+      for (const bad of [foreign.id, gone.id, 'not-a-uuid']) {
+        await expect(
+          service.reviewSpeakers(creator, id, { baseVersion: 1, userLinks: { 'Speaker 2': bad }, confirm: true }),
+        ).rejects.toMatchObject({
+          status: 400,
+          response: expect.objectContaining({ code: 'invalid_user_links', invalid: [bad] }),
+        });
+      }
+      expect(await versions(id)).toBe(1);
+    });
+
+    it('lists linkable members of the meeting\'s company only, to editors, with id, name and avatar', async () => {
+      const { service } = build();
+      const id = await twoSpeakerMeeting();
+      const all = await service.listLinkableMembers(creator, id, { limit: 50 });
+      const ids = all.items.map((m: any) => m.id);
+      expect(ids).toEqual(expect.arrayContaining([owner.id, creator.id, coworker.id]));
+      expect(ids).not.toContain(foreign.id);
+      expect(Object.keys(all.items[0]).sort()).toEqual(['avatarUrl', 'id', 'name']);
+      const found = await service.listLinkableMembers(creator, id, { q: 'colin' });
+      expect(found.items.map((m: any) => m.id)).toEqual([coworker.id]);
+      const page = await service.listLinkableMembers(owner, id, { limit: 1 });
+      expect(page.items).toHaveLength(1);
+      expect(page.hasMore).toBe(true);
+      await expect(service.listLinkableMembers(coworker, id)).rejects.toThrow(MEETING_READ_ONLY_MESSAGE);
+      await expect(service.listLinkableMembers(foreign, id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('saved AI insights', () => {
     it('the creator saves a Q&A and an analysis; every member lists them, newest first, with the author', async () => {
       const { service } = build();

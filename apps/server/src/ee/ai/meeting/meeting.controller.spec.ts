@@ -48,6 +48,7 @@ describe('MeetingController actor wiring', () => {
     await controller.deleteInsight('m1', 'i1', user, workspace);
     await controller.archive('m1', user, workspace);
     await controller.unarchive('m1', user, workspace);
+    await controller.linkableMembers('m1', { q: 'ma' } as any, user, workspace);
     await controller.getAudio('m1', user, workspace);
     await controller.streamAudio('m1', undefined, user, workspace, reply);
     for (const [name, fn] of Object.entries(service)) {

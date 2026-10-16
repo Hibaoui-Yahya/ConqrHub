@@ -396,3 +396,50 @@ Behaviour changes:
   `Champs requis manquants : …`.
 - Execution, after approval, uses the space-mapped project when the payload
   has no `projectId`. The failure message when there is none is French.
+
+---
+
+## 6. Linking speakers to members
+
+### `GET /ai/meeting/:id/linkable-members?q=&limit=` (new)
+
+This returns the people a speaker of this meeting may be linked to: the
+**active members of the meeting's company**, never a group. It needs the edit
+right on the meeting (creator or Owner/Admin), because only editors link
+speakers. Anyone else gets 403 with the read-only message, and another company
+gets 404.
+
+| param | rule |
+| --- | --- |
+| `q` | optional, ≤ 100 chars. Matches part of the name or e-mail, case-insensitive. The e-mail is never returned |
+| `limit` | 1–50, default 20 |
+
+The response is 200, sorted by name:
+
+```json
+{ "items": [{ "id": "uuid", "name": "Colin Martin", "avatarUrl": null }], "hasMore": false }
+```
+
+If `hasMore` is true, narrow the search with `q`.
+
+### `POST /ai/meeting/:id/transcript/speakers`: `userLinks` (changed)
+
+The body is unchanged: `{ baseVersion, renames?, merges?, userLinks?, reassign?, confirm? }`.
+
+- `userLinks` maps a speaker label to a member id. A value of `null` or `""`
+  removes the link.
+- Every id is now validated against the active members of the meeting's
+  company. If one is unknown, belongs to another company, is deactivated or is
+  malformed, the **whole request** is refused with 400
+  `code: "invalid_user_links"` and `invalid: [ids]`, and nothing is written.
+- A linked speaker that has no display name yet takes the member's name. This
+  counts as an edit, so analysis is re-run with the names when AI is
+  available. A name set by a reviewer is kept.
+- As before, links are persisted only with `confirm: true`, which writes a
+  new canonical transcript version.
+
+### `GET /ai/meeting/:id/transcript` (changed, additive)
+
+`speakers[label].userId` carries the link. The new field
+`linkedUsers: { "<userId>": { id, name, avatarUrl } }` describes the linked
+people who are still members of the company.
