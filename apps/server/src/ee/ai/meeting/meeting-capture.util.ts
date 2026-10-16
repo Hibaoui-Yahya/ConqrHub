@@ -20,8 +20,8 @@ export type CaptureSource = (typeof CAPTURE_SOURCES)[number];
 const MINUTE_MS = 60_000;
 const MIB = 1024 * 1024;
 
-/** Default upper bound of one recording: 4 hours of audio. */
-export const DEFAULT_MAX_CAPTURE_MINUTES = 240;
+/** Default upper bound of one recording: 2 hours of audio. Longer runs are untested against the provider, the pipeline and the ffmpeg mix. */
+export const DEFAULT_MAX_CAPTURE_MINUTES = 120;
 /** Default upper bound of the stored audio of one meeting, all chunks. */
 export const DEFAULT_MAX_CAPTURE_MIB = 1536;
 /** One uploaded chunk (multipart file part). Matches the controller. */
@@ -51,7 +51,7 @@ function boundedInt(raw: unknown, fallback: number, min: number, max: number) {
 
 /**
  * Limits of a live recording. MEETING_CAPTURE_MAX_MINUTES (1–1440, default
- * 240) and MEETING_CAPTURE_MAX_MB (16–8192 MiB, default 1536) override them.
+ * 120) and MEETING_CAPTURE_MAX_MB (16–8192 MiB, default 1536) override them.
  */
 export function captureLimits(
   env: Record<string, string | undefined> = process.env,

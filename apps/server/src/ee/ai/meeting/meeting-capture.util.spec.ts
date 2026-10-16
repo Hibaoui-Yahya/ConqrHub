@@ -23,16 +23,16 @@ const chunk = (
 });
 
 describe('captureLimits', () => {
-  it('defaults to 4 hours and 1.5 GiB', () => {
+  it('defaults to 2 hours and 1.5 GiB', () => {
     const limits = captureLimits({});
-    expect(limits.maxDurationMs).toBe(4 * 60 * 60 * 1000);
+    expect(limits.maxDurationMs).toBe(2 * 60 * 60 * 1000);
     expect(limits.maxBytes).toBe(1536 * 1024 * 1024);
   });
   it('reads the environment and clamps nonsense', () => {
     expect(captureLimits({ MEETING_CAPTURE_MAX_MINUTES: '90' }).maxDurationMs).toBe(90 * 60_000);
     expect(captureLimits({ MEETING_CAPTURE_MAX_MINUTES: '0' }).maxDurationMs).toBe(60_000);
     expect(captureLimits({ MEETING_CAPTURE_MAX_MINUTES: '99999' }).maxDurationMs).toBe(24 * 60 * 60_000);
-    expect(captureLimits({ MEETING_CAPTURE_MAX_MINUTES: 'abc' }).maxDurationMs).toBe(4 * 60 * 60_000);
+    expect(captureLimits({ MEETING_CAPTURE_MAX_MINUTES: 'abc' }).maxDurationMs).toBe(2 * 60 * 60_000);
     expect(captureLimits({ MEETING_CAPTURE_MAX_MB: '64' }).maxBytes).toBe(64 * 1024 * 1024);
   });
   it('formats the limit in French', () => {

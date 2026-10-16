@@ -49,7 +49,7 @@ The recorder uploads audio while it records, every ~10–30 s, per source.
 
   | limit | default | env |
   | --- | --- | --- |
-  | audio timeline (`startMs + durationMs` of any chunk) | 4 h (+2 min grace) | `MEETING_CAPTURE_MAX_MINUTES` (1–1440) |
+  | audio timeline (`startMs + durationMs` of any chunk) | 2 h (+2 min grace) | `MEETING_CAPTURE_MAX_MINUTES` (1–1440) |
   | stored bytes per meeting, all chunks | 1536 MiB | `MEETING_CAPTURE_MAX_MB` (16–8192) |
   | one chunk | 150 MiB | — |
   | chunks per source | 20 000 | — |
