@@ -39,6 +39,7 @@ import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
+import { audioResponseHeaders } from './meeting-media.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
@@ -550,10 +551,12 @@ export class MeetingController {
       id,
       target || 'original',
     );
-    reply
-      .header('Content-Type', mime)
-      .header('Content-Disposition', 'inline')
-      .header('Cache-Control', 'no-store')
-      .send(stream);
+    // Only a closed list of audio types is ever served inline; anything else
+    // (including legacy uploads that stored the client's Content-Type) is an
+    // opaque, sandboxed download that cannot run script on this origin.
+    for (const [name, value] of Object.entries(audioResponseHeaders(mime))) {
+      reply.header(name, value);
+    }
+    reply.send(stream);
   }
 }

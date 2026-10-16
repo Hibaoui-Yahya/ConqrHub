@@ -28,6 +28,11 @@ import {
   type MeetingActor,
 } from './meeting-access.util';
 import {
+  audioResponseHeaders,
+  detectAudioContainer,
+  storageFileName,
+} from './meeting-media.util';
+import {
   formatMeetingDateTime,
   reportLabels,
   reportLanguageInstruction,
@@ -351,8 +356,14 @@ export class MeetingService {
         if (!['recording', 'created'].includes(meeting.status)) {
           throw new BadRequestException('Meeting is not recording');
         }
+        // After the access checks, so a caller without access learns nothing
+        // about the meeting from a format error.
+        const detected = detectAudioContainer(file);
+        if (!detected) {
+          throw new BadRequestException('Unsupported audio format');
+        }
         const prefix = meeting.audioStoragePrefix || `meetings/${meetingId}`;
-        const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.webm`;
+        const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.${detected.ext}`;
         await this.storage.upload(chunkPath, file);
         uploadedPath = chunkPath;
         const manifest = this.parseAudioManifest(meeting.audioManifest);
@@ -370,7 +381,7 @@ export class MeetingService {
           ...meta,
           path: chunkPath,
           bytes: file.length,
-          mime: meta.mime || 'audio/webm',
+          mime: detected.mime,
         });
         await trx
           .updateTable('meetings')
@@ -651,6 +662,12 @@ export class MeetingService {
     if (!opts.consent) {
       throw new BadRequestException('Consent is required to upload a meeting');
     }
+    // The declared type and name come from the client; only the file's own
+    // bytes decide what it is and how it will be served back.
+    const detected = detectAudioContainer(file);
+    if (!detected) {
+      throw new BadRequestException('Unsupported audio format');
+    }
 
     const template = await this.templates.resolveForMeeting(workspaceId, opts.templateId, opts.meetingType);
     const meetingType = opts.templateId && template ? template.baseType : opts.meetingType || template?.baseType || 'generic-meeting';
@@ -677,7 +694,7 @@ export class MeetingService {
 
     // Store the file
     const prefix = `meetings/${meeting.id}`;
-    const filePath = `${prefix}/original/${filename}`;
+    const filePath = `${prefix}/original/${storageFileName(filename, detected.ext)}`;
     await this.storage.upload(filePath, file);
 
     await this.db
@@ -687,7 +704,7 @@ export class MeetingService {
         audioManifest: JSON.stringify({
           originalPath: filePath,
           sizeBytes: file.length,
-          mime: opts.mime || this.mimeForPath(filename),
+          mime: detected.mime,
         }),
         durationMs: null,
       })
@@ -2053,7 +2070,13 @@ export class MeetingService {
     }
 
     try {
-      const url = await this.storage.getSignedUrl(resolved.filePath, 3600);
+      // The object's stored Content-Type is not trusted (older uploads kept
+      // the client's): force the safe type and disposition on the URL itself.
+      const safe = audioResponseHeaders(resolved.mime);
+      const url = await this.storage.getSignedUrl(resolved.filePath, 3600, {
+        contentType: safe['Content-Type'],
+        contentDisposition: safe['Content-Disposition'],
+      });
       return { url, expiresIn: 3600 };
     } catch (error) {
       if (!isStorageObjectNotFound(error)) throw error;

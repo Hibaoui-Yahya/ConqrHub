@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Readable } from 'stream';
 import { realpath } from 'node:fs/promises';
 import { resolve, sep } from 'path';
-import { StorageDriver } from '../interfaces';
+import { SignedUrlResponseOverrides, StorageDriver } from '../interfaces';
 import {
   isStorageObjectNotFound,
   StorageObjectNotFoundError,
@@ -129,7 +129,11 @@ export class LocalReadFallbackDriver implements StorageDriver {
     return this.primary.getUrl(filePath);
   }
 
-  async getSignedUrl(filePath: string, expireIn: number): Promise<string> {
+  async getSignedUrl(
+    filePath: string,
+    expireIn: number,
+    response?: SignedUrlResponseOverrides,
+  ): Promise<string> {
     if (
       !(await this.primary.exists(filePath)) &&
       (await this.availableInFallback(filePath))
@@ -140,7 +144,7 @@ export class LocalReadFallbackDriver implements StorageDriver {
         `Object ${filePath} is only available through the local fallback; no signed URL`,
       );
     }
-    return this.primary.getSignedUrl(filePath, expireIn);
+    return this.primary.getSignedUrl(filePath, expireIn, response);
   }
 
   async delete(filePath: string): Promise<void> {
