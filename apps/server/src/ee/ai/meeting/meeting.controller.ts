@@ -39,9 +39,10 @@ import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
 import { ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
+import { StopMeetingDto } from './dto/stop-meeting.dto';
+import { MAX_CHUNK_BYTES } from './meeting-capture.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
-const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
 
 /** Every route works in the caller's workspace with the caller's role:
  *  members read every meeting of the company; the creator and
@@ -145,13 +146,15 @@ export class MeetingController {
       });
     } catch (err: any) {
       if (err?.statusCode === 413) {
-        throw new BadRequestException('Audio chunk too large');
+        throw new BadRequestException(
+          'Ce morceau audio dépasse 150 Mo : envoyez des morceaux plus courts.',
+        );
       }
-      throw new BadRequestException('Failed to process audio chunk');
+      throw new BadRequestException('Le morceau audio n’a pas pu être lu.');
     }
 
     if (!fileData) {
-      throw new BadRequestException('No audio file provided');
+      throw new BadRequestException('Aucun fichier audio dans la requête.');
     }
 
     const file: Buffer = await fileData.toBuffer();
@@ -163,7 +166,21 @@ export class MeetingController {
       startMs: Number(fields.startMs?.value || 0),
       durationMs: Number(fields.durationMs?.value || 0),
       mime: fileData.mimetype,
+      continuation: fields.continuation?.value === 'true',
+      replace: fields.replace?.value === 'true',
     });
+  }
+
+  // ──────────── GET /:id/capture (resume a live recording) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/capture')
+  async capture(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getCaptureState(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/stop ────────────
@@ -172,10 +189,16 @@ export class MeetingController {
   @Post(':id/stop')
   async stop(
     @Param('id') id: string,
+    @Body() dto: StopMeetingDto,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.stop(actor(user, workspace), id);
+    return this.meetingService.stop(actor(user, workspace), id, {
+      allowGaps: dto?.allowGaps,
+      expectedLastSequence: dto?.expectedLastSequence
+        ? { ...dto.expectedLastSequence }
+        : undefined,
+    });
   }
 
   // ──────────── GET / (list) ────────────

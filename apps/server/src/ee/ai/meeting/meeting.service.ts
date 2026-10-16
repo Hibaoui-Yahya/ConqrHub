@@ -7,6 +7,8 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  PayloadTooLargeException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -14,7 +16,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { isStorageObjectNotFound } from '../../../integrations/storage/storage.errors';
 import {
@@ -81,6 +83,16 @@ import {
   type AudioSignal,
 } from './meeting-audio.util';
 import { normalizeMarkers } from './meeting-markers.util';
+import {
+  CAPTURE_LIMIT_GRACE_MS,
+  captureGaps,
+  captureLimits,
+  captureState,
+  formatCaptureDuration,
+  planCapture,
+  type CaptureSource,
+  type ManifestChunk,
+} from './meeting-capture.util';
 import {
   applyEvaluationEdit,
   buildEvaluationMarkdown,
@@ -188,6 +200,8 @@ function escapeHtml(value: string): string {
 
 type AudioSource = {
   path: string;
+  /** Chunk paths read back as one file (progressive capture take). */
+  parts?: string[];
   mime: string;
   source?: string;
   sequence?: number;
@@ -306,6 +320,13 @@ export class MeetingService {
 
   // ──────────── chunk ────────────
 
+  /**
+   * Store one chunk of a live recording (progressive capture, see
+   * MEET_CONTRACT.md). Sequence numbers are per source and start at 0. A
+   * re-send of a chunk already stored with the same bytes changes nothing
+   * and answers `duplicate: true` (also after stop); different bytes for a
+   * stored sequence are refused unless the recorder asks to replace them.
+   */
   async ingestChunk(
     actor: MeetingActor,
     meetingId: string,
@@ -316,17 +337,33 @@ export class MeetingService {
       startMs: number;
       durationMs: number;
       mime?: string;
+      /** Appends to the previous sequence (MediaRecorder timeslice part). */
+      continuation?: boolean;
+      /** Overwrite a stored sequence whose bytes differ. */
+      replace?: boolean;
     },
   ) {
     if (!isMeetingId(meetingId)) throw new NotFoundException('Meeting not found');
+    const limits = captureLimits();
     if (
       !['mic', 'system'].includes(meta.source) ||
       ![meta.sequence, meta.startMs, meta.durationMs].every(
         (value) => Number.isSafeInteger(value) && value >= 0,
-      )
+      ) ||
+      meta.sequence > limits.maxSequence
     ) {
       throw new BadRequestException('Invalid audio source or timing');
     }
+    if (meta.continuation && meta.sequence === 0) {
+      throw new BadRequestException(
+        'Le morceau 0 d’une source doit contenir l’en-tête audio : il ne peut pas être une suite.',
+      );
+    }
+    if (!file?.length) {
+      throw new BadRequestException('Le morceau audio est vide.');
+    }
+    const sha256 = createHash('sha256').update(file).digest('hex');
+    const continuation = meta.continuation === true;
     let uploadedPath: string | null = null;
     let replacedPath: string | null = null;
     try {
@@ -348,30 +385,89 @@ export class MeetingService {
         if (!canEditMeeting(meeting, actor)) {
           throw new ForbiddenException(MEETING_READ_ONLY_MESSAGE);
         }
+        const manifest = this.parseAudioManifest(meeting.audioManifest);
+        const previous = (manifest.chunks || []) as Array<Record<string, any>>;
+        const stored = previous.find(
+          (chunk) =>
+            chunk.source === meta.source &&
+            Number(chunk.sequence) === meta.sequence,
+        );
+        const sameBytes =
+          !!stored &&
+          (typeof stored.sha256 === 'string'
+            ? stored.sha256 === sha256
+            : Number(stored.bytes) === file.length);
+        if (stored && sameBytes) {
+          // A retry of a request that already landed (lost response, reload).
+          const segment = await trx
+            .selectFrom('meetingSegments')
+            .select('id')
+            .where('meetingId', '=', meetingId)
+            .where('source', '=', meta.source as any)
+            .where('sequence', '=', meta.sequence)
+            .executeTakeFirst();
+          return {
+            segmentId: segment?.id ?? null,
+            text: '',
+            ...this.chunkReceipt(previous, meta, stored, { duplicate: true, replaced: false }),
+          };
+        }
         if (!['recording', 'created'].includes(meeting.status)) {
           throw new BadRequestException('Meeting is not recording');
+        }
+        if (stored && !meta.replace) {
+          throw new ConflictException({
+            statusCode: 409,
+            code: 'chunk_conflict',
+            message: `Le morceau ${meta.sequence} (${meta.source}) est déjà enregistré avec un autre contenu. Reprenez la numérotation à partir de la capture enregistrée.`,
+            source: meta.source,
+            sequence: meta.sequence,
+            storedSha256: stored.sha256 ?? null,
+          });
+        }
+        const others = previous.filter((chunk) => chunk !== stored);
+        const sameSource = others.filter((chunk) => chunk.source === meta.source);
+        if (sameSource.length >= limits.maxChunksPerSource) {
+          throw new PayloadTooLargeException({
+            statusCode: 413,
+            code: 'capture_chunk_limit',
+            message: `Cet enregistrement compte déjà ${limits.maxChunksPerSource} morceaux pour cette source : envoyez des morceaux plus longs ou arrêtez l’enregistrement.`,
+          });
+        }
+        if (meta.startMs + meta.durationMs > limits.maxDurationMs + CAPTURE_LIMIT_GRACE_MS) {
+          throw new UnprocessableEntityException({
+            statusCode: 422,
+            code: 'capture_duration_limit',
+            message: `La durée maximale d’un enregistrement (${formatCaptureDuration(limits.maxDurationMs)}) est atteinte : arrêtez l’enregistrement pour lancer le traitement.`,
+            maxDurationMs: limits.maxDurationMs,
+          });
+        }
+        const storedBytes = others.reduce((n, c) => n + Number(c.bytes ?? 0), 0);
+        if (storedBytes + file.length > limits.maxBytes) {
+          throw new PayloadTooLargeException({
+            statusCode: 413,
+            code: 'capture_size_limit',
+            message: `La taille maximale de l’audio d’une réunion (${Math.round(limits.maxBytes / (1024 * 1024))} Mo) est atteinte : arrêtez l’enregistrement pour lancer le traitement.`,
+            maxBytes: limits.maxBytes,
+          });
         }
         const prefix = meeting.audioStoragePrefix || `meetings/${meetingId}`;
         const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.webm`;
         await this.storage.upload(chunkPath, file);
         uploadedPath = chunkPath;
-        const manifest = this.parseAudioManifest(meeting.audioManifest);
-        const previous = (manifest.chunks || []) as Array<Record<string, any>>;
-        replacedPath =
-          previous.find(
-            (chunk) =>
-              chunk.source === meta.source && chunk.sequence === meta.sequence,
-          )?.path ?? null;
-        const chunks = previous.filter(
-          (chunk) =>
-            !(chunk.source === meta.source && chunk.sequence === meta.sequence),
-        );
-        chunks.push({
-          ...meta,
+        replacedPath = stored?.path ?? null;
+        const entry = {
+          source: meta.source,
+          sequence: meta.sequence,
+          startMs: meta.startMs,
+          durationMs: meta.durationMs,
           path: chunkPath,
           bytes: file.length,
           mime: meta.mime || 'audio/webm',
-        });
+          sha256,
+          ...(continuation ? { continuation: true } : {}),
+        };
+        const chunks = [...others, entry];
         await trx
           .updateTable('meetings')
           .set({
@@ -401,7 +497,14 @@ export class MeetingService {
           })
           .returning('id')
           .executeTakeFirstOrThrow();
-        return { segmentId: segment.id, text: '' };
+        return {
+          segmentId: segment.id,
+          text: '',
+          ...this.chunkReceipt(chunks, meta, entry, {
+            duplicate: false,
+            replaced: !!stored,
+          }),
+        };
       });
       if (replacedPath) await this.storage.delete(replacedPath).catch(() => {});
       return result;
@@ -411,15 +514,92 @@ export class MeetingService {
     }
   }
 
+  /** What the chunk response tells the recorder (additive fields). */
+  private chunkReceipt(
+    chunks: Array<Record<string, any>>,
+    meta: { source: string; sequence: number },
+    entry: Record<string, any>,
+    flags: { duplicate: boolean; replaced: boolean },
+  ) {
+    const state = captureState(chunks as ManifestChunk[]);
+    const source = state.sources[meta.source as CaptureSource];
+    return {
+      source: meta.source,
+      sequence: meta.sequence,
+      bytes: Number(entry.bytes ?? 0),
+      sha256: typeof entry.sha256 === 'string' ? entry.sha256 : null,
+      continuation: entry.continuation === true,
+      duplicate: flags.duplicate,
+      replaced: flags.replaced,
+      nextSequence: source?.nextSequence ?? meta.sequence + 1,
+      missingSequences: source?.missingSequences ?? [],
+      totalBytes: state.totalBytes,
+      durationMs: state.durationMs,
+    };
+  }
+
+  // ──────────── capture state (resume after a reload) ────────────
+
+  /**
+   * Which chunks the Hub holds for a live recording, per source, with the
+   * next sequence to send and the limits. A recorder that reloads reads it
+   * before sending again (MEET_CONTRACT.md).
+   */
+  async getCaptureState(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    const manifest = this.parseAudioManifest(meeting.audioManifest);
+    const chunks = ((manifest.chunks || []) as ManifestChunk[]).filter(
+      (c) => c && typeof c.path === 'string',
+    );
+    const state = captureState(chunks);
+    return {
+      meetingId: meeting.id,
+      status: meeting.status,
+      captureKind: meeting.captureKind,
+      recording: ['recording', 'created'].includes(meeting.status),
+      canEdit: canEditMeeting(meeting, actor),
+      startedAt: meeting.startedAt,
+      limits: captureLimits(),
+      ...state,
+    };
+  }
+
   // ──────────── stop ────────────
 
-  async stop(actor: MeetingActor, meetingId: string) {
+  /**
+   * End a live recording and start processing. Refused (409
+   * `capture_incomplete`, nothing changes) when sequences are missing —
+   * inside what was stored, or after it per `expectedLastSequence` — so
+   * the recorder can re-send them; `allowGaps` stops anyway and processes
+   * what is there.
+   */
+  async stop(
+    actor: MeetingActor,
+    meetingId: string,
+    opts: {
+      allowGaps?: boolean;
+      expectedLastSequence?: Partial<Record<string, number>>;
+    } = {},
+  ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
 
     if (!['recording', 'created'].includes(meeting.status)) {
       throw new BadRequestException(
         `Meeting is not recording (status: ${meeting.status})`,
       );
+    }
+
+    const chunks = (this.parseAudioManifest(meeting.audioManifest).chunks ||
+      []) as ManifestChunk[];
+    const gaps = captureGaps(chunks, opts.expectedLastSequence);
+    if (Object.keys(gaps).length > 0 && !opts.allowGaps) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'capture_incomplete',
+        message:
+          'Des morceaux de l’enregistrement ne sont pas encore arrivés. Renvoyez-les avant d’arrêter, ou arrêtez quand même en acceptant de perdre ces passages.',
+        missing: gaps,
+      });
     }
 
     // Compare-and-set: a double click or a retried request stops once.
@@ -437,7 +617,21 @@ export class MeetingService {
       return this.withAccess(await this.getMeetingOrThrow(meetingId), actor);
     }
 
-    await this.logTransition(meetingId, 'recording', 'finalizing', undefined, actor.id);
+    const plan = planCapture(chunks);
+    await this.logTransition(
+      meetingId,
+      'recording',
+      'finalizing',
+      chunks.length
+        ? {
+            chunks: chunks.length,
+            takes: plan.takes.length,
+            ...(Object.keys(gaps).length ? { missing: gaps, gapsAccepted: true } : {}),
+            ...(plan.orphans.length ? { unreadableChunks: plan.orphans.length } : {}),
+          }
+        : undefined,
+      actor.id,
+    );
 
     // Kick the intelligence pipeline automatically so live recordings
     // don't dead-end in "finalizing".
@@ -2002,7 +2196,9 @@ export class MeetingService {
 
     if (target === 'original') {
       filePath = manifest.playbackPath || manifest.originalPath || null;
-      mime = manifest.playbackPath ? 'audio/mp4' : manifest.mime || null;
+      mime = manifest.playbackPath
+        ? manifest.playbackMime || 'audio/mp4'
+        : manifest.mime || null;
       if (!filePath && manifest.chunks?.length) {
         if (manifest.chunks.length > 1) {
           throw new NotFoundException('Combined recording is being prepared');
@@ -2678,7 +2874,7 @@ export class MeetingService {
           );
         }
 
-        if (meeting.captureKind === 'live' && audio.length > 1) {
+        if (this.needsPlayback(meeting, audio)) {
           await this.prepareCombinedPlayback(meeting, audio);
         }
 
@@ -2939,22 +3135,36 @@ export class MeetingService {
     },
     audio: AudioSource[],
   ) {
-    const playback = await mixMeetingPlayback(
-      await Promise.all(
-        audio.map(async (source) => ({
-          audio: await this.storage.read(source.path),
-          startMs: source.startMs,
-        })),
-      ),
-    );
+    // One take made of several chunks: its appended bytes already are a
+    // complete recording, played as recorded (no re-encoding). Several
+    // takes or sources are mixed on the shared timeline.
+    const single = audio.length === 1 && (audio[0].parts?.length ?? 0) > 1;
+    const playback = single
+      ? await this.readAudio(audio[0])
+      : await mixMeetingPlayback(
+          await Promise.all(
+            audio.map(async (source) => ({
+              audio: await this.readAudio(source),
+              startMs: source.startMs,
+            })),
+          ),
+        );
+    const playbackMime = single
+      ? (audio[0].mime || 'audio/webm').split(';')[0].trim()
+      : 'audio/mp4';
+    const extension = single
+      ? ({ 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' } as Record<string, string>)[
+          playbackMime
+        ] ?? 'webm'
+      : 'm4a';
     // Each run writes its own key, so a late or superseded run can never
     // overwrite the bytes the current manifest points to. Only the run
     // still in charge (fenced write) moves the pointer.
     const run = this.runScope.getStore();
     const prefix = meeting.audioStoragePrefix || `meetings/${meeting.id}`;
     const playbackPath = run
-      ? `${prefix}/playback-${run.runId}.m4a`
-      : `${prefix}/playback.m4a`;
+      ? `${prefix}/playback-${run.runId}.${extension}`
+      : `${prefix}/playback.${extension}`;
     await this.storage.upload(playbackPath, playback);
     try {
       await this.write(async (trx) => {
@@ -2970,7 +3180,12 @@ export class MeetingService {
           .set({
             // Postgres.js serializes inferred jsonb parameters. Bind text explicitly
             // so a JSON object cannot become a double-encoded string literal.
-            audioManifest: sql`${JSON.stringify({ ...this.parseAudioManifest(current?.audioManifest), playbackPath })}::text::jsonb`,
+            audioManifest: sql`${JSON.stringify({
+              ...this.parseAudioManifest(current?.audioManifest),
+              playbackPath,
+              // Absent (dropped by JSON) for mp4, like older manifests.
+              playbackMime: playbackMime !== 'audio/mp4' ? playbackMime : undefined,
+            })}::text::jsonb`,
           })
           .where('id', '=', meeting.id)
           .execute();
@@ -3015,7 +3230,7 @@ export class MeetingService {
       let meanDb = -Infinity;
       let provenSilent = true;
       for (const file of files) {
-        const signal = await this.inspectSignal(await this.storage.read(file.path));
+        const signal = await this.inspectSignal(await this.readAudio(file));
         if (!signal || !isDigitalSilence(signal)) {
           provenSilent = false;
           break;
@@ -3068,17 +3283,37 @@ export class MeetingService {
       ];
     }
 
-    const chunks = (manifest.chunks as Array<Record<string, any>>) || [];
-    return chunks
-      .sort((a, b) => Number(a.sequence ?? 0) - Number(b.sequence ?? 0))
-      .map((c) => ({
-        path: c.path as string,
-        mime: c.mime || 'audio/webm',
-        source: c.source || 'mic',
-        sequence: Number(c.sequence ?? 0),
-        startMs: Number(c.startMs ?? 0),
-        durationMs: Number(c.durationMs ?? 0),
-      }));
+    // Live capture: one source per take. A standalone chunk is its own
+    // take (every earlier recording); continuation chunks are appended to
+    // the chunk before them. Orphan continuations (no header) are skipped.
+    const chunks = (manifest.chunks as ManifestChunk[]) || [];
+    return planCapture(chunks).takes.map((take) => ({
+      path: take.path,
+      ...(take.parts ? { parts: take.parts } : {}),
+      mime: take.mime,
+      source: take.source,
+      sequence: take.sequence,
+      startMs: take.startMs,
+      durationMs: take.durationMs,
+    }));
+  }
+
+  /** The bytes of one source: its file, or its chunks appended in order. */
+  private async readAudio(source: Pick<AudioSource, 'path' | 'parts'>): Promise<Buffer> {
+    if (!source.parts || source.parts.length <= 1) {
+      return this.storage.read(source.path);
+    }
+    const buffers: Buffer[] = [];
+    for (const part of source.parts) buffers.push(await this.storage.read(part));
+    return Buffer.concat(buffers);
+  }
+
+  /** A live recording needs a playback file unless one chunk is the whole audio. */
+  private needsPlayback(meeting: { captureKind: string | null }, audio: AudioSource[]) {
+    return (
+      meeting.captureKind === 'live' &&
+      (audio.length > 1 || audio.some((a) => (a.parts?.length ?? 0) > 1))
+    );
   }
 
   /** Transcribe every audio source and persist transcript version 1. */
@@ -3122,11 +3357,11 @@ export class MeetingService {
             };
       const buffer =
         group.length === 1
-          ? await this.storage.read(src.path)
+          ? await this.readAudio(src)
           : await mixMeetingPlayback(
               await Promise.all(
                 group.map(async (input) => ({
-                  audio: await this.storage.read(input.path),
+                  audio: await this.readAudio(input),
                   startMs: input.startMs ?? 0,
                 })),
               ),

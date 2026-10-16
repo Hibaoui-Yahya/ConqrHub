@@ -41,7 +41,8 @@ describe('MeetingController actor wiring', () => {
     await controller.attributeSpeakers('m1', { baseVersion: 1 } as any, user, workspace);
     await controller.generateEvaluation('m1', {} as any, user, workspace);
     await controller.saveEvaluation('m1', {} as any, user, workspace);
-    await controller.stop('m1', user, workspace);
+    await controller.stop('m1', {} as any, user, workspace);
+    await controller.capture('m1', user, workspace);
     await controller.getAudio('m1', user, workspace);
     await controller.streamAudio('m1', undefined, user, workspace, reply);
     for (const [name, fn] of Object.entries(service)) {

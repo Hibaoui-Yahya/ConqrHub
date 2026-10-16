@@ -153,7 +153,10 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   it('retries replace only the matching channel/sequence without duplicate transcript inputs', async () => {
     await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic'));
     await Promise.all([
-      service.ingestChunk(actor, meetingId, Buffer.from('replacement'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('replacement'), {
+        ...meta('mic'),
+        replace: true,
+      }),
       service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
     ]);
     expect((await meeting()).audioManifest.chunks).toHaveLength(2);
@@ -163,6 +166,107 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       files.get(chunks.find((c: any) => c.source === 'mic').path)?.toString(),
     ).toBe('replacement');
   });
+  it('a re-send of the same bytes is a no-op, also after stop; other bytes need replace', async () => {
+    const first = await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic'));
+    expect(first).toMatchObject({ duplicate: false, replaced: false, nextSequence: 1 });
+    const again = await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic'));
+    expect(again).toMatchObject({ duplicate: true, segmentId: first.segmentId, sha256: first.sha256 });
+    expect(storage.upload).toHaveBeenCalledTimes(1);
+    await expect(
+      service.ingestChunk(actor, meetingId, Buffer.from('other'), meta('mic')),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(files.size).toBe(1);
+    await db.updateTable('meetings').set({ status: 'finalizing' }).where('id', '=', meetingId).execute();
+    // The response of the last chunk was lost while the recorder stopped.
+    expect(
+      await service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),
+    ).toMatchObject({ duplicate: true });
+  });
+
+  it('progressive capture: timeslice parts are read back as one file per take, in order', async () => {
+    // Uploaded out of order and concurrently with the other source.
+    const part = (source: string, sequence: number, bytes: string, startMs: number) =>
+      service.ingestChunk(actor, meetingId, Buffer.from(bytes), {
+        source,
+        sequence,
+        startMs,
+        durationMs: 10_000,
+        mime: 'audio/webm;codecs=opus',
+        continuation: sequence > 0,
+      });
+    await part('mic', 0, 'HDR-a', 0);
+    await Promise.all([part('mic', 2, '-c', 20_000), part('mic', 1, '-b', 10_000), part('system', 0, 'SYS', 0)]);
+    const sources = await (service as any).resolveAudioSources(await meeting());
+    expect(sources.map((s: any) => [s.source, s.parts?.length ?? 1, s.startMs, s.durationMs])).toEqual([
+      ['mic', 3, 0, 30_000],
+      ['system', 1, 0, 10_000],
+    ]);
+    const result = await (service as any).transcribeMeeting(meetingId, sources);
+    const sent = (service as any).stt.transcribeDiarized.mock.calls.map((c: any) => c[0].toString());
+    expect(sent.sort()).toEqual(['HDR-a-b-c', 'SYS']);
+    expect(result.segments).toHaveLength(2);
+    expect((await meeting()).durationMs).toBe(30_000);
+  });
+
+  it('a single take of several parts becomes the playback file as recorded, no re-encoding', async () => {
+    for (const [sequence, bytes] of [[0, 'HDR'], [1, '+1'], [2, '+2']] as const) {
+      await service.ingestChunk(actor, meetingId, Buffer.from(bytes), {
+        ...meta('mic', 5000),
+        sequence,
+        startMs: sequence * 5000,
+        continuation: sequence > 0,
+      });
+    }
+    const row = await meeting();
+    const sources = await (service as any).resolveAudioSources(row);
+    expect((service as any).needsPlayback(row, sources)).toBe(true);
+    (mixMeetingPlayback as jest.Mock).mockClear();
+    await (service as any).prepareCombinedPlayback(row, sources);
+    expect(mixMeetingPlayback).not.toHaveBeenCalled();
+    const manifest = (await meeting()).audioManifest;
+    expect(files.get(manifest.playbackPath)?.toString()).toBe('HDR+1+2');
+    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({
+      filePath: manifest.playbackPath,
+      mime: 'audio/webm',
+    });
+  });
+
+  it('refuses a headerless chunk 0, and timing past the duration limit', async () => {
+    await expect(
+      service.ingestChunk(actor, meetingId, Buffer.from('x'), { ...meta('mic'), continuation: true }),
+    ).rejects.toThrow('en-tête');
+    const before = process.env.MEETING_CAPTURE_MAX_MINUTES;
+    process.env.MEETING_CAPTURE_MAX_MINUTES = '10';
+    try {
+      await expect(
+        service.ingestChunk(actor, meetingId, Buffer.from('x'), { ...meta('mic', 10_000), startMs: 12 * 60_000 + 1 }),
+      ).rejects.toMatchObject({ status: 422 });
+      expect(
+        await service.ingestChunk(actor, meetingId, Buffer.from('x'), { ...meta('mic', 10_000), startMs: 9 * 60_000 }),
+      ).toMatchObject({ duplicate: false });
+    } finally {
+      if (before === undefined) delete process.env.MEETING_CAPTURE_MAX_MINUTES;
+      else process.env.MEETING_CAPTURE_MAX_MINUTES = before;
+    }
+  });
+
+  it('stop refuses while sequences are missing and changes nothing', async () => {
+    await service.ingestChunk(actor, meetingId, Buffer.from('a'), meta('mic'));
+    await service.ingestChunk(actor, meetingId, Buffer.from('c'), { ...meta('mic'), sequence: 2, continuation: true });
+    await expect(service.stop(actor, meetingId)).rejects.toMatchObject({
+      status: 409,
+      response: expect.objectContaining({ code: 'capture_incomplete', missing: { mic: [1] } }),
+    });
+    await service.ingestChunk(actor, meetingId, Buffer.from('b'), { ...meta('mic'), sequence: 1, continuation: true });
+    await expect(
+      service.stop(actor, meetingId, { expectedLastSequence: { mic: 3 } }),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ missing: { mic: [3] } }) });
+    expect((await meeting()).status).toBe('recording');
+    const state = await service.getCaptureState(actor, meetingId);
+    expect(state.sources.mic).toMatchObject({ count: 3, nextSequence: 3, missingSequences: [] });
+    expect(state.recording).toBe(true);
+  });
+
   it('takes the longer channel duration without shrinking it on a later short upload', async () => {
     await service.ingestChunk(actor, meetingId,
       Buffer.from('remote'),
