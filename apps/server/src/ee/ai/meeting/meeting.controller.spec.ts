@@ -1,4 +1,5 @@
-import { MeetingController } from './meeting.controller';
+import { BadRequestException } from '@nestjs/common';
+import { MeetingController, parseLanguageConfig } from './meeting.controller';
 
 jest.mock('./meeting.service', () => ({ MeetingService: class {} }));
 
@@ -41,7 +42,14 @@ describe('MeetingController actor wiring', () => {
     await controller.attributeSpeakers('m1', { baseVersion: 1 } as any, user, workspace);
     await controller.generateEvaluation('m1', {} as any, user, workspace);
     await controller.saveEvaluation('m1', {} as any, user, workspace);
-    await controller.stop('m1', user, workspace);
+    await controller.stop('m1', {} as any, user, workspace);
+    await controller.capture('m1', user, workspace);
+    await controller.listInsights('m1', {} as any, user, workspace);
+    await controller.saveInsight('m1', { kind: 'qa', question: 'q', content: 'a' } as any, user, workspace);
+    await controller.deleteInsight('m1', 'i1', user, workspace);
+    await controller.archive('m1', user, workspace);
+    await controller.unarchive('m1', user, workspace);
+    await controller.linkableMembers('m1', { q: 'ma' } as any, user, workspace);
     await controller.getAudio('m1', user, workspace);
     await controller.streamAudio('m1', undefined, user, workspace, reply);
     for (const [name, fn] of Object.entries(service)) {
@@ -58,5 +66,26 @@ describe('MeetingController actor wiring', () => {
     await controller.list({ limit: 30, scope: 'all' } as any, user, workspace);
     await controller.list({ limit: 30, scope: 'mine' } as any, user, workspace);
     expect(service.list.mock.calls.map((c) => c[1].mine)).toEqual([false, false, true]);
+  });
+
+  it('parses the upload languageConfig field and refuses malformed JSON with a 400', () => {
+    expect(parseLanguageConfig('{"language":"ar_en"}')).toEqual({ language: 'ar_en' });
+    expect(parseLanguageConfig(undefined)).toBeUndefined();
+    expect(() => parseLanguageConfig('{fr')).toThrow(BadRequestException);
+    expect(() => parseLanguageConfig('"fr"')).toThrow('languageConfig');
+  });
+
+  it('passes the list filters through untouched', async () => {
+    const { controller, service } = setup();
+    const query = {
+      type: 'recruitment-interview',
+      status: 'completed,published',
+      from: '2026-10-01',
+      to: '2026-10-16',
+      ownerId: '0190a4c8-0000-7000-8000-000000000001',
+      archived: 'only',
+    };
+    await controller.list(query as any, user, workspace);
+    expect(service.list.mock.calls[0][1]).toMatchObject(query);
   });
 });

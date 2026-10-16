@@ -36,18 +36,34 @@ import { MeetingAccessGuard } from './meeting-access.guard';
 import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
-import { ReviewSpeakersDto } from './dto/review-speakers.dto';
+import { LinkableMembersDto, ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
+import { StopMeetingDto } from './dto/stop-meeting.dto';
+import { ListInsightsDto, SaveInsightDto } from './dto/meeting-insight.dto';
+import { MAX_CHUNK_BYTES } from './meeting-capture.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
-const MAX_CHUNK_BYTES = 150 * 1024 * 1024; // live recorder chunk
 
 /** Every route works in the caller's workspace with the caller's role:
  *  members read every meeting of the company; the creator and
  *  Owners/Admins change it (LTC-03). */
 function actor(user: User, workspace: Workspace): MeetingActor {
   return { id: user.id, role: user.role, workspaceId: workspace.id };
+}
+
+/** The upload's languageConfig field: a JSON object, else a 400 (was a 500). */
+export function parseLanguageConfig(raw: unknown): Record<string, unknown> | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  try {
+    const value = JSON.parse(String(raw));
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  } catch {
+    // fall through
+  }
+  throw new BadRequestException(
+    'Le champ languageConfig doit être un objet JSON, par exemple {"language":"fr"}.',
+  );
 }
 
 // MeetingAccessGuard: every /:id route answers 404 unless the meeting is a
@@ -116,9 +132,7 @@ export class MeetingController {
       title: fields.title?.value,
       meetingType: fields.meetingType?.value,
       templateId: fields.templateId?.value,
-      languageConfig: fields.languageConfig
-        ? JSON.parse(fields.languageConfig.value)
-        : undefined,
+      languageConfig: parseLanguageConfig(fields.languageConfig?.value),
       autoProcess: fields.autoProcess?.value === 'true',
       mime: fileData.mimetype,
     });
@@ -145,13 +159,15 @@ export class MeetingController {
       });
     } catch (err: any) {
       if (err?.statusCode === 413) {
-        throw new BadRequestException('Audio chunk too large');
+        throw new BadRequestException(
+          'Ce morceau audio dépasse 150 Mo : envoyez des morceaux plus courts.',
+        );
       }
-      throw new BadRequestException('Failed to process audio chunk');
+      throw new BadRequestException('Le morceau audio n’a pas pu être lu.');
     }
 
     if (!fileData) {
-      throw new BadRequestException('No audio file provided');
+      throw new BadRequestException('Aucun fichier audio dans la requête.');
     }
 
     const file: Buffer = await fileData.toBuffer();
@@ -163,7 +179,21 @@ export class MeetingController {
       startMs: Number(fields.startMs?.value || 0),
       durationMs: Number(fields.durationMs?.value || 0),
       mime: fileData.mimetype,
+      continuation: fields.continuation?.value === 'true',
+      replace: fields.replace?.value === 'true',
     });
+  }
+
+  // ──────────── GET /:id/capture (resume a live recording) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/capture')
+  async capture(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.getCaptureState(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/stop ────────────
@@ -172,10 +202,16 @@ export class MeetingController {
   @Post(':id/stop')
   async stop(
     @Param('id') id: string,
+    @Body() dto: StopMeetingDto,
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.meetingService.stop(actor(user, workspace), id);
+    return this.meetingService.stop(actor(user, workspace), id, {
+      allowGaps: dto?.allowGaps,
+      expectedLastSequence: dto?.expectedLastSequence
+        ? { ...dto.expectedLastSequence }
+        : undefined,
+    });
   }
 
   // ──────────── GET / (list) ────────────
@@ -195,6 +231,12 @@ export class MeetingController {
         q: query.q,
         // Home: only the caller's own meetings; otherwise company-wide.
         mine: query.scope === 'mine',
+        type: query.type,
+        status: query.status,
+        from: query.from,
+        to: query.to,
+        ownerId: query.ownerId,
+        archived: query.archived,
       },
       actor(user, workspace),
     );
@@ -225,6 +267,28 @@ export class MeetingController {
     return this.meetingService.update(actor(user, workspace), id, {
       title: dto.title,
     });
+  }
+
+  // ──────────── POST /:id/archive · /:id/unarchive (not a deletion) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/archive')
+  async archive(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.archive(actor(user, workspace), id);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/unarchive')
+  async unarchive(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.unarchive(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/markers (moments marked while recording) ────────────
@@ -272,6 +336,46 @@ export class MeetingController {
       dto.key,
       dto.value,
     );
+  }
+
+  // ──────────── saved AI insights (communication analysis, Q&A) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/insights')
+  async listInsights(
+    @Param('id') id: string,
+    @Query() query: ListInsightsDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listInsights(actor(user, workspace), id, query?.kind);
+  }
+
+  @HttpCode(HttpStatus.CREATED)
+  @Post(':id/insights')
+  async saveInsight(
+    @Param('id') id: string,
+    @Body() dto: SaveInsightDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.saveInsight(actor(user, workspace), id, {
+      kind: dto.kind,
+      question: dto.question,
+      content: dto.content,
+      transcriptVersion: dto.transcriptVersion,
+    });
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id/insights/:insightId')
+  async deleteInsight(
+    @Param('id') id: string,
+    @Param('insightId') insightId: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.meetingService.deleteInsight(actor(user, workspace), id, insightId);
   }
 
   // ──────────── POST /:id/process ────────────
@@ -346,6 +450,22 @@ export class MeetingController {
       userLinks: dto.userLinks,
       reassign: dto.reassign,
       confirm: dto.confirm,
+    });
+  }
+
+  // ──────────── GET /:id/linkable-members (speaker ↔ member links) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/linkable-members')
+  async linkableMembers(
+    @Param('id') id: string,
+    @Query() query: LinkableMembersDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.listLinkableMembers(actor(user, workspace), id, {
+      q: query?.q,
+      limit: query?.limit,
     });
   }
 

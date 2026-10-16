@@ -7,6 +7,8 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  PayloadTooLargeException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -14,7 +16,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { isStorageObjectNotFound } from '../../../integrations/storage/storage.errors';
 import {
@@ -25,6 +27,7 @@ import {
   canEditMeeting,
   isMeetingId,
   MEETING_READ_ONLY_MESSAGE,
+  meetingSpaceIds,
   type MeetingActor,
 } from './meeting-access.util';
 import {
@@ -81,6 +84,34 @@ import {
   type AudioSignal,
 } from './meeting-audio.util';
 import { normalizeMarkers } from './meeting-markers.util';
+import {
+  CAPTURE_LIMIT_GRACE_MS,
+  captureGaps,
+  captureLimits,
+  captureState,
+  formatCaptureDuration,
+  planCapture,
+  type CaptureSource,
+  type ManifestChunk,
+} from './meeting-capture.util';
+import {
+  isInsightKind,
+  MAX_INSIGHTS_PER_MEETING,
+  normalizeInsight,
+} from './meeting-insights.util';
+import { dateRange, parseStatuses, splitList } from './meeting-list.util';
+import {
+  duplicateSearchQuery,
+  LIKELY_DUPLICATE_SIMILARITY,
+  matchEvidenceSegments,
+  rankDuplicateCandidates,
+  resolveMappedProject,
+} from './meeting-proposals.util';
+
+import { reportLanguageCandidate, sttLanguage } from './meeting-stt-language.util';
+
+/** One work-item search while generating proposals. */
+const DUPLICATE_CHECK_TIMEOUT_MS = 5_000;
 import {
   applyEvaluationEdit,
   buildEvaluationMarkdown,
@@ -188,6 +219,8 @@ function escapeHtml(value: string): string {
 
 type AudioSource = {
   path: string;
+  /** Chunk paths read back as one file (progressive capture take). */
+  parts?: string[];
   mime: string;
   source?: string;
   sequence?: number;
@@ -306,6 +339,13 @@ export class MeetingService {
 
   // ──────────── chunk ────────────
 
+  /**
+   * Store one chunk of a live recording (progressive capture, see
+   * MEET_CONTRACT.md). Sequence numbers are per source and start at 0. A
+   * re-send of a chunk already stored with the same bytes changes nothing
+   * and answers `duplicate: true` (also after stop); different bytes for a
+   * stored sequence are refused unless the recorder asks to replace them.
+   */
   async ingestChunk(
     actor: MeetingActor,
     meetingId: string,
@@ -316,17 +356,33 @@ export class MeetingService {
       startMs: number;
       durationMs: number;
       mime?: string;
+      /** Appends to the previous sequence (MediaRecorder timeslice part). */
+      continuation?: boolean;
+      /** Overwrite a stored sequence whose bytes differ. */
+      replace?: boolean;
     },
   ) {
     if (!isMeetingId(meetingId)) throw new NotFoundException('Meeting not found');
+    const limits = captureLimits();
     if (
       !['mic', 'system'].includes(meta.source) ||
       ![meta.sequence, meta.startMs, meta.durationMs].every(
         (value) => Number.isSafeInteger(value) && value >= 0,
-      )
+      ) ||
+      meta.sequence > limits.maxSequence
     ) {
       throw new BadRequestException('Invalid audio source or timing');
     }
+    if (meta.continuation && meta.sequence === 0) {
+      throw new BadRequestException(
+        'Le morceau 0 d’une source doit contenir l’en-tête audio : il ne peut pas être une suite.',
+      );
+    }
+    if (!file?.length) {
+      throw new BadRequestException('Le morceau audio est vide.');
+    }
+    const sha256 = createHash('sha256').update(file).digest('hex');
+    const continuation = meta.continuation === true;
     let uploadedPath: string | null = null;
     let replacedPath: string | null = null;
     try {
@@ -348,30 +404,89 @@ export class MeetingService {
         if (!canEditMeeting(meeting, actor)) {
           throw new ForbiddenException(MEETING_READ_ONLY_MESSAGE);
         }
+        const manifest = this.parseAudioManifest(meeting.audioManifest);
+        const previous = (manifest.chunks || []) as Array<Record<string, any>>;
+        const stored = previous.find(
+          (chunk) =>
+            chunk.source === meta.source &&
+            Number(chunk.sequence) === meta.sequence,
+        );
+        const sameBytes =
+          !!stored &&
+          (typeof stored.sha256 === 'string'
+            ? stored.sha256 === sha256
+            : Number(stored.bytes) === file.length);
+        if (stored && sameBytes) {
+          // A retry of a request that already landed (lost response, reload).
+          const segment = await trx
+            .selectFrom('meetingSegments')
+            .select('id')
+            .where('meetingId', '=', meetingId)
+            .where('source', '=', meta.source as any)
+            .where('sequence', '=', meta.sequence)
+            .executeTakeFirst();
+          return {
+            segmentId: segment?.id ?? null,
+            text: '',
+            ...this.chunkReceipt(previous, meta, stored, { duplicate: true, replaced: false }),
+          };
+        }
         if (!['recording', 'created'].includes(meeting.status)) {
           throw new BadRequestException('Meeting is not recording');
+        }
+        if (stored && !meta.replace) {
+          throw new ConflictException({
+            statusCode: 409,
+            code: 'chunk_conflict',
+            message: `Le morceau ${meta.sequence} (${meta.source}) est déjà enregistré avec un autre contenu. Reprenez la numérotation à partir de la capture enregistrée.`,
+            source: meta.source,
+            sequence: meta.sequence,
+            storedSha256: stored.sha256 ?? null,
+          });
+        }
+        const others = previous.filter((chunk) => chunk !== stored);
+        const sameSource = others.filter((chunk) => chunk.source === meta.source);
+        if (sameSource.length >= limits.maxChunksPerSource) {
+          throw new PayloadTooLargeException({
+            statusCode: 413,
+            code: 'capture_chunk_limit',
+            message: `Cet enregistrement compte déjà ${limits.maxChunksPerSource} morceaux pour cette source : envoyez des morceaux plus longs ou arrêtez l’enregistrement.`,
+          });
+        }
+        if (meta.startMs + meta.durationMs > limits.maxDurationMs + CAPTURE_LIMIT_GRACE_MS) {
+          throw new UnprocessableEntityException({
+            statusCode: 422,
+            code: 'capture_duration_limit',
+            message: `La durée maximale d’un enregistrement (${formatCaptureDuration(limits.maxDurationMs)}) est atteinte : arrêtez l’enregistrement pour lancer le traitement.`,
+            maxDurationMs: limits.maxDurationMs,
+          });
+        }
+        const storedBytes = others.reduce((n, c) => n + Number(c.bytes ?? 0), 0);
+        if (storedBytes + file.length > limits.maxBytes) {
+          throw new PayloadTooLargeException({
+            statusCode: 413,
+            code: 'capture_size_limit',
+            message: `La taille maximale de l’audio d’une réunion (${Math.round(limits.maxBytes / (1024 * 1024))} Mo) est atteinte : arrêtez l’enregistrement pour lancer le traitement.`,
+            maxBytes: limits.maxBytes,
+          });
         }
         const prefix = meeting.audioStoragePrefix || `meetings/${meetingId}`;
         const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.webm`;
         await this.storage.upload(chunkPath, file);
         uploadedPath = chunkPath;
-        const manifest = this.parseAudioManifest(meeting.audioManifest);
-        const previous = (manifest.chunks || []) as Array<Record<string, any>>;
-        replacedPath =
-          previous.find(
-            (chunk) =>
-              chunk.source === meta.source && chunk.sequence === meta.sequence,
-          )?.path ?? null;
-        const chunks = previous.filter(
-          (chunk) =>
-            !(chunk.source === meta.source && chunk.sequence === meta.sequence),
-        );
-        chunks.push({
-          ...meta,
+        replacedPath = stored?.path ?? null;
+        const entry = {
+          source: meta.source,
+          sequence: meta.sequence,
+          startMs: meta.startMs,
+          durationMs: meta.durationMs,
           path: chunkPath,
           bytes: file.length,
           mime: meta.mime || 'audio/webm',
-        });
+          sha256,
+          ...(continuation ? { continuation: true } : {}),
+        };
+        const chunks = [...others, entry];
         await trx
           .updateTable('meetings')
           .set({
@@ -401,7 +516,14 @@ export class MeetingService {
           })
           .returning('id')
           .executeTakeFirstOrThrow();
-        return { segmentId: segment.id, text: '' };
+        return {
+          segmentId: segment.id,
+          text: '',
+          ...this.chunkReceipt(chunks, meta, entry, {
+            duplicate: false,
+            replaced: !!stored,
+          }),
+        };
       });
       if (replacedPath) await this.storage.delete(replacedPath).catch(() => {});
       return result;
@@ -411,15 +533,92 @@ export class MeetingService {
     }
   }
 
+  /** What the chunk response tells the recorder (additive fields). */
+  private chunkReceipt(
+    chunks: Array<Record<string, any>>,
+    meta: { source: string; sequence: number },
+    entry: Record<string, any>,
+    flags: { duplicate: boolean; replaced: boolean },
+  ) {
+    const state = captureState(chunks as ManifestChunk[]);
+    const source = state.sources[meta.source as CaptureSource];
+    return {
+      source: meta.source,
+      sequence: meta.sequence,
+      bytes: Number(entry.bytes ?? 0),
+      sha256: typeof entry.sha256 === 'string' ? entry.sha256 : null,
+      continuation: entry.continuation === true,
+      duplicate: flags.duplicate,
+      replaced: flags.replaced,
+      nextSequence: source?.nextSequence ?? meta.sequence + 1,
+      missingSequences: source?.missingSequences ?? [],
+      totalBytes: state.totalBytes,
+      durationMs: state.durationMs,
+    };
+  }
+
+  // ──────────── capture state (resume after a reload) ────────────
+
+  /**
+   * Which chunks the Hub holds for a live recording, per source, with the
+   * next sequence to send and the limits. A recorder that reloads reads it
+   * before sending again (MEET_CONTRACT.md).
+   */
+  async getCaptureState(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    const manifest = this.parseAudioManifest(meeting.audioManifest);
+    const chunks = ((manifest.chunks || []) as ManifestChunk[]).filter(
+      (c) => c && typeof c.path === 'string',
+    );
+    const state = captureState(chunks);
+    return {
+      meetingId: meeting.id,
+      status: meeting.status,
+      captureKind: meeting.captureKind,
+      recording: ['recording', 'created'].includes(meeting.status),
+      canEdit: canEditMeeting(meeting, actor),
+      startedAt: meeting.startedAt,
+      limits: captureLimits(),
+      ...state,
+    };
+  }
+
   // ──────────── stop ────────────
 
-  async stop(actor: MeetingActor, meetingId: string) {
+  /**
+   * End a live recording and start processing. Refused (409
+   * `capture_incomplete`, nothing changes) when sequences are missing —
+   * inside what was stored, or after it per `expectedLastSequence` — so
+   * the recorder can re-send them; `allowGaps` stops anyway and processes
+   * what is there.
+   */
+  async stop(
+    actor: MeetingActor,
+    meetingId: string,
+    opts: {
+      allowGaps?: boolean;
+      expectedLastSequence?: Partial<Record<string, number>>;
+    } = {},
+  ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
 
     if (!['recording', 'created'].includes(meeting.status)) {
       throw new BadRequestException(
         `Meeting is not recording (status: ${meeting.status})`,
       );
+    }
+
+    const chunks = (this.parseAudioManifest(meeting.audioManifest).chunks ||
+      []) as ManifestChunk[];
+    const gaps = captureGaps(chunks, opts.expectedLastSequence);
+    if (Object.keys(gaps).length > 0 && !opts.allowGaps) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'capture_incomplete',
+        message:
+          'Des morceaux de l’enregistrement ne sont pas encore arrivés. Renvoyez-les avant d’arrêter, ou arrêtez quand même en acceptant de perdre ces passages.',
+        missing: gaps,
+      });
     }
 
     // Compare-and-set: a double click or a retried request stops once.
@@ -437,7 +636,21 @@ export class MeetingService {
       return this.withAccess(await this.getMeetingOrThrow(meetingId), actor);
     }
 
-    await this.logTransition(meetingId, 'recording', 'finalizing', undefined, actor.id);
+    const plan = planCapture(chunks);
+    await this.logTransition(
+      meetingId,
+      'recording',
+      'finalizing',
+      chunks.length
+        ? {
+            chunks: chunks.length,
+            takes: plan.takes.length,
+            ...(Object.keys(gaps).length ? { missing: gaps, gapsAccepted: true } : {}),
+            ...(plan.orphans.length ? { unreadableChunks: plan.orphans.length } : {}),
+          }
+        : undefined,
+      actor.id,
+    );
 
     // Kick the intelligence pipeline automatically so live recordings
     // don't dead-end in "finalizing".
@@ -458,6 +671,17 @@ export class MeetingService {
       q?: string;
       /** Only the caller's own meetings (the Home "À traiter" list). */
       mine?: boolean;
+      /** Meeting type(s), comma-separated. */
+      type?: string;
+      /** Status(es), comma-separated. */
+      status?: string;
+      /** startedAt range (ISO date or date-time, both inclusive). */
+      from?: string;
+      to?: string;
+      /** Creator of the meeting. */
+      ownerId?: string;
+      /** Archived meetings: hidden by default. */
+      archived?: 'exclude' | 'include' | 'only';
     },
     actor?: MeetingActor,
   ) {
@@ -467,15 +691,44 @@ export class MeetingService {
     // Unified search: a word of the title or of the transcript. "%" and
     // "_" in the query are literal, not wildcards.
     const pattern = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+    const types = splitList(opts.type);
+    const statusFilter = parseStatuses(opts.status);
+    if (statusFilter.ok === false) {
+      throw new BadRequestException(`Statut inconnu : « ${statusFilter.unknown} ».`);
+    }
+    const statuses = statusFilter.statuses;
+    const range = dateRange(opts.from, opts.to);
+    if (range.invalid) {
+      throw new BadRequestException('Période invalide : « from » doit précéder « to ».');
+    }
+    if (opts.ownerId !== undefined && !isMeetingId(opts.ownerId)) {
+      throw new BadRequestException('Identifiant de personne invalide.');
+    }
+    // Asking for the "archived" status shows archived meetings.
+    const archived =
+      opts.archived ?? (statuses.includes('archived') ? 'include' : 'exclude');
     const base = () => {
       let query = this.db
         .selectFrom('meetings')
         .where('workspaceId', '=', workspaceId)
         .where('deletedAt', 'is', null);
       // Every active member of the company reads every meeting (LTC-03);
-      // "mine" narrows the list to the caller's own meetings (Home).
+      // "mine" narrows the list to the caller's own meetings (Home). The
+      // filters below only narrow it further, never widen it.
       if (opts.mine && actor?.id) {
         query = query.where('userId', '=', actor.id);
+      }
+      if (opts.ownerId) query = query.where('userId', '=', opts.ownerId);
+      if (types.length) query = query.where('meetingType', 'in', types);
+      if (statuses.length) query = query.where('status', 'in', statuses as any);
+      if (range.from) query = query.where('startedAt', '>=', range.from);
+      if (range.toExclusive) query = query.where('startedAt', '<', range.toExclusive);
+      if (archived === 'exclude') {
+        query = query.where('archivedAt', 'is', null).where('status', '!=', 'archived');
+      } else if (archived === 'only') {
+        query = query.where((eb) =>
+          eb.or([eb('archivedAt', 'is not', null), eb('status', '=', 'archived')]),
+        );
       }
       if (pattern) {
         query = query.where((eb) =>
@@ -588,6 +841,117 @@ export class MeetingService {
     return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
   }
 
+  // ──────────── archive (MEET_CONTRACT.md §3) ────────────
+
+  /**
+   * Put a meeting aside: status "archived" and archived_at, nothing else.
+   * Not a deletion — every record, file and page stays; the list hides it
+   * by default and unarchive restores the status it had. Same edit rule as
+   * rename. Never while recording or processing. Status and timeline event
+   * are written directly: an archive is not news, so no notification.
+   */
+  async archive(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (meeting.status === 'archived') {
+      return this.toCamelMeeting(meeting, actor);
+    }
+    if (
+      ['recording', 'created', 'stopping'].includes(meeting.status) ||
+      PROCESSING_STATUSES.has(meeting.status) ||
+      mayBeLive(await this.pipelineJobState(meetingId))
+    ) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'meeting_busy',
+        message:
+          'Cette réunion est en cours d’enregistrement ou de traitement : archivez-la quand le traitement sera terminé.',
+      });
+    }
+    await this.db.transaction().execute(async (trx) => {
+      const updated = await trx
+        .updateTable('meetings')
+        .set({ status: 'archived', archivedAt: new Date() })
+        .where('id', '=', meetingId)
+        .where('status', '=', meeting.status)
+        .where('deletedAt', 'is', null)
+        .executeTakeFirst();
+      if (Number(updated.numUpdatedRows ?? 0) === 0) return;
+      await trx
+        .insertInto('meetingProcessingEvents')
+        .values({
+          meetingId,
+          event: 'transition',
+          fromStatus: meeting.status,
+          toStatus: 'archived',
+          actorId: actor.id,
+          detail: jsonbDetail({ archived: true }),
+        })
+        .execute();
+    });
+    return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  /** Back to the status the meeting had when it was archived. */
+  async unarchive(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (meeting.status !== 'archived') {
+      return this.toCamelMeeting(meeting, actor);
+    }
+    const archivedFrom = await this.db
+      .selectFrom('meetingProcessingEvents')
+      .select('fromStatus')
+      .where('meetingId', '=', meetingId)
+      .where('event', '=', 'transition')
+      .where('toStatus', '=', 'archived')
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    const previous = archivedFrom?.fromStatus ?? null;
+    // A status that would restart work (or an unknown one) comes back as
+    // "completed": unarchiving never resumes a recording or a run.
+    const restored =
+      previous &&
+      previous !== 'archived' &&
+      !PROCESSING_STATUSES.has(previous) &&
+      !['recording', 'created', 'stopping', 'deleted', 'deletion_pending'].includes(previous)
+        ? previous
+        : 'completed';
+    await this.db.transaction().execute(async (trx) => {
+      const updated = await trx
+        .updateTable('meetings')
+        .set({ status: restored as any, archivedAt: null })
+        .where('id', '=', meetingId)
+        .where('status', '=', 'archived')
+        .where('deletedAt', 'is', null)
+        .executeTakeFirst();
+      if (Number(updated.numUpdatedRows ?? 0) === 0) return;
+      await trx
+        .insertInto('meetingProcessingEvents')
+        .values({
+          meetingId,
+          event: 'transition',
+          fromStatus: 'archived',
+          toStatus: restored,
+          actorId: actor.id,
+          detail: jsonbDetail({ unarchived: true }),
+        })
+        .execute();
+    });
+    return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  /** Changes that would move an archived meeting's status wait for unarchive. */
+  private assertNotArchived(meeting: { status: string }) {
+    if (meeting.status === 'archived') {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'meeting_archived',
+        message: 'Cette réunion est archivée : désarchivez-la avant de la traiter ou de la publier.',
+      });
+    }
+  }
+
   // ──────────── markers ("Marquer un moment") ────────────
 
   /** Replace the moments marked during the recording. Stored in the
@@ -629,6 +993,147 @@ export class MeetingService {
       .executeTakeFirst();
 
     return this.withAccess(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  // ──────────── saved AI insights (MEET_CONTRACT.md §2) ────────────
+
+  /** Saved analyses and Q&A of a meeting, newest first. Anyone who reads it. */
+  async listInsights(actor: MeetingActor, meetingId: string, kind?: string) {
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    let query = this.db
+      .selectFrom('meetingInsights as i')
+      .leftJoin('users as u', 'u.id', 'i.createdBy')
+      .select([
+        'i.id',
+        'i.kind',
+        'i.question',
+        'i.content',
+        'i.transcriptVersion',
+        'i.createdAt',
+        'i.createdBy',
+        'u.name as authorName',
+        'u.avatarUrl as authorAvatarUrl',
+      ])
+      .where('i.meetingId', '=', meetingId)
+      .where('i.workspaceId', '=', meeting.workspaceId);
+    if (kind !== undefined) {
+      if (!isInsightKind(kind)) {
+        throw new BadRequestException('Type d’élément inconnu : « communication-analysis » ou « qa » attendu.');
+      }
+      query = query.where('i.kind', '=', kind);
+    }
+    const rows = await query
+      .orderBy('i.createdAt', 'desc')
+      .orderBy('i.id', 'desc')
+      .limit(MAX_INSIGHTS_PER_MEETING)
+      .execute();
+    const canEdit = canEditMeeting(meeting, actor);
+    return { items: rows.map((r) => this.toInsight(r, canEdit)) };
+  }
+
+  /** Save an insight: the same edit rule as every other meeting output. */
+  async saveInsight(
+    actor: MeetingActor,
+    meetingId: string,
+    input: { kind?: unknown; question?: unknown; content?: unknown; transcriptVersion?: unknown },
+  ) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    const insight = normalizeInsight(input);
+    if (insight.ok === false) throw new BadRequestException(insight.error);
+    const id = await this.db.transaction().execute(async (trx) => {
+      // The meeting's row lock keeps the per-meeting cap exact.
+      await trx
+        .selectFrom('meetings')
+        .select('id')
+        .where('id', '=', meetingId)
+        .forUpdate()
+        .executeTakeFirst();
+      const existing = await trx
+        .selectFrom('meetingInsights')
+        .select(sql<string>`count(*)::int`.as('n'))
+        .where('meetingId', '=', meetingId)
+        .executeTakeFirst();
+      if (Number(existing?.n ?? 0) >= MAX_INSIGHTS_PER_MEETING) {
+        throw new ConflictException({
+          statusCode: 409,
+          code: 'insight_limit',
+          message: `Cette réunion compte déjà ${MAX_INSIGHTS_PER_MEETING} éléments enregistrés : supprimez-en avant d’en ajouter.`,
+        });
+      }
+      const row = await trx
+        .insertInto('meetingInsights')
+        .values({
+          meetingId,
+          workspaceId: meeting.workspaceId,
+          kind: insight.kind,
+          question: insight.question,
+          content: insight.content,
+          transcriptVersion: insight.transcriptVersion,
+          createdBy: actor.id,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return row.id;
+    });
+    const saved = await this.db
+      .selectFrom('meetingInsights as i')
+      .leftJoin('users as u', 'u.id', 'i.createdBy')
+      .select([
+        'i.id',
+        'i.kind',
+        'i.question',
+        'i.content',
+        'i.transcriptVersion',
+        'i.createdAt',
+        'i.createdBy',
+        'u.name as authorName',
+        'u.avatarUrl as authorAvatarUrl',
+      ])
+      .where('i.id', '=', id)
+      .executeTakeFirstOrThrow();
+    return this.toInsight(saved, true);
+  }
+
+  /** Remove one saved insight (not the meeting): the edit rule again. */
+  async deleteInsight(actor: MeetingActor, meetingId: string, insightId: string) {
+    await this.getEditableMeeting(actor, meetingId);
+    if (!isMeetingId(insightId)) throw new NotFoundException('Élément introuvable.');
+    const deleted = await this.db
+      .deleteFrom('meetingInsights')
+      .where('id', '=', insightId)
+      .where('meetingId', '=', meetingId)
+      .executeTakeFirst();
+    if (Number(deleted?.numDeletedRows ?? 0) === 0) {
+      throw new NotFoundException('Élément introuvable.');
+    }
+  }
+
+  private toInsight(
+    r: {
+      id: string;
+      kind: string;
+      question: string | null;
+      content: string;
+      transcriptVersion: number | null;
+      createdAt: Date | string;
+      createdBy: string | null;
+      authorName: string | null;
+      authorAvatarUrl: string | null;
+    },
+    canDelete: boolean,
+  ) {
+    return {
+      id: r.id,
+      kind: r.kind,
+      question: r.question,
+      content: r.content,
+      transcriptVersion: r.transcriptVersion,
+      createdAt: r.createdAt,
+      author: r.createdBy
+        ? { id: r.createdBy, name: r.authorName ?? null, avatarUrl: r.authorAvatarUrl ?? null }
+        : null,
+      canDelete,
+    };
   }
 
   // ──────────── upload ────────────
@@ -723,6 +1228,7 @@ export class MeetingService {
     },
   ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertNotArchived(meeting);
 
     if (!opts.force && !PROCESSABLE_STATUSES.has(meeting.status)) {
       throw new BadRequestException(
@@ -923,8 +1429,104 @@ export class MeetingService {
     meetingId: string,
     version: number | string = 'latest',
   ) {
-    await this.getReadableMeeting(actor, meetingId);
-    return this.readTranscript(meetingId, version);
+    const meeting = await this.getReadableMeeting(actor, meetingId);
+    const transcript = await this.readTranscript(meetingId, version);
+    // Additive: who the linked speakers are (id, name, avatar only), for
+    // members of this meeting's company still active.
+    const linked = Object.values(transcript.speakers as Record<string, { userId?: unknown }>)
+      .map((s) => s?.userId)
+      .filter((id): id is string => typeof id === 'string' && isMeetingId(id));
+    const members = linked.length
+      ? await this.db
+          .selectFrom('users')
+          .select(['id', 'name', 'avatarUrl'])
+          .where('id', 'in', [...new Set(linked)])
+          .where('workspaceId', '=', meeting.workspaceId)
+          .where('deletedAt', 'is', null)
+          .execute()
+      : [];
+    return {
+      ...transcript,
+      linkedUsers: Object.fromEntries(
+        members.map((m) => [m.id, { id: m.id, name: m.name ?? null, avatarUrl: m.avatarUrl ?? null }]),
+      ),
+    };
+  }
+
+  // ──────────── speakers ↔ members (MEET_CONTRACT.md §6) ────────────
+
+  /**
+   * The members a speaker of this meeting may be linked to: active members
+   * of the meeting's company, id / name / avatar only. Needs the edit right
+   * (only editors link speakers).
+   */
+  async listLinkableMembers(
+    actor: MeetingActor,
+    meetingId: string,
+    opts: { q?: string; limit?: number } = {},
+  ) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    const limit = Math.min(Math.max(Math.floor(Number(opts.limit) || 20), 1), 50);
+    const q = (opts.q ?? '').trim().slice(0, 100);
+    let query = this.db
+      .selectFrom('users')
+      .select(['id', 'name', 'avatarUrl'])
+      .where('workspaceId', '=', meeting.workspaceId)
+      .where('deletedAt', 'is', null)
+      .where('deactivatedAt', 'is', null);
+    if (q) {
+      const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      // Matches the name or the e-mail; the e-mail is never returned.
+      query = query.where((eb) => eb.or([eb('name', 'ilike', pattern), eb('email', 'ilike', pattern)]));
+    }
+    const rows = await query
+      .orderBy(sql`lower(coalesce(name, ''))`)
+      .orderBy('id')
+      .limit(limit + 1)
+      .execute();
+    return {
+      items: rows.slice(0, limit).map((u) => ({ id: u.id, name: u.name ?? null, avatarUrl: u.avatarUrl ?? null })),
+      hasMore: rows.length > limit,
+    };
+  }
+
+  /**
+   * The members named by a speaker review's userLinks, by id. Refuses the
+   * whole review (nothing applied) when one is not an active member of the
+   * meeting's company: a speaker is never linked to a stranger.
+   */
+  private async linkableMembersById(workspaceId: string, values: unknown[]) {
+    const ids = [
+      ...new Set(
+        values
+          .filter((v) => v !== null && v !== undefined && v !== '')
+          .map((v) => (typeof v === 'string' ? v.trim() : v)),
+      ),
+    ];
+    const malformed = ids.filter((id) => typeof id !== 'string' || !isMeetingId(id));
+    const wellFormed = ids.filter((id): id is string => typeof id === 'string' && isMeetingId(id));
+    const rows = wellFormed.length
+      ? await this.db
+          .selectFrom('users')
+          .select(['id', 'name'])
+          .where('id', 'in', wellFormed)
+          .where('workspaceId', '=', workspaceId)
+          .where('deletedAt', 'is', null)
+          .where('deactivatedAt', 'is', null)
+          .execute()
+      : [];
+    const found = new Map(rows.map((r) => [r.id, r]));
+    const invalid = [...malformed.map(String), ...wellFormed.filter((id) => !found.has(id))];
+    if (invalid.length) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'invalid_user_links',
+        message:
+          'Un intervenant ne peut être associé qu’à un membre actif de l’entreprise. Choisissez la personne dans la liste des membres.',
+        invalid,
+      });
+    }
+    return found;
   }
 
   /** A transcript version of a meeting the caller already checked. */
@@ -980,12 +1582,13 @@ export class MeetingService {
       baseVersion: number;
       renames?: Record<string, string>;
       merges?: [string, string][];
-      userLinks?: Record<string, string>;
+      userLinks?: Record<string, string | null>;
       reassign?: Record<string, string>;
       confirm?: boolean;
     },
   ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (req.confirm) this.assertNotArchived(meeting);
     if (req.confirm && PROCESSING_STATUSES.has(meeting.status) &&
         mayBeLive(await this.pipelineJobState(meetingId))) {
       throw new ConflictException(
@@ -1071,11 +1674,21 @@ export class MeetingService {
       if (!inUse.has(label)) delete speakers[label];
     }
 
-    // Apply user links
+    // Apply user links: only active members of the meeting's company may
+    // be named (validated before anything is applied); null / "" unlinks.
+    // A linked speaker with no name yet takes the member's name.
+    let namedByLink = 0;
     if (req.userLinks) {
+      const members = await this.linkableMembersById(meeting.workspaceId, Object.values(req.userLinks));
       for (const [label, userId] of Object.entries(req.userLinks)) {
-        if (speakers[label]) {
-          speakers[label].userId = userId;
+        if (!speakers[label]) continue;
+        const id = typeof userId === 'string' && userId.trim() ? userId.trim() : null;
+        speakers[label].userId = id;
+        const name = id ? members.get(id)?.name?.trim() : null;
+        if (name && !speakers[label].displayName) {
+          speakers[label].displayName = name.slice(0, MAX_SPEAKER_NAME_CHARS);
+          speakers[label].confidence = 1;
+          namedByLink += 1;
         }
       }
     }
@@ -1109,6 +1722,7 @@ export class MeetingService {
 
       const edited =
         Object.keys(req.renames ?? {}).length > 0 ||
+        namedByLink > 0 ||
         (req.merges ?? []).length > 0 ||
         reassigned.length > 0 ||
         transcript.status === 'attributed';
@@ -1204,6 +1818,7 @@ export class MeetingService {
   ) {
     const actor = this.actorOf(user, workspaceId);
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertNotArchived(meeting);
     // The meeting's own permission is not enough: filing in Hub also needs
     // the right to create pages in that space.
     await this.assertCanPublishIn(user, workspaceId, opts.spaceId);
@@ -1429,6 +2044,7 @@ export class MeetingService {
       this.actorOf(user, workspaceId),
       meetingId,
     );
+    this.assertNotArchived(meeting);
     if (PROCESSING_STATUSES.has(meeting.status)) {
       throw new BadRequestException(
         'Le traitement de cette réunion n’est pas terminé. Publiez-la quand l’analyse sera prête.',
@@ -1712,7 +2328,14 @@ export class MeetingService {
   // ──────────── approve safe proposals ────────────
 
   async approveSafeProposals(actor: MeetingActor, meetingId: string) {
-    await this.getEditableMeeting(actor, meetingId);
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    // The space may have been mapped (or the meeting published) since the
+    // proposals were generated: a project found now satisfies projectId.
+    let mappedProject: string | null | undefined;
+    const projectNow = async () =>
+      mappedProject !== undefined
+        ? mappedProject
+        : (mappedProject = (await this.resolveMeetingProject(meeting)).projectId);
 
     const safeProposals = await this.db
       .selectFrom('meetingActionProposals')
@@ -1731,11 +2354,20 @@ export class MeetingService {
       // Validate before approving
       const validation =
         this.parseJson<Record<string, unknown>>(p.validation) || {};
-      const missingFields = (validation.missingFields as string[]) || [];
+      const payload = {
+        ...(this.parseJson<Record<string, unknown>>(p.payload) ?? {}),
+        ...(this.parseJson<Record<string, unknown>>(p.editedPayload) ?? {}),
+      };
+      let missingFields = ((validation.missingFields as string[]) || []).filter(
+        (f) => !(f === 'projectId' && String(payload.projectId ?? '').trim()),
+      );
+      if (missingFields.includes('projectId') && (await projectNow())) {
+        missingFields = missingFields.filter((f) => f !== 'projectId');
+      }
       if (missingFields.length > 0) {
         skipped.push({
           id: p.id,
-          reason: `Missing required fields: ${missingFields.join(', ')}`,
+          reason: `Champs requis manquants : ${missingFields.join(', ')}`,
         });
         continue;
       }
@@ -1905,10 +2537,14 @@ export class MeetingService {
         );
         return;
       }
-      const projectId = String(payload.projectId ?? '').trim();
+      // A proposal made before the meeting had a mapped space (e.g. it was
+      // published afterwards) takes the space's project now.
+      const projectId =
+        String(payload.projectId ?? '').trim() ||
+        ((await this.resolveMeetingProject(meeting)).projectId ?? '');
       if (!projectId) {
         await fail(
-          'A ConqrPlane project is required — set projectId and retry.',
+          'Aucun projet ConqrPlan n’est indiqué pour cette tâche : choisissez le projet (projectId), puis relancez.',
         );
         return;
       }
@@ -2002,7 +2638,9 @@ export class MeetingService {
 
     if (target === 'original') {
       filePath = manifest.playbackPath || manifest.originalPath || null;
-      mime = manifest.playbackPath ? 'audio/mp4' : manifest.mime || null;
+      mime = manifest.playbackPath
+        ? manifest.playbackMime || 'audio/mp4'
+        : manifest.mime || null;
       if (!filePath && manifest.chunks?.length) {
         if (manifest.chunks.length > 1) {
           throw new NotFoundException('Combined recording is being prepared');
@@ -2678,7 +3316,7 @@ export class MeetingService {
           );
         }
 
-        if (meeting.captureKind === 'live' && audio.length > 1) {
+        if (this.needsPlayback(meeting, audio)) {
           await this.prepareCombinedPlayback(meeting, audio);
         }
 
@@ -2939,22 +3577,36 @@ export class MeetingService {
     },
     audio: AudioSource[],
   ) {
-    const playback = await mixMeetingPlayback(
-      await Promise.all(
-        audio.map(async (source) => ({
-          audio: await this.storage.read(source.path),
-          startMs: source.startMs,
-        })),
-      ),
-    );
+    // One take made of several chunks: its appended bytes already are a
+    // complete recording, played as recorded (no re-encoding). Several
+    // takes or sources are mixed on the shared timeline.
+    const single = audio.length === 1 && (audio[0].parts?.length ?? 0) > 1;
+    const playback = single
+      ? await this.readAudio(audio[0])
+      : await mixMeetingPlayback(
+          await Promise.all(
+            audio.map(async (source) => ({
+              audio: await this.readAudio(source),
+              startMs: source.startMs,
+            })),
+          ),
+        );
+    const playbackMime = single
+      ? (audio[0].mime || 'audio/webm').split(';')[0].trim()
+      : 'audio/mp4';
+    const extension = single
+      ? ({ 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' } as Record<string, string>)[
+          playbackMime
+        ] ?? 'webm'
+      : 'm4a';
     // Each run writes its own key, so a late or superseded run can never
     // overwrite the bytes the current manifest points to. Only the run
     // still in charge (fenced write) moves the pointer.
     const run = this.runScope.getStore();
     const prefix = meeting.audioStoragePrefix || `meetings/${meeting.id}`;
     const playbackPath = run
-      ? `${prefix}/playback-${run.runId}.m4a`
-      : `${prefix}/playback.m4a`;
+      ? `${prefix}/playback-${run.runId}.${extension}`
+      : `${prefix}/playback.${extension}`;
     await this.storage.upload(playbackPath, playback);
     try {
       await this.write(async (trx) => {
@@ -2970,7 +3622,12 @@ export class MeetingService {
           .set({
             // Postgres.js serializes inferred jsonb parameters. Bind text explicitly
             // so a JSON object cannot become a double-encoded string literal.
-            audioManifest: sql`${JSON.stringify({ ...this.parseAudioManifest(current?.audioManifest), playbackPath })}::text::jsonb`,
+            audioManifest: sql`${JSON.stringify({
+              ...this.parseAudioManifest(current?.audioManifest),
+              playbackPath,
+              // Absent (dropped by JSON) for mp4, like older manifests.
+              playbackMime: playbackMime !== 'audio/mp4' ? playbackMime : undefined,
+            })}::text::jsonb`,
           })
           .where('id', '=', meeting.id)
           .execute();
@@ -3015,7 +3672,7 @@ export class MeetingService {
       let meanDb = -Infinity;
       let provenSilent = true;
       for (const file of files) {
-        const signal = await this.inspectSignal(await this.storage.read(file.path));
+        const signal = await this.inspectSignal(await this.readAudio(file));
         if (!signal || !isDigitalSilence(signal)) {
           provenSilent = false;
           break;
@@ -3068,17 +3725,37 @@ export class MeetingService {
       ];
     }
 
-    const chunks = (manifest.chunks as Array<Record<string, any>>) || [];
-    return chunks
-      .sort((a, b) => Number(a.sequence ?? 0) - Number(b.sequence ?? 0))
-      .map((c) => ({
-        path: c.path as string,
-        mime: c.mime || 'audio/webm',
-        source: c.source || 'mic',
-        sequence: Number(c.sequence ?? 0),
-        startMs: Number(c.startMs ?? 0),
-        durationMs: Number(c.durationMs ?? 0),
-      }));
+    // Live capture: one source per take. A standalone chunk is its own
+    // take (every earlier recording); continuation chunks are appended to
+    // the chunk before them. Orphan continuations (no header) are skipped.
+    const chunks = (manifest.chunks as ManifestChunk[]) || [];
+    return planCapture(chunks).takes.map((take) => ({
+      path: take.path,
+      ...(take.parts ? { parts: take.parts } : {}),
+      mime: take.mime,
+      source: take.source,
+      sequence: take.sequence,
+      startMs: take.startMs,
+      durationMs: take.durationMs,
+    }));
+  }
+
+  /** The bytes of one source: its file, or its chunks appended in order. */
+  private async readAudio(source: Pick<AudioSource, 'path' | 'parts'>): Promise<Buffer> {
+    if (!source.parts || source.parts.length <= 1) {
+      return this.storage.read(source.path);
+    }
+    const buffers: Buffer[] = [];
+    for (const part of source.parts) buffers.push(await this.storage.read(part));
+    return Buffer.concat(buffers);
+  }
+
+  /** A live recording needs a playback file unless one chunk is the whole audio. */
+  private needsPlayback(meeting: { captureKind: string | null }, audio: AudioSource[]) {
+    return (
+      meeting.captureKind === 'live' &&
+      (audio.length > 1 || audio.some((a) => (a.parts?.length ?? 0) > 1))
+    );
   }
 
   /** Transcribe every audio source and persist transcript version 1. */
@@ -3089,14 +3766,13 @@ export class MeetingService {
     const speakers: Record<string, TranscriptSpeaker> = {};
     const multiChannel =
       new Set(sources.map((s) => s.source ?? 'mic')).size > 1;
-    const requestedLanguage = this.parseJson<{ language?: string }>(
-      meeting.languageConfig,
-    )?.language;
-    let language: string | null =
-      typeof requestedLanguage === 'string' &&
-      /^[a-z]{2}(?:-[A-Z]{2})?$/.test(requestedLanguage)
-        ? requestedLanguage
-        : null;
+    // The meeting's own language wins over detection (and over every
+    // account / company default). It cannot be sent to the provider with
+    // diarization (see meeting-stt-language.util.ts); "ar_en" and other
+    // code-switching choices keep the detected language.
+    const stt = sttLanguage(this.parseJson(meeting.languageConfig));
+    let language: string | null = stt.mode === 'single' ? stt.hint : null;
+    let detectedLanguage: string | null = null;
 
     // One acoustic request per channel keeps speaker ids consistent across
     // multiple uploaded files. Assemble their measured offsets before ASR.
@@ -3122,16 +3798,17 @@ export class MeetingService {
             };
       const buffer =
         group.length === 1
-          ? await this.storage.read(src.path)
+          ? await this.readAudio(src)
           : await mixMeetingPlayback(
               await Promise.all(
                 group.map(async (input) => ({
-                  audio: await this.storage.read(input.path),
+                  audio: await this.readAudio(input),
                   startMs: input.startMs ?? 0,
                 })),
               ),
             );
       const result = await this.transcribeSource(meeting, buffer, src.mime);
+      detectedLanguage ??= result.language;
       language ??= result.language;
 
       const built = buildSourceSegments(
@@ -3207,6 +3884,15 @@ export class MeetingService {
           segments: JSON.stringify(segments),
           speakers: JSON.stringify(speakers),
           isProvisional: true,
+          // Which language was asked for and what reached the provider.
+          processingConfig: sql`${JSON.stringify({
+            language: {
+              requested: stt.requested,
+              mode: stt.mode,
+              providerHint: stt.sentToProvider ? stt.hint : null,
+              detected: detectedLanguage,
+            },
+          })}::text::jsonb`,
         })
         .executeTakeFirst();
 
@@ -3755,7 +4441,8 @@ export class MeetingService {
     return {
       language: resolveReportLanguage([
         config.reportLanguage,
-        config.language,
+        // "ar_en" (code-switching) names no single report language.
+        reportLanguageCandidate(config),
         tr?.language,
         creatorDefaults.defaultLanguage,
         meet.defaultLanguage,
@@ -4253,7 +4940,13 @@ export class MeetingService {
    * the idempotency key never lets a retry insert a duplicate.
    */
   private async generateProposals(
-    meeting: { id: string; workspaceId: string },
+    meeting: {
+      id: string;
+      workspaceId: string;
+      userId: string;
+      spaceId?: string | null;
+      settings?: unknown;
+    },
     text: string,
     transcriptVersion: number,
     language: ReportLanguage = 'fr',
@@ -4282,12 +4975,32 @@ export class MeetingService {
           : [];
       if (!Array.isArray(items)) return;
 
-      const rows = items.slice(0, 12).flatMap((item, index) => {
+      const drafts = items.slice(0, 12).flatMap((item, index) => {
         const it = (item ?? {}) as Record<string, unknown>;
         const title = String(it.title ?? '')
           .trim()
           .slice(0, 200);
-        if (!title) return [];
+        return title ? [{ it, index, title }] : [];
+      });
+      if (drafts.length === 0) {
+        await this.write((trx) =>
+          trx
+            .deleteFrom('meetingActionProposals')
+            .where('meetingId', '=', meetingId)
+            .where('status', 'in', ['proposed', 'draft'])
+            .execute(),
+        );
+        return;
+      }
+      // Context shared by every proposal: the transcript segments the
+      // quotes come from, and the ConqrPlan project of the meeting's space.
+      const { segments } = await this.latestTranscriptText(meetingId);
+      const project = await this.resolveMeetingProject(meeting);
+      const duplicates = await Promise.all(
+        drafts.map((d) => this.duplicateCheck(meeting, d.title, project.projectId)),
+      );
+
+      const rows = drafts.map(({ it, index, title }, i) => {
         const owner = typeof it.owner === 'string' ? it.owner.trim() : '';
         const dueDate = typeof it.dueDate === 'string' ? it.dueDate.trim() : '';
         const quote =
@@ -4296,42 +5009,53 @@ export class MeetingService {
           typeof it.confidence === 'number' && Number.isFinite(it.confidence)
             ? Math.max(0, Math.min(1, it.confidence))
             : 0.5;
+        const duplicate = duplicates[i];
         const warnings: string[] = [];
         if (!owner) warnings.push(labels.noOwner);
         if (confidence < 0.6) warnings.push(labels.lowConfidence);
-        return [
-          {
-            meetingId,
-            workspaceId: meeting.workspaceId,
-            kind: 'work_item',
-            targetApp: 'conqrplane',
+        if (!project.projectId) warnings.push(labels.noProject);
+        if (duplicate.likelyDuplicate) warnings.push(labels.possibleDuplicate);
+        const missingFields = project.projectId ? [] : ['projectId'];
+        return {
+          meetingId,
+          workspaceId: meeting.workspaceId,
+          kind: 'work_item',
+          targetApp: 'conqrplane',
+          title,
+          payload: JSON.stringify({
             title,
-            payload: JSON.stringify({
-              title,
-              description: String(it.description ?? '')
-                .trim()
-                .slice(0, 2000),
-              owner: owner || null,
-              dueDate: dueDate || null,
-            }),
-            reason:
-              String(it.description ?? '')
-                .trim()
-                .slice(0, 500) || labels.agreed,
-            evidence: JSON.stringify(quote ? [{ segmentIds: [], quote }] : []),
-            confidence,
-            commitment: it.commitment === 'tentative' ? 'tentative' : 'firm',
-            riskLevel: 'safe',
-            validation: JSON.stringify({
-              warnings,
-              missingFields: ['projectId'],
-            }),
-            duplicateCheck: JSON.stringify({ searched: false, candidates: [] }),
-            status: 'proposed',
-            idempotencyKey: `meeting:${meetingId}:v${transcriptVersion}:${index}`,
-            transcriptVersion,
-          },
-        ];
+            description: String(it.description ?? '')
+              .trim()
+              .slice(0, 2000),
+            owner: owner || null,
+            dueDate: dueDate || null,
+            ...(project.projectId ? { projectId: project.projectId } : {}),
+          }),
+          reason:
+            String(it.description ?? '')
+              .trim()
+              .slice(0, 500) || labels.agreed,
+          evidence: JSON.stringify(
+            quote ? [{ segmentIds: matchEvidenceSegments(quote, segments), quote }] : [],
+          ),
+          confidence,
+          commitment: it.commitment === 'tentative' ? 'tentative' : 'firm',
+          // A likely duplicate is never approved in bulk ("approve safe").
+          riskLevel: duplicate.likelyDuplicate ? 'normal' : 'safe',
+          validation: JSON.stringify({
+            warnings,
+            missingFields,
+            project: {
+              projectId: project.projectId,
+              source: project.source,
+              candidates: project.candidates,
+            },
+          }),
+          duplicateCheck: JSON.stringify(duplicate),
+          status: 'proposed',
+          idempotencyKey: `meeting:${meetingId}:v${transcriptVersion}:${index}`,
+          transcriptVersion,
+        };
       });
       await this.write(async (trx) => {
         await trx
@@ -4350,6 +5074,104 @@ export class MeetingService {
       if (err instanceof StaleRunError) throw err;
       this.logger.warn(
         `Meeting ${meetingId}: proposal generation failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * The ConqrPlan project of a meeting, from the project↔space mappings of
+   * its spaces (its own space, then the space it was published into). No
+   * space, no mapping or several projects → null: the reviewer chooses.
+   */
+  private async resolveMeetingProject(meeting: {
+    workspaceId: string;
+    spaceId?: string | null;
+    settings?: unknown;
+  }): Promise<{
+    projectId: string | null;
+    candidates: string[];
+    source: 'space_mapping' | 'ambiguous' | 'no_mapping' | 'no_space' | 'lookup_failed';
+  }> {
+    const spaceIds = meetingSpaceIds({
+      spaceId: meeting.spaceId ?? null,
+      settings: this.parseJson(meeting.settings),
+    });
+    if (spaceIds.length === 0) return { projectId: null, candidates: [], source: 'no_space' };
+    try {
+      const rows = await this.db
+        .selectFrom('integrationProjectSpaceMappings')
+        .select(['planeProjectId', 'mappingKind'])
+        .where('workspaceId', '=', meeting.workspaceId)
+        .where('spaceId', 'in', spaceIds)
+        .where('deletedAt', 'is', null)
+        .execute();
+      const resolved = resolveMappedProject(rows);
+      return {
+        ...resolved,
+        source: resolved.projectId ? 'space_mapping' : rows.length ? 'ambiguous' : 'no_mapping',
+      };
+    } catch (err) {
+      this.logger.warn(
+        `Meeting project mapping lookup failed: ${(err as Error).message}`,
+      );
+      return { projectId: null, candidates: [], source: 'lookup_failed' };
+    }
+  }
+
+  /**
+   * Existing ConqrPlan work items with nearly the same title, through the
+   * work-item search, as the meeting's creator (read scope). Bounded by
+   * DUPLICATE_CHECK_TIMEOUT_MS; Plan not connected, slow or failing → the
+   * proposal is kept with `searched: false` and a reason, never dropped.
+   */
+  /** A property so tests can shorten it. */
+  private duplicateCheckTimeoutMs = DUPLICATE_CHECK_TIMEOUT_MS;
+
+  private async duplicateCheck(
+    meeting: { workspaceId: string; userId: string },
+    title: string,
+    projectId: string | null,
+  ): Promise<Record<string, unknown> & { likelyDuplicate?: boolean }> {
+    const skipped = (reason: string, extra: Record<string, unknown> = {}) => ({
+      searched: false,
+      reason,
+      candidates: [],
+      ...extra,
+    });
+    if (typeof this.plane?.isEnabled !== 'function' || !this.plane.isEnabled()) {
+      return skipped('plan_not_connected');
+    }
+    const query = duplicateSearchQuery(title);
+    if (!query) return skipped('empty_title');
+    try {
+      const delegation = this.delegatedTokens.mintForPlane({
+        hubUserId: meeting.userId,
+        hubWorkspaceId: meeting.workspaceId,
+        scope: [DELEGATED_SCOPES.workItemRead],
+      });
+      const { results } = await withTimeout(
+        this.plane.searchWorkItems(
+          { query, limit: 10, ...(projectId ? { projectId } : {}) },
+          { delegation: delegation.token, correlationId: delegation.jti },
+        ),
+        this.duplicateCheckTimeoutMs,
+      );
+      const candidates = rankDuplicateCandidates(title, results ?? []);
+      return {
+        searched: true,
+        searchedAt: new Date().toISOString(),
+        query,
+        projectId,
+        scope: projectId ? 'project' : 'workspace',
+        candidates,
+        likelyDuplicate: (candidates[0]?.similarity ?? 0) >= LIKELY_DUPLICATE_SIMILARITY,
+      };
+    } catch (err) {
+      if (err instanceof StaleRunError) throw err;
+      const msg = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+      this.logger.warn(`Duplicate check unavailable for "${title.slice(0, 60)}": ${msg}`);
+      return skipped(
+        (err as Error)?.name === 'PipelineTimeoutError' ? 'timeout' : 'unavailable',
       );
     }
   }
@@ -4588,6 +5410,8 @@ export class MeetingService {
       failureReason: row.failureReason,
       cost: this.parseJson(row.cost),
       publishedAt: row.publishedAt,
+      // Additive: set while the meeting is archived (MEET_CONTRACT.md §3).
+      archivedAt: row.archivedAt ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       deletedAt: row.deletedAt,
