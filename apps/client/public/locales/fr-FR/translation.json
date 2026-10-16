@@ -1794,5 +1794,13 @@
   "Speakers or proposals of a meeting wait for you.": "Des intervenants ou des propositions d’une réunion vous attendent.",
   "Report published": "Compte rendu publié",
   "The report of your meeting was published in Hub.": "Le compte rendu de votre réunion a été publié dans Hub.",
-  "Sounds only play for notifications that reach the bell. These settings apply to your account, in Hub and in Meet.": "Les sons ne retentissent que pour les notifications qui arrivent dans la cloche. Ces réglages s’appliquent à votre compte, dans Hub comme dans Meet."
+  "Sounds only play for notifications that reach the bell. These settings apply to your account, in Hub and in Meet.": "Les sons ne retentissent que pour les notifications qui arrivent dans la cloche. Ces réglages s’appliquent à votre compte, dans Hub comme dans Meet.",
+  "See all notifications": "Voir toutes les notifications",
+  "{{count}} unread notifications": "{{count}} notifications non lues",
+  "{{count}} unread notifications_one": "{{count}} notification non lue",
+  "{{count}} unread notifications_other": "{{count}} notifications non lues",
+  "Notification settings": "Paramètres des notifications",
+  "All": "Tout",
+  "Documentation health dropped to <bold>{{score}}/100</bold>": "La santé documentaire est descendue à <bold>{{score}}/100</bold>",
+  "{{count}} unread notifications_many": "{{count}} notifications non lues"
 }

@@ -50,6 +50,7 @@ import VerifiedPages from "@/ee/page-verification/pages/verified-pages.tsx";
 import KnowledgeBasePage from "@/ee/page-verification/pages/knowledge-base.tsx";
 import DocHealthPage from "@/features/doc-health/pages/doc-health-page.tsx";
 import TemplateList from "@/ee/template/pages/template-list";
+import NotificationsPage from "@/features/notification/pages/notifications-page";
 import TemplateEditor from "@/ee/template/pages/template-editor";
 import FavoritesPage from "@/pages/favorites/favorites-page";
 import AiChat from "@/ee/ai-chat/pages/ai-chat.tsx";
@@ -115,6 +116,7 @@ export default function App() {
           <Route path={"/ai/chat/:chatId"} element={<AiChat />} />
           <Route path={"/spaces"} element={<SpacesPage />} />
           <Route path={"/favorites"} element={<FavoritesPage />} />
+          <Route path={"/notifications"} element={<NotificationsPage />} />
           <Route path={"/templates"} element={<TemplateList />} />
           <Route
             path={"/templates/:templateId"}

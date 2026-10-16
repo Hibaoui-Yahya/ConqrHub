@@ -1,4 +1,11 @@
-import { IsArray, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 
 export class NotificationIdDto {
@@ -18,4 +25,9 @@ export class ListNotificationsDto extends PaginationOptions {
   @IsString()
   @IsIn(['direct', 'updates', 'all'])
   type?: 'direct' | 'updates' | 'all' = 'all';
+
+  /** Only notifications not read yet. */
+  @IsOptional()
+  @IsBoolean()
+  unreadOnly?: boolean;
 }

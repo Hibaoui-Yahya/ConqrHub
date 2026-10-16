@@ -11,6 +11,7 @@ export type NotificationType =
   | "page.verified"
   | "page.approval_requested"
   | "page.approval_rejected"
+  | "doc_health.dropped"
   | "meeting.ready"
   | "meeting.failed"
   | "meeting.review_needed"

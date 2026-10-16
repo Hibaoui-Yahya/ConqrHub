@@ -72,11 +72,13 @@ export class NotificationService {
     userId: string,
     pagination: PaginationOptions,
     type: NotificationTab = 'all',
+    unreadOnly = false,
   ) {
     const result = await this.notificationRepo.findByUserId(
       userId,
       pagination,
       type,
+      unreadOnly,
     );
 
     const pageIds = result.items

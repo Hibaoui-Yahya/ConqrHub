@@ -67,6 +67,8 @@ export function NotificationItem({
         return "Page verification has expired";
       case "page.verification_invalidated":
         return "<bold>{{name}}</bold> edited “{{page}}”: the page leaves the knowledge base until it is verified again";
+      case "doc_health.dropped":
+        return "Documentation health dropped to <bold>{{score}}/100</bold>";
       default:
         return "";
     }
@@ -79,7 +81,9 @@ export function NotificationItem({
           notification.page.slugId,
           notification.page.title,
         )
-      : undefined;
+      : notification.type === "doc_health.dropped"
+        ? "/settings/health"
+        : undefined;
 
   const meeting = isMeetingNotification(notification.type)
     ? notificationText(notification, t)
@@ -211,6 +215,7 @@ export function NotificationItem({
               values={{
                 name: notification.actor?.name,
                 page: notification.page?.title || t("Untitled"),
+                score: String(notification.data?.score ?? ""),
               }}
               components={{ bold: <Text span fw={600} /> }}
             />

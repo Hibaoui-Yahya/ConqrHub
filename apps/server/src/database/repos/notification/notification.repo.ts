@@ -35,6 +35,7 @@ export class NotificationRepo {
     userId: string,
     pagination: PaginationOptions,
     type: NotificationTab = 'all',
+    unreadOnly = false,
   ) {
     let query = this.db
       .selectFrom('notifications')
@@ -53,6 +54,10 @@ export class NotificationRepo {
           ),
         ]),
       );
+
+    if (unreadOnly) {
+      query = query.where('readAt', 'is', null);
+    }
 
     if (type === 'direct') {
       query = query.where('type', '!=', NotificationType.PAGE_UPDATED);

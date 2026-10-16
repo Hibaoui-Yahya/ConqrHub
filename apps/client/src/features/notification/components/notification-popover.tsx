@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   ActionIcon,
+  Anchor,
+  Divider,
   Group,
   Indicator,
   Menu,
@@ -18,6 +20,7 @@ import {
   IconFilter,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { NotificationList } from "./notification-list";
 import { SuiteNotificationList } from "@/features/integration/components/suite-notification-list";
 import {
@@ -178,6 +181,23 @@ export function NotificationPopover() {
             />
           )}
         </ScrollArea.Autosize>
+
+        <Divider />
+        <Group justify="center" py="xs">
+          <Anchor
+            component={Link}
+            to={
+              tab === "direct"
+                ? "/notifications"
+                : `/notifications?tab=${tab}`
+            }
+            size="sm"
+            fw={600}
+            onClick={() => setOpened(false)}
+          >
+            {t("See all notifications")}
+          </Anchor>
+        </Group>
       </Popover.Dropdown>
     </Popover>
   );
