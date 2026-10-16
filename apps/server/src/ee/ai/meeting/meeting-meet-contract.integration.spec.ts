@@ -207,6 +207,129 @@ suite('ConqrMeet contract routes', () => {
     });
   });
 
+  describe('proposal quality', () => {
+    const TURNS = [
+      'Bonjour à tous, on fait le point sur le budget du projet Atlas.',
+      'Marie prépare le plan de recrutement pour vendredi.',
+      'Paul enverra le contrat au client lundi prochain.',
+    ];
+    const proposalsAi = () => ({
+      isAvailable: () => true,
+      generate: jest.fn(async () => ({
+        text: JSON.stringify([
+          { title: 'Préparer le plan de recrutement', owner: 'Marie', quote: 'Marie prépare le plan de recrutement', confidence: 0.9 },
+          { title: 'Envoyer le contrat au client', owner: 'Paul', quote: 'Paul enverra le contrat au client lundi prochain.', confidence: 0.9 },
+        ]),
+      })),
+    });
+    const tokens = { mintForPlane: jest.fn(() => ({ token: 'obo', jti: 'jti-1' })) };
+
+    async function meetingWithTranscript(spaceId: string | null) {
+      const id = await addMeeting({ by: creator, spaceId });
+      const segments = TURNS.map((text, i) => ({ id: `seg-${i}`, speaker: 'Speaker 1', text, rawText: text, startMs: i * 5000, endMs: i * 5000 + 4000 }));
+      await db
+        .insertInto('meetingTranscripts')
+        .values({
+          meetingId: id,
+          version: 1,
+          kind: 'live',
+          status: 'transcribed',
+          provider: 'mistral',
+          segments: sql`${JSON.stringify(segments)}::jsonb`,
+          speakers: sql`'{}'::jsonb`,
+        })
+        .execute();
+      return id;
+    }
+    async function mappedSpace(projects: Array<[string, string]>) {
+      const spaceId = randomUUID();
+      await db.insertInto('spaces').values({ id: spaceId, workspaceId: ws1, slug: `s-${spaceId.slice(0, 8)}`, name: 'Atlas' }).execute();
+      for (const [planeProjectId, mappingKind] of projects) {
+        await db.insertInto('integrationProjectSpaceMappings').values({ workspaceId: ws1, spaceId, planeProjectId, mappingKind }).execute();
+      }
+      return spaceId;
+    }
+    const proposals = (id: string) =>
+      db.selectFrom('meetingActionProposals').selectAll().where('meetingId', '=', id).orderBy('idempotencyKey').execute();
+    const json = (v: any) => (typeof v === 'string' ? JSON.parse(v) : v);
+    const generate = async (service: MeetingService, id: string) =>
+      (service as any).generateProposals(await meetingRow(id), TURNS.join('\n'), 1, 'fr');
+
+    it('cites the transcript segments, takes the space\'s project and flags a likely duplicate', async () => {
+      const plane = {
+        isEnabled: () => true,
+        searchWorkItems: jest.fn(async ({ query }: { query: string }) => ({
+          results: query.includes('contrat')
+            ? [{ id: 'wi-9', name: 'Envoyer le contrat au client', project_id: 'proj-1', project__identifier: 'ATL', sequence_id: 9, state__name: 'Todo', state__group: 'unstarted' }]
+            : [{ id: 'wi-1', name: 'Budget Atlas', project_id: 'proj-1' }],
+        })),
+      };
+      const { service } = build({ ai: proposalsAi(), plane, delegatedTokens: tokens });
+      const id = await meetingWithTranscript(await mappedSpace([['proj-1', 'primary'], ['proj-2', 'secondary']]));
+      await generate(service, id);
+      const [recruit, contract] = await proposals(id);
+
+      expect(json(recruit.evidence)).toEqual([{ segmentIds: ['seg-1'], quote: 'Marie prépare le plan de recrutement' }]);
+      expect(json(contract.evidence)[0].segmentIds).toEqual(['seg-2']);
+      expect(json(recruit.payload).projectId).toBe('proj-1');
+      expect(json(recruit.validation)).toMatchObject({
+        missingFields: [],
+        project: { projectId: 'proj-1', source: 'space_mapping' },
+      });
+      expect(plane.searchWorkItems).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: 'proj-1' }),
+        { delegation: 'obo', correlationId: 'jti-1' },
+      );
+      expect(tokens.mintForPlane).toHaveBeenCalledWith(
+        expect.objectContaining({ hubUserId: creator.id, scope: ['work-item:read'] }),
+      );
+      expect(json(recruit.duplicateCheck)).toMatchObject({ searched: true, candidates: [], likelyDuplicate: false });
+      expect(recruit.riskLevel).toBe('safe');
+      expect(json(contract.duplicateCheck)).toMatchObject({
+        searched: true,
+        likelyDuplicate: true,
+        candidates: [{ id: 'wi-9', identifier: 'ATL', sequenceId: 9, similarity: 1 }],
+      });
+      expect(contract.riskLevel).toBe('normal');
+      expect(json(contract.validation).warnings).toContain(
+        'Une tâche ConqrPlan semblable existe peut-être déjà : vérifiez avant de créer.',
+      );
+
+      // "Approve safe" leaves the likely duplicate to a person.
+      const result = await service.approveSafeProposals(creator, id);
+      expect(result.approved).toEqual([recruit.id]);
+    });
+
+    it('without a mapped space: projectId is the only missing field and Plan being down never blocks', async () => {
+      const plane = {
+        isEnabled: () => true,
+        searchWorkItems: jest.fn(() => new Promise(() => undefined)), // never answers
+      };
+      const { service } = build({ ai: proposalsAi(), plane, delegatedTokens: tokens });
+      (service as any).duplicateCheckTimeoutMs = 50;
+      const id = await meetingWithTranscript(null);
+      await generate(service, id);
+      const rows = await proposals(id);
+      expect(rows).toHaveLength(2);
+      for (const p of rows) {
+        expect(json(p.validation)).toMatchObject({ missingFields: ['projectId'], project: { projectId: null, source: 'no_space' } });
+        expect(json(p.duplicateCheck)).toMatchObject({ searched: false, reason: 'timeout' });
+        expect(json(p.payload).projectId).toBeUndefined();
+      }
+      // Plan not connected at all: same, with its own reason.
+      const offline = build({ ai: proposalsAi(), plane: { isEnabled: () => false } });
+      const other = await meetingWithTranscript(await mappedSpace([['p-a', 'primary'], ['p-b', 'primary']]));
+      await generate(offline.service, other);
+      const [first] = await proposals(other);
+      expect(json(first.duplicateCheck)).toMatchObject({ searched: false, reason: 'plan_not_connected' });
+      expect(json(first.validation)).toMatchObject({
+        missingFields: ['projectId'],
+        project: { source: 'ambiguous', candidates: expect.arrayContaining(['p-a', 'p-b']) },
+      });
+      expect((await offline.service.approveSafeProposals(creator, other)).approved).toEqual([]);
+    });
+  });
+
   describe('saved AI insights', () => {
     it('the creator saves a Q&A and an analysis; every member lists them, newest first, with the author', async () => {
       const { service } = build();

@@ -349,3 +349,50 @@ colleague. A person of another company matches nothing. `scope=mine` and
 `ownerId` intersect. The response is still `{ items, total }`, and `total`
 counts the filtered list. For local-time day boundaries, send date-times with
 an offset (`2026-10-16T00:00:00+02:00`).
+
+---
+
+## 5. Action proposals (changed fields, same routes)
+
+`GET /ai/meeting/:id/proposals` keeps its shape. Proposals generated from this
+release on fill these fields:
+
+- **`evidence`**: `[{ "segmentIds": ["<transcript segment id>", …], "quote": "…" }]`.
+  The ids are the segments of the latest transcript, at the time of analysis,
+  that the quote came from, in transcript order (at most 6). A quote that
+  matches no segment keeps `segmentIds: []`; the Hub never guesses a
+  citation.
+- **`validation`**:
+  `{ "warnings": [string], "missingFields": ["projectId"] | [], "project": { "projectId": string|null, "source": "space_mapping"|"ambiguous"|"no_mapping"|"no_space"|"lookup_failed", "candidates": [projectId…] } }`.
+  - The project comes from the ConqrPlan ↔ Hub space mappings of the
+    meeting's space (its own space, then the space it was published into).
+    The single primary-mapped project is used, otherwise the single mapped
+    project.
+  - When a project is found it is also written into `payload.projectId` and
+    `missingFields` is `[]`.
+  - When none or several are found, `missingFields` is `["projectId"]`, the
+    French warning *Aucun projet ConqrPlan n’est associé…* is added, and
+    `candidates` lists the mapped projects to choose from.
+- **`duplicateCheck`**, one ConqrPlan work-item search per proposal, made as
+  the meeting's creator (scope `work-item:read`) with a 5 s timeout. It
+  covers the project when one is known, otherwise the whole workspace.
+  - On success:
+    `{ "searched": true, "searchedAt", "query", "projectId", "scope": "project"|"workspace", "likelyDuplicate": bool, "candidates": [{ "id", "name", "projectId", "identifier", "sequenceId", "state", "stateGroup", "similarity" }] }`.
+    `candidates` holds at most 3 items with title similarity ≥ 0.5, sorted.
+    `likelyDuplicate` is true when the best candidate scores ≥ 0.8.
+  - On failure:
+    `{ "searched": false, "reason": "plan_not_connected"|"timeout"|"unavailable"|"empty_title", "candidates": [] }`.
+    A failure never blocks or drops a proposal.
+- **`riskLevel`**: a likely duplicate is `normal` instead of `safe` and gets
+  the French warning *Une tâche ConqrPlan semblable existe peut-être déjà…*.
+  `POST /:id/proposals/approve-safe` therefore leaves it for a person to
+  decide.
+
+Behaviour changes:
+
+- `approve-safe` no longer skips a proposal for `projectId` when the payload,
+  the edited payload or the meeting's space mapping now provides one (for
+  example after publication). The skip reason is now French:
+  `Champs requis manquants : …`.
+- Execution, after approval, uses the space-mapped project when the payload
+  has no `projectId`. The failure message when there is none is French.
