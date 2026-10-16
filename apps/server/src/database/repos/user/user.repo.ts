@@ -271,7 +271,7 @@ export class UserRepo {
    */
   setPreferenceObject(
     userId: string,
-    key: 'notificationSounds',
+    key: 'notificationSounds' | 'firstRun',
     value: Record<string, unknown>,
   ) {
     return this.db

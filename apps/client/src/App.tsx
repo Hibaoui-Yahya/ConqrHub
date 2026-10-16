@@ -53,6 +53,8 @@ import TemplateEditor from "@/ee/template/pages/template-editor";
 import FavoritesPage from "@/pages/favorites/favorites-page";
 import AiChat from "@/ee/ai-chat/pages/ai-chat.tsx";
 import VerifyEmail from "@/ee/pages/verify-email.tsx";
+import WelcomePage from "@/features/first-run/welcome-page.tsx";
+import { UserProvider } from "@/features/user/user-provider.tsx";
 
 export default function App() {
   const { t } = useTranslation();
@@ -65,6 +67,14 @@ export default function App() {
         <Route index element={<Navigate to="/home" />} />
         <Route path={"/login"} element={<LoginPage />} />
         <Route path={"/invites/:invitationId"} element={<InviteSignup />} />
+        <Route
+          path={"/welcome"}
+          element={
+            <UserProvider>
+              <WelcomePage />
+            </UserProvider>
+          }
+        />
         <Route path={"/forgot-password"} element={<ForgotPassword />} />
         <Route path={"/password-reset"} element={<PasswordReset />} />
         <Route path={"/login/mfa"} element={<MfaChallengePage />} />

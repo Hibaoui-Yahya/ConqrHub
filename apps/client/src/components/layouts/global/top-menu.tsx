@@ -10,6 +10,7 @@ import {
   IconBrush,
   IconCheck,
   IconChevronDown,
+  IconCompass,
   IconDeviceDesktop,
   IconLogout,
   IconMoon,
@@ -18,7 +19,11 @@ import {
   IconUserCircle,
   IconUsers,
 } from "@tabler/icons-react";
-import { useAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
+import {
+  hubTourOpenAtom,
+  isFirstRunEnabled,
+} from "@/features/first-run/first-run.ts";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom.ts";
 import { Link } from "react-router-dom";
 import APP_ROUTE from "@/lib/app-route.ts";
@@ -33,6 +38,7 @@ export default function TopMenu() {
   const { t } = useTranslation();
   const [currentUser] = useAtom(currentUserAtom);
   const { logout } = useAuth();
+  const openTour = useSetAtom(hubTourOpenAtom);
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const [, setPreference] = useConqrTheme();
   const chooseScheme = (scheme: "light" | "dark" | "auto") => {
@@ -166,6 +172,15 @@ export default function TopMenu() {
             </Menu.Item>
           </Menu.Sub.Dropdown>
         </Menu.Sub>
+
+        {isFirstRunEnabled() && (
+          <Menu.Item
+            onClick={() => openTour(true)}
+            leftSection={<IconCompass size={16} />}
+          >
+            Revoir la visite guidée
+          </Menu.Item>
+        )}
 
         <Menu.Divider />
 

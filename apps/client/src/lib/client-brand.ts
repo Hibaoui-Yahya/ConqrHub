@@ -14,7 +14,9 @@ export interface ClientBrand {
   pitch: string;
   /** Square mark on a dark panel (white tile). */
   markSrc?: string;
-  team: { name: string; photo: string }[];
+  team: { name: string; photo: string; title?: string }[];
+  /** People listed by the client without a photo. */
+  extraMembers?: { name: string; title?: string }[];
   /** Head count shown on small screens (photos may be missing for some). */
   teamSize?: number;
   facts: { value: string; label: string }[];
@@ -22,22 +24,68 @@ export interface ClientBrand {
   defaultLocale?: string;
 }
 
+/** Team as published on latetechercheuse.com (Cabinet de recrutement). */
 const LTC_TEAM = [
-  ["Elisabeth Starenkyj", "elisabeth-starenkyj"],
-  ["Annie Bissonnette", "annie-bissonnette"],
-  ["Sébastien Vachon", "sebastien-vachon"],
-  ["Sophia Hoareau", "sophia-hoareau"],
-  ["Marc Michaud", "marc-michaud"],
-  ["Laure Broisin", "laure-broisin"],
-  ["Elsa Vecchi", "elsa-vecchi"],
-  ["Caroline Blackburn", "caroline-blackburn"],
-  ["Meggie Blanchard", "meggie-blanchard"],
-  ["Geneviève Clément", "genevieve-clement"],
-  ["Guillaume Lachance", "guillaume-lachance"],
-  ["Alice Henrottay", "alice-henrottay"],
-  ["Amélie Bissonnette-Théorêt", "amelie-bissonnette-theoret"],
-  ["Nour Saci", "nour-saci"],
-].map(([name, file]) => ({ name, photo: `/branding/ltc/team/${file}.jpg` }));
+  [
+    "Elisabeth Starenkyj",
+    "elisabeth-starenkyj",
+    "Co-présidente, associée principale",
+  ],
+  [
+    "Annie Bissonnette",
+    "annie-bissonnette",
+    "Co-présidente, associée principale",
+  ],
+  [
+    "Sébastien Vachon",
+    "sebastien-vachon",
+    "Directeur, gestion de talents, associé",
+  ],
+  ["Sophia Hoareau", "sophia-hoareau", "Directrice, gestion de talents"],
+  [
+    "Marc Michaud",
+    "marc-michaud",
+    "Directeur, gestion de talents et développement des affaires",
+  ],
+  ["Laure Broisin", "laure-broisin", "Directrice, gestion de talents"],
+  ["Elsa Vecchi", "elsa-vecchi", "Conseillère principale, gestion de talents"],
+  [
+    "Caroline Blackburn",
+    "caroline-blackburn",
+    "Conseillère principale, gestion de talents",
+  ],
+  [
+    "Meggie Blanchard",
+    "meggie-blanchard",
+    "Conseillère principale, gestion de talents",
+  ],
+  [
+    "Geneviève Clément",
+    "genevieve-clement",
+    "Conseillère principale, gestion de talents",
+  ],
+  [
+    "Guillaume Lachance",
+    "guillaume-lachance",
+    "Conseiller, gestion de talents",
+  ],
+  ["Alice Henrottay", "alice-henrottay", "Conseillère, gestion de talents"],
+  [
+    "Amélie Bissonnette-Théorêt",
+    "amelie-bissonnette-theoret",
+    "Coordonnatrice, rayonnement et développement des affaires",
+  ],
+  ["Nour Saci", "nour-saci", "Coordonnatrice, opérations et administration"],
+].map(([name, file, title]) => ({
+  name,
+  title,
+  photo: `/branding/ltc/team/${file}.jpg`,
+}));
+
+/** Published members without a photo (shown with initials). */
+const LTC_EXTRA = [
+  { name: "Geneviève Moreau", title: "Conseillère, gestion de talents" },
+];
 
 const BRANDS: Record<string, ClientBrand> = {
   ltc: {
@@ -49,6 +97,7 @@ const BRANDS: Record<string, ClientBrand> = {
       "Your interviews in ConqrMeet, your team's knowledge in ConqrHub. One account for both.",
     markSrc: "/branding/ltc/ltc-mark.svg",
     team: LTC_TEAM,
+    extraMembers: LTC_EXTRA,
     teamSize: 15,
     facts: [
       { value: "1997", label: "Founded in Montréal" },
@@ -73,4 +122,26 @@ const NEUTRAL: ClientBrand = {
 export function getClientBrand(): ClientBrand {
   const key = (getConfigValue("CLIENT_BRAND") || "").trim().toLowerCase();
   return BRANDS[key] ?? NEUTRAL;
+}
+
+function normalize(name: string): string {
+  return (name || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/,.*$/, "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+}
+
+/** The published profile (role, photo) matching an account name, if any. */
+export function findBrandMember(
+  name: string | undefined,
+): { name: string; title?: string; photo?: string } | undefined {
+  if (!name) return undefined;
+  const brand = getClientBrand();
+  const key = normalize(name);
+  return [...brand.team, ...(brand.extraMembers ?? [])].find(
+    (m) => normalize(m.name) === key,
+  );
 }

@@ -93,6 +93,19 @@ export class UserService {
       );
     }
 
+    if (typeof updateUserDto.firstRun !== 'undefined') {
+      const incoming = updateUserDto.firstRun ?? {};
+      const now = new Date().toISOString();
+      const value: Record<string, unknown> = {};
+      if (incoming.onboarded === true) value.onboardedAt = now;
+      if (incoming.hubTourSeen === true) value.hubTourSeenAt = now;
+      if (typeof incoming.jobTitle === 'string') {
+        value.jobTitle = incoming.jobTitle.replace(/\s+/g, ' ').trim();
+      }
+      if (Object.keys(value).length === 0) return user;
+      return this.userRepo.setPreferenceObject(userId, 'firstRun', value);
+    }
+
     if (typeof updateUserDto.meetingDefaults !== 'undefined') {
       const incoming = updateUserDto.meetingDefaults ?? {};
       const value: Record<string, unknown> = {};

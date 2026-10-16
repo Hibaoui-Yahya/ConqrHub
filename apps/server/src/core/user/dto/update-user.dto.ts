@@ -92,6 +92,26 @@ export class NotificationSoundsDto {
   categories?: NotificationSoundCategoriesDto;
 }
 
+/**
+ * First-visit state (onboarding and product tours). Flags are one-way: true
+ * stamps the current time on the server. Stored as settings.preferences.firstRun.
+ */
+export class FirstRunDto {
+  @IsOptional()
+  @IsBoolean()
+  onboarded?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hubTourSeen?: boolean;
+
+  /** Role shown on the profile and used to pick the onboarding track. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  jobTitle?: string;
+}
+
 export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
@@ -100,6 +120,12 @@ export class UpdateUserDto extends PartialType(
   @ValidateNested()
   @Type(() => NotificationSoundsDto)
   notificationSounds: NotificationSoundsDto;
+
+  /** Stored as settings.preferences.firstRun (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FirstRunDto)
+  firstRun: FirstRunDto;
 
   /** Stored as settings.preferences.meetings (merged key by key). */
   @IsOptional()
