@@ -970,6 +970,37 @@ export interface SuiteDelegationAudit {
   workspaceId: string | null;
 }
 
+export interface SuiteSessionEvents {
+  clientId: string | null;
+  detail: Json | null;
+  event: string;
+  familyId: string | null;
+  hubSessionId: string | null;
+  id: Generated<Int8>;
+  occurredAt: Generated<Timestamp>;
+  reason: string | null;
+  userId: string | null;
+  workspaceId: string | null;
+}
+
+export interface SuiteTokenFamilies {
+  clientId: string;
+  createdAt: Generated<Timestamp>;
+  currentJti: string;
+  expiresAt: Timestamp;
+  hubSessionId: string | null;
+  id: Generated<string>;
+  previousJti: string | null;
+  reuseCount: Generated<number>;
+  revokedAt: Timestamp | null;
+  revokedReason: string | null;
+  rotatedAt: Timestamp | null;
+  rotationCount: Generated<number>;
+  state: Generated<string>;
+  userId: string;
+  workspaceId: string;
+}
+
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
@@ -1020,6 +1051,8 @@ export interface DB {
   spaceMembers: SpaceMembers;
   spaces: Spaces;
   suiteDelegationAudit: SuiteDelegationAudit;
+  suiteSessionEvents: SuiteSessionEvents;
+  suiteTokenFamilies: SuiteTokenFamilies;
   suiteOrgIdentity: SuiteOrgIdentity;
   templates: Templates;
   userMfa: UserMfa;
