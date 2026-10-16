@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { SuiteTokenFamilyRepo } from '@docmost/db/repos/auth/suite-token-family.repo';
 import { TokenService } from './services/token.service';
 import { HubSessionValidator } from './services/hub-session-validator.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -170,10 +171,14 @@ describeDb('Hub session revocation (real Postgres + Redis)', () => {
       {} as any,
       { getOrThrow: () => redis } as any,
       validator,
+      new SuiteTokenFamilyRepo(db as any),
     );
-    const idp = new SuiteIdpService(jwt, environment, {
-      getOrThrow: () => redis,
-    } as any);
+    const idp = new SuiteIdpService(
+      jwt,
+      environment,
+      { getOrThrow: () => redis } as any,
+      new SuiteTokenFamilyRepo(db as any),
+    );
     idpController = new SuiteIdpController(
       idp,
       tokens,

@@ -41,7 +41,7 @@ function makeController(raw = LEGACY) {
     isHttps: () => false,
   } as any;
   const redis = { set: jest.fn(async () => 'OK'), getdel: jest.fn(async () => '1') };
-  const idp = new SuiteIdpService(jwt as any, environment, { getOrThrow: () => redis } as any);
+  const idp = new SuiteIdpService(jwt as any, environment, { getOrThrow: () => redis } as any, {} as any);
   const tokenService = { verifyJwt: jest.fn() } as any;
   const userRepo = { findById: jest.fn() } as any;
   const sessionValidator = { validate: jest.fn() } as any;

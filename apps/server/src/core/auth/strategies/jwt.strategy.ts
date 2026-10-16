@@ -23,6 +23,17 @@ import {
   AuthStateUnavailableException,
   HubSessionValidator,
 } from '../services/hub-session-validator.service';
+import { SuiteTokenFamilyRepo } from '@docmost/db/repos/auth/suite-token-family.repo';
+import {
+  clientPolicyMode,
+  clientProfiles,
+  epochMatches,
+  familyIsLive,
+  hubSessionEpoch,
+  suiteRouteAllowed,
+  suiteTokenEpoch,
+} from '../idp/suite-token-policy';
+import { ForbiddenException } from '@nestjs/common';
 
 // Short cache TTL for the user + workspace objects only. Session validity is
 // never served from this cache: a revoked session must stop working on the
@@ -48,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private moduleRef: ModuleRef,
     private readonly redisService: RedisService,
     private readonly sessionValidator: HubSessionValidator,
+    private readonly families: SuiteTokenFamilyRepo,
   ) {
     super({
       jwtFromRequest: (req: FastifyRequest) => {
@@ -101,10 +113,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       payload.type === undefined &&
       (payload as { aud?: string }).aud === SUITE_IDP_ACCESS_AUD
     ) {
-      return this.validateSuiteToken(payload);
+      return this.validateSuiteToken(req, payload);
     }
 
     if (payload.type !== JwtType.ACCESS) {
+      throw new UnauthorizedException();
+    }
+    // Emergency revocation / backup restore: tokens minted under an older
+    // epoch are refused, whatever the (possibly restored) session row says.
+    if (!epochMatches((payload as { ep?: number }).ep, hubSessionEpoch())) {
       throw new UnauthorizedException();
     }
 
@@ -167,10 +184,52 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     return { user, workspace };
   }
 
-  /** Stateless (no Hub session row): resolve and validate user + workspace. */
+  /**
+   * Suite access tokens are short-lived but NOT stateless any more: the token
+   * family they belong to is read on every request, so an access token issued
+   * before a logout, revocation or deactivation stops working at once. The
+   * client's route profile is enforced here, on the Hub, not only by the
+   * client's own proxy. Unreadable state is a 503, never an acceptance.
+   */
   private async validateSuiteToken(
-    payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
+    req: any,
+    payload: (JwtPayload | JwtApiKeyPayload) & {
+      jti?: string;
+      fid?: string;
+      azp?: string;
+      ep?: number;
+    },
   ): Promise<CachedAuthResult> {
+    if (!payload.fid || !epochMatches(payload.ep, suiteTokenEpoch())) {
+      throw new UnauthorizedException();
+    }
+    let family;
+    try {
+      family = await this.families.findForRequest(payload.fid);
+    } catch (err) {
+      this.logger.error(`Token family lookup failed: ${(err as Error)?.message ?? err}`);
+      throw new AuthStateUnavailableException();
+    }
+    if (
+      !familyIsLive(family, {
+        userId: payload.sub,
+        workspaceId: payload.workspaceId,
+        clientId: payload.azp,
+      })
+    ) {
+      throw new UnauthorizedException();
+    }
+    const url: string = req?.raw?.url ?? req?.url ?? '';
+    const method: string = req?.method ?? req?.raw?.method ?? 'GET';
+    if (!suiteRouteAllowed(clientProfiles(), payload.azp, method, url, req?.body)) {
+      const route = `${method} ${url.split('?')[0]}`;
+      if (clientPolicyMode() === 'report') {
+        this.logger.warn(`Suite client ${payload.azp} outside its profile: ${route}`);
+      } else {
+        this.logger.warn(`Suite client ${payload.azp} refused: ${route}`);
+        throw new ForbiddenException('Route not allowed for this client');
+      }
+    }
     return this.loadWorkspaceAndUser(payload);
   }
 

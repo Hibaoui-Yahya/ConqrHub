@@ -40,6 +40,7 @@ const CLIENT_AUTHENTICATED_PATHS = [
   '/oauth/register',
   '/oauth/revoke',
   '/api/idp/token',
+  '/api/idp/session/end',
   '/mcp',
 ];
 

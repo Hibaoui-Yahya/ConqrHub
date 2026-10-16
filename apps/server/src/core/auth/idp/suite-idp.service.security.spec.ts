@@ -11,7 +11,7 @@ function makeService(raw: string) {
     getSuiteIdpClientsRaw: () => raw,
   };
   const redisService = { getOrThrow: () => ({ set: jest.fn(), getdel: jest.fn() }) };
-  return new SuiteIdpService(jwt as any, environment as any, redisService as any);
+  return new SuiteIdpService(jwt as any, environment as any, redisService as any, {} as any);
 }
 
 const LEGACY = 'plane|plane-suite-secret|http://localhost/auth/oidc/callback/';

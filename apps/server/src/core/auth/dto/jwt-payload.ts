@@ -14,6 +14,8 @@ export type JwtPayload = {
   workspaceId: string;
   type: 'access';
   sessionId?: string;
+  /** Hub session epoch at mint time (absent on older tokens = 0). */
+  ep?: number;
 };
 
 export type JwtCollabPayload = {

@@ -6,10 +6,16 @@ import {
   Post,
   Query,
   Req,
+  Optional,
   Res,
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SESSIONS_REVOKED_EVENT,
+  SessionsRevokedEvent,
+} from '../../session/session-events';
 import type { User } from '@docmost/db/types/entity.types';
 import { HubSessionValidator } from '../services/hub-session-validator.service';
 import { clearAuthCookie, usesAuthCookie } from '../auth-cookie.util';
@@ -47,6 +53,7 @@ export class SuiteIdpController {
     private readonly userRepo: UserRepo,
     private readonly environment: EnvironmentService,
     private readonly sessionValidator: HubSessionValidator,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   @Public()
@@ -142,14 +149,16 @@ export class SuiteIdpController {
     }
     if (body.grant_type === 'authorization_code' && body.code) {
       try {
-        const { userId, workspaceId } = await this.idp.exchangeCode(
+        const { userId, workspaceId, sessionId } = await this.idp.exchangeCode(
           body.code,
           client,
         );
         return res
           .code(200)
           .header('Cache-Control', 'no-store')
-          .send(await this.idp.issueTokenPair(userId, workspaceId, client));
+          .send(
+            await this.idp.issueTokenPair(userId, workspaceId, client, sessionId),
+          );
       } catch (err) {
         return this.tokenError(res, err);
       }
@@ -165,6 +174,47 @@ export class SuiteIdpController {
       }
     }
     return res.code(400).send({ error: 'unsupported_grant_type' });
+  }
+
+  /**
+   * Hub–Meet unified logout, called server to server by a confidential
+   * client (ConqrMeet's BFF) with its client secret and any refresh token of
+   * the sign-in to end. Ends the Hub session that authorized it and every
+   * token family of that session; access tokens already issued stop working
+   * on their next request. Idempotent: repeating it answers already_ended.
+   * Proprietary endpoint (not RFC 7009 / OIDC RP-initiated logout).
+   */
+  @Public()
+  @Throttle({ [AUTH_THROTTLER]: { limit: 60, ttl: 60_000 } })
+  @Post('session/end')
+  async endSession(
+    @Body() body: Record<string, string>,
+    @Res() res: FastifyReply,
+  ) {
+    const client = this.idp.findClient(body.client_id);
+    if (!this.idp.verifyClientSecret(client, body.client_secret)) {
+      return res.code(401).send({ error: 'invalid_client' });
+    }
+    if (!body.refresh_token) {
+      return res.code(400).send({ error: 'invalid_request' });
+    }
+    try {
+      const outcome = await this.idp.endSession(body.refresh_token, client);
+      if ('userId' in outcome && outcome.hubSessionId) {
+        const event: SessionsRevokedEvent = {
+          userId: outcome.userId,
+          workspaceId: outcome.workspaceId,
+          sessionIds: [outcome.hubSessionId],
+        };
+        this.events?.emit(SESSIONS_REVOKED_EVENT, event);
+      }
+      return res
+        .code(200)
+        .header('Cache-Control', 'no-store')
+        .send({ state: outcome.result });
+    } catch (err) {
+      return this.tokenError(res, err);
+    }
   }
 
   /**
@@ -196,7 +246,7 @@ export class SuiteIdpController {
     if (!token) {
       return res.code(401).send({ error: 'invalid_token' });
     }
-    let claims: { userId: string; workspaceId: string };
+    let claims: Awaited<ReturnType<SuiteIdpService['verifyAccessToken']>>;
     try {
       claims = await this.idp.verifyAccessToken(token);
     } catch {
@@ -204,6 +254,9 @@ export class SuiteIdpController {
     }
     let user: User | undefined;
     try {
+      if (!(await this.idp.isAccessTokenLive(claims))) {
+        return res.code(401).send({ error: 'invalid_token' });
+      }
       user = await this.userRepo.findById(claims.userId, claims.workspaceId);
     } catch {
       return res

@@ -9,12 +9,14 @@ import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
 import type { User, UserSession } from '@docmost/db/types/entity.types';
 import { isUserDisabled } from '../../../common/helpers';
+import { epochMatches, hubSessionEpoch } from '../idp/suite-token-policy';
 
 /** The claims of a verified Hub session JWT that the validator relies on. */
 export interface HubSessionClaims {
   sub: string;
   workspaceId: string;
   sessionId?: string;
+  ep?: number;
 }
 
 export interface HubSessionCheck {
@@ -81,6 +83,9 @@ export class HubSessionValidator {
     check: HubSessionCheck,
   ): Promise<{ user: User; session: UserSession | null }> {
     if (!claims?.sub || !claims.workspaceId) throw new UnauthorizedException();
+    if (!epochMatches(claims.ep, hubSessionEpoch())) {
+      throw new UnauthorizedException();
+    }
     if (
       check.expectedWorkspaceId &&
       check.expectedWorkspaceId !== claims.workspaceId
