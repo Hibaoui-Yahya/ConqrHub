@@ -114,7 +114,9 @@ const MEET_ROUTES: RouteRule[] = [
   {
     methods: ['POST'],
     path: /^\/api\/users\/update$/,
-    bodyKeys: ['theme', 'themeCustom', 'meetingDefaults'],
+    // Theme, meeting defaults and the ConqrMeet tour flag — never name,
+    // e-mail or anything else on the account.
+    bodyKeys: ['theme', 'themeCustom', 'meetingDefaults', 'firstRun'],
   },
   { methods: ['GET'], path: /^\/api\/attachments\/img\/user\/[^/]+$/ },
 ];
