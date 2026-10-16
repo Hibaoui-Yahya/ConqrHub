@@ -52,6 +52,20 @@ function actor(user: User, workspace: Workspace): MeetingActor {
   return { id: user.id, role: user.role, workspaceId: workspace.id };
 }
 
+/** The upload's languageConfig field: a JSON object, else a 400 (was a 500). */
+export function parseLanguageConfig(raw: unknown): Record<string, unknown> | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  try {
+    const value = JSON.parse(String(raw));
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  } catch {
+    // fall through
+  }
+  throw new BadRequestException(
+    'Le champ languageConfig doit être un objet JSON, par exemple {"language":"fr"}.',
+  );
+}
+
 // MeetingAccessGuard: every /:id route answers 404 unless the meeting is a
 // live meeting of the caller's company (company-wide read, LTC-03).
 @UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
@@ -118,9 +132,7 @@ export class MeetingController {
       title: fields.title?.value,
       meetingType: fields.meetingType?.value,
       templateId: fields.templateId?.value,
-      languageConfig: fields.languageConfig
-        ? JSON.parse(fields.languageConfig.value)
-        : undefined,
+      languageConfig: parseLanguageConfig(fields.languageConfig?.value),
       autoProcess: fields.autoProcess?.value === 'true',
       mime: fileData.mimetype,
     });

@@ -418,6 +418,63 @@ suite('ConqrMeet contract routes', () => {
     });
   });
 
+  describe('per-meeting language', () => {
+    const stt = (detected: string) => ({
+      transcribeDiarized: jest.fn(async () => ({
+        text: 'Bonjour à tous.',
+        language: detected,
+        segments: [{ text: 'Bonjour à tous.', startMs: 0, endMs: 900, speakerId: 'a' }],
+      })),
+    });
+    async function recordAndTranscribe(service: MeetingService, languageConfig?: Record<string, unknown>) {
+      const started = await service.start(ws1, creator.id, { title: 'Langue', consent: true, languageConfig });
+      await service.ingestChunk(creator, started.id, Buffer.from('audio'), {
+        source: 'mic',
+        sequence: 0,
+        startMs: 0,
+        durationMs: 1000,
+      });
+      const row = await meetingRow(started.id);
+      await (service as any).transcribeMeeting(started.id, await (service as any).resolveAudioSources(row));
+      const tr = await db
+        .selectFrom('meetingTranscripts')
+        .select(['language', 'processingConfig'])
+        .where('meetingId', '=', started.id)
+        .executeTakeFirstOrThrow();
+      const config = typeof tr.processingConfig === 'string' ? JSON.parse(tr.processingConfig) : tr.processingConfig;
+      return { id: started.id, language: tr.language, config };
+    }
+
+    it('the language chosen at start wins over detection and over the account default, all the way to the report', async () => {
+      await db
+        .updateTable('users')
+        .set({ settings: sql`${JSON.stringify({ preferences: { meetings: { defaultLanguage: 'en' } } })}::jsonb` })
+        .where('id', '=', creator.id)
+        .execute();
+      const { service } = build({ stt: stt('en') });
+      const fr = await recordAndTranscribe(service, { language: 'fr-CA' });
+      expect(fr.language).toBe('fr');
+      expect(fr.config).toEqual({ language: { requested: 'fr', mode: 'single', providerHint: null, detected: 'en' } });
+      expect((await (service as any).localeContext(await meetingRow(fr.id))).language).toBe('fr');
+
+      // No choice: the account default is not forced on transcription; detection stands.
+      const auto = await recordAndTranscribe(service);
+      expect(auto.language).toBe('en');
+      expect(auto.config.language.mode).toBe('auto');
+    });
+
+    it('Arabic + English code-switching auto-detects and does not make the report Arabic', async () => {
+      const { service } = build({ stt: stt('ar') });
+      const mixed = await recordAndTranscribe(service, { language: 'ar_en' });
+      expect(mixed.language).toBe('ar'); // what the provider detected
+      expect(mixed.config.language).toMatchObject({ requested: 'ar_en', mode: 'code_switching', providerHint: null });
+      // The report falls through to the detected language, then the defaults —
+      // "ar_en" itself never reads as a report language.
+      await db.deleteFrom('meetingTranscripts').where('meetingId', '=', mixed.id).execute();
+      expect((await (service as any).localeContext(await meetingRow(mixed.id))).language).not.toBe('ar');
+    });
+  });
+
   describe('saved AI insights', () => {
     it('the creator saves a Q&A and an analysis; every member lists them, newest first, with the author', async () => {
       const { service } = build();

@@ -55,7 +55,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       db,
     );
     await sql`CREATE TABLE meeting_transcripts (meeting_id uuid, version integer, kind text, status text,
-      provider text, language text, segments jsonb, speakers jsonb, is_provisional boolean)`.execute(
+      provider text, language text, segments jsonb, speakers jsonb, is_provisional boolean,
+      processing_config jsonb)`.execute(
       db,
     );
   });

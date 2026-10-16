@@ -443,3 +443,28 @@ The body is unchanged: `{ baseVersion, renames?, merges?, userLinks?, reassign?,
 `speakers[label].userId` carries the link. The new field
 `linkedUsers: { "<userId>": { id, name, avatarUrl } }` describes the linked
 people who are still members of the company.
+
+---
+
+## 7. Per-meeting language
+
+`languageConfig: { "language": "<code>" }` is sent at `start`, at `upload` (a
+multipart field holding JSON) and at `process`. It now resolves as follows.
+
+| value | transcription | transcript `language` | report language |
+| --- | --- | --- | --- |
+| `fr`, `fr-CA`, `FR_fr`, `en`, `ar`, … | provider auto-detects (see below) | **the chosen code** (`fr`), over detection | the chosen code, over the account and company defaults |
+| `ar_en` (code-switching) | auto-detect: a single-language hint would force or translate one language | what the provider detected | no single language from the meeting: detected, then the account and company defaults (never "Arabic" read from `ar_en`) |
+| absent, `""`, `auto`, unknown | auto-detect | detected | detected, then the defaults |
+
+- **What reaches the provider.** Nothing, today. Meeting transcription is the
+  diarized Mistral request, which needs segment timestamps, and Mistral
+  documents `language` as not compatible with `timestamp_granularities`.
+  Sending the language would make the diarized call fail and fall back to the
+  single-speaker path. The switch is
+  `PROVIDER_ACCEPTS_LANGUAGE_WITH_DIARIZATION` in
+  `meeting-stt-language.util.ts`.
+- **Recorded on the transcript (version 1).** `processing_config.language`
+  holds `{ requested, mode: "single"|"code_switching"|"auto", providerHint, detected }`.
+- **Upload.** A malformed `languageConfig` field now answers 400 in French
+  instead of a 500.

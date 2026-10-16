@@ -108,6 +108,8 @@ import {
   resolveMappedProject,
 } from './meeting-proposals.util';
 
+import { reportLanguageCandidate, sttLanguage } from './meeting-stt-language.util';
+
 /** One work-item search while generating proposals. */
 const DUPLICATE_CHECK_TIMEOUT_MS = 5_000;
 import {
@@ -3764,14 +3766,13 @@ export class MeetingService {
     const speakers: Record<string, TranscriptSpeaker> = {};
     const multiChannel =
       new Set(sources.map((s) => s.source ?? 'mic')).size > 1;
-    const requestedLanguage = this.parseJson<{ language?: string }>(
-      meeting.languageConfig,
-    )?.language;
-    let language: string | null =
-      typeof requestedLanguage === 'string' &&
-      /^[a-z]{2}(?:-[A-Z]{2})?$/.test(requestedLanguage)
-        ? requestedLanguage
-        : null;
+    // The meeting's own language wins over detection (and over every
+    // account / company default). It cannot be sent to the provider with
+    // diarization (see meeting-stt-language.util.ts); "ar_en" and other
+    // code-switching choices keep the detected language.
+    const stt = sttLanguage(this.parseJson(meeting.languageConfig));
+    let language: string | null = stt.mode === 'single' ? stt.hint : null;
+    let detectedLanguage: string | null = null;
 
     // One acoustic request per channel keeps speaker ids consistent across
     // multiple uploaded files. Assemble their measured offsets before ASR.
@@ -3807,6 +3808,7 @@ export class MeetingService {
               ),
             );
       const result = await this.transcribeSource(meeting, buffer, src.mime);
+      detectedLanguage ??= result.language;
       language ??= result.language;
 
       const built = buildSourceSegments(
@@ -3882,6 +3884,15 @@ export class MeetingService {
           segments: JSON.stringify(segments),
           speakers: JSON.stringify(speakers),
           isProvisional: true,
+          // Which language was asked for and what reached the provider.
+          processingConfig: sql`${JSON.stringify({
+            language: {
+              requested: stt.requested,
+              mode: stt.mode,
+              providerHint: stt.sentToProvider ? stt.hint : null,
+              detected: detectedLanguage,
+            },
+          })}::text::jsonb`,
         })
         .executeTakeFirst();
 
@@ -4430,7 +4441,8 @@ export class MeetingService {
     return {
       language: resolveReportLanguage([
         config.reportLanguage,
-        config.language,
+        // "ar_en" (code-switching) names no single report language.
+        reportLanguageCandidate(config),
         tr?.language,
         creatorDefaults.defaultLanguage,
         meet.defaultLanguage,

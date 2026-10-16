@@ -1,4 +1,5 @@
-import { MeetingController } from './meeting.controller';
+import { BadRequestException } from '@nestjs/common';
+import { MeetingController, parseLanguageConfig } from './meeting.controller';
 
 jest.mock('./meeting.service', () => ({ MeetingService: class {} }));
 
@@ -65,6 +66,13 @@ describe('MeetingController actor wiring', () => {
     await controller.list({ limit: 30, scope: 'all' } as any, user, workspace);
     await controller.list({ limit: 30, scope: 'mine' } as any, user, workspace);
     expect(service.list.mock.calls.map((c) => c[1].mine)).toEqual([false, false, true]);
+  });
+
+  it('parses the upload languageConfig field and refuses malformed JSON with a 400', () => {
+    expect(parseLanguageConfig('{"language":"ar_en"}')).toEqual({ language: 'ar_en' });
+    expect(parseLanguageConfig(undefined)).toBeUndefined();
+    expect(() => parseLanguageConfig('{fr')).toThrow(BadRequestException);
+    expect(() => parseLanguageConfig('"fr"')).toThrow('languageConfig');
   });
 
   it('passes the list filters through untouched', async () => {
