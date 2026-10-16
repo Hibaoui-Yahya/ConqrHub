@@ -39,6 +39,7 @@ import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-act
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
 import IconMermaid from "@/components/icons/icon-mermaid";
 import IconDrawio from "@/components/icons/icon-drawio";
+import i18n from "@/i18n.ts";
 import { IconColumns4 } from "@/components/icons/icon-columns-4";
 import { IconColumns5 } from "@/components/icons/icon-columns-5";
 import {
@@ -709,12 +710,16 @@ export const getSuggestionItems = ({
   query: string;
   excludeItems?: Set<string>;
 }): SlashMenuGroupedItemsType => {
-  const search = query.toLowerCase();
+  // Matches the English command and the one shown in the interface
+  // language, accents ignored ("tableau" finds Tableau, "equation" Équation).
+  const fold = (value: string) =>
+    value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const search = fold(query);
   const filteredGroups: SlashMenuGroupedItemsType = {};
 
   const fuzzyMatch = (query: string, target: string) => {
     let queryIndex = 0;
-    target = target.toLowerCase();
+    target = fold(target);
     for (const char of target) {
       if (query[queryIndex] === char) queryIndex++;
       if (queryIndex === query.length) return true;
@@ -727,7 +732,9 @@ export const getSuggestionItems = ({
       if (excludeItems?.has(item.title)) return false;
       return (
         fuzzyMatch(search, item.title) ||
-        item.description.toLowerCase().includes(search) ||
+        fuzzyMatch(search, i18n.t(item.title)) ||
+        fold(item.description).includes(search) ||
+        fold(i18n.t(item.description)).includes(search) ||
         (item.searchTerms &&
           item.searchTerms.some((term: string) => term.includes(search)))
       );
@@ -735,8 +742,10 @@ export const getSuggestionItems = ({
 
     if (filteredItems.length) {
       filteredGroups[group] = filteredItems.sort((a, b) => {
-        const aTitle = a.title.toLowerCase().includes(search) ? 0 : 1;
-        const bTitle = b.title.toLowerCase().includes(search) ? 0 : 1;
+        const inTitle = (title: string) =>
+          fold(title).includes(search) || fold(i18n.t(title)).includes(search);
+        const aTitle = inTitle(a.title) ? 0 : 1;
+        const bTitle = inTitle(b.title) ? 0 : 1;
         return aTitle - bTitle;
       });
     }

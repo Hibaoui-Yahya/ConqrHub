@@ -49,9 +49,14 @@ const EditorAiMenu = ({ editor }: EditorAiMenuProps): JSX.Element | null => {
   });
   const currentItems = useMemo(() => {
     return commandItems[activeCommandSet].filter((item) => {
-      return item.name.toLowerCase().includes(prompt.toLowerCase());
+      // Typed text filters on the shown (translated) name or the English one.
+      const needle = prompt.toLowerCase();
+      return (
+        t(item.name).toLowerCase().includes(needle) ||
+        item.name.toLowerCase().includes(needle)
+      );
     });
-  }, [prompt, output, activeCommandSet]);
+  }, [prompt, output, activeCommandSet, t]);
   const updateMenuPlacement = useCallback(() => {
     if (!editor || !showAiMenu) return;
 

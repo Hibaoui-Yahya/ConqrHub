@@ -50,16 +50,20 @@ function categoryBadge(category: SearchGapCategory) {
   );
 }
 
+/** i18n key and values: the average is a value, not part of the key. */
 function categoryHint(
   category: SearchGapCategory,
   avgResultCount: number,
-): string {
+): [string, Record<string, string>?] {
   if (category === "no_results") {
-    return "Search returned nothing — likely missing content or terminology mismatch.";
+    return [
+      "Search returned nothing — likely missing content or terminology mismatch.",
+    ];
   }
-  return `Search returned ~${avgResultCount.toFixed(
-    1,
-  )} results on average but no one clicked — likely wrong content, weak titles, or bad ranking.`;
+  return [
+    "Search returned ~{{average}} results on average but no one clicked — likely wrong content, weak titles, or bad ranking.",
+    { average: avgResultCount.toFixed(1) },
+  ];
 }
 
 export default function SearchGapsCard() {
@@ -137,7 +141,7 @@ export default function SearchGapsCard() {
                   </Table.Td>
                   <Table.Td>
                     <Tooltip
-                      label={t(categoryHint(gap.category, gap.avgResultCount))}
+                      label={t(...categoryHint(gap.category, gap.avgResultCount))}
                       withArrow
                       multiline
                       w={260}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Stack,
   Text,
@@ -33,6 +34,7 @@ export function KnowledgePanel({
   urn: string;
   planeProjectId?: string;
 }) {
+  const { t } = useTranslation();
   const { data: relationships, isLoading, isError } = useRelationships(urn);
   const [linkOpen, setLinkOpen] = useState(false);
   // Live-refresh smart cards when Plane changes (SSE, §8.4).
@@ -96,7 +98,7 @@ export function KnowledgePanel({
       leftSection={<IconPlus size={14} />}
       onClick={() => setLinkOpen(true)}
     >
-      Link work item
+      {t("Link work item")}
     </Button>
   );
 
@@ -113,9 +115,9 @@ export function KnowledgePanel({
     return (
       <Stack gap="sm" p="sm">
         <EmptyState
-          icon={<AccessibleIcon name="relation" label="Links" size={20} />}
-          title="No linked work or knowledge yet"
-          description="Link a Plane work item to trace delivery against this page."
+          icon={<AccessibleIcon name="relation" label={t("Links")} size={20} />}
+          title={t("No linked work or knowledge yet")}
+          description={t("Link a Plane work item to trace delivery against this page.")}
         />
         {addButton}
         {linkModal}
