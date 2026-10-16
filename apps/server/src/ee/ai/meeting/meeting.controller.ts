@@ -219,6 +219,12 @@ export class MeetingController {
         q: query.q,
         // Home: only the caller's own meetings; otherwise company-wide.
         mine: query.scope === 'mine',
+        type: query.type,
+        status: query.status,
+        from: query.from,
+        to: query.to,
+        ownerId: query.ownerId,
+        archived: query.archived,
       },
       actor(user, workspace),
     );
@@ -249,6 +255,28 @@ export class MeetingController {
     return this.meetingService.update(actor(user, workspace), id, {
       title: dto.title,
     });
+  }
+
+  // ──────────── POST /:id/archive · /:id/unarchive (not a deletion) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/archive')
+  async archive(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.archive(actor(user, workspace), id);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/unarchive')
+  async unarchive(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.unarchive(actor(user, workspace), id);
   }
 
   // ──────────── POST /:id/markers (moments marked while recording) ────────────

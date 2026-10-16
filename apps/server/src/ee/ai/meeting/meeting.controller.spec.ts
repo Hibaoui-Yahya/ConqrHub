@@ -46,6 +46,8 @@ describe('MeetingController actor wiring', () => {
     await controller.listInsights('m1', {} as any, user, workspace);
     await controller.saveInsight('m1', { kind: 'qa', question: 'q', content: 'a' } as any, user, workspace);
     await controller.deleteInsight('m1', 'i1', user, workspace);
+    await controller.archive('m1', user, workspace);
+    await controller.unarchive('m1', user, workspace);
     await controller.getAudio('m1', user, workspace);
     await controller.streamAudio('m1', undefined, user, workspace, reply);
     for (const [name, fn] of Object.entries(service)) {
@@ -62,5 +64,19 @@ describe('MeetingController actor wiring', () => {
     await controller.list({ limit: 30, scope: 'all' } as any, user, workspace);
     await controller.list({ limit: 30, scope: 'mine' } as any, user, workspace);
     expect(service.list.mock.calls.map((c) => c[1].mine)).toEqual([false, false, true]);
+  });
+
+  it('passes the list filters through untouched', async () => {
+    const { controller, service } = setup();
+    const query = {
+      type: 'recruitment-interview',
+      status: 'completed,published',
+      from: '2026-10-01',
+      to: '2026-10-16',
+      ownerId: '0190a4c8-0000-7000-8000-000000000001',
+      archived: 'only',
+    };
+    await controller.list(query as any, user, workspace);
+    expect(service.list.mock.calls[0][1]).toMatchObject(query);
   });
 });

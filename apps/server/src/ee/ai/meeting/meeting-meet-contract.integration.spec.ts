@@ -133,6 +133,80 @@ suite('ConqrMeet contract routes', () => {
     await db?.destroy();
   });
 
+  describe('archive and unarchive', () => {
+    it('archives without deleting, hides from the list by default, restores the previous status, notifies nobody', async () => {
+      const { service, notifications } = build();
+      const id = await addMeeting({ by: creator, status: 'awaiting_review', title: 'À archiver' });
+      await service.saveInsight(creator, id, { kind: 'qa', question: 'Q', content: 'R' });
+      const archived = await service.archive(creator, id);
+      expect(archived).toMatchObject({ status: 'archived', archivedAt: expect.any(Date) });
+      expect(await service.archive(creator, id)).toMatchObject({ status: 'archived' }); // idempotent
+
+      const titles = async (opts: any = {}) =>
+        (await service.list(ws1, { limit: 100, q: 'À archiver', ...opts }, coworker)).items.map((m: any) => m.id);
+      expect(await titles()).not.toContain(id);
+      expect(await titles({ archived: 'include' })).toContain(id);
+      expect(await titles({ archived: 'only' })).toEqual([id]);
+      expect(await titles({ status: 'archived' })).toEqual([id]);
+
+      // Data stays and remains readable.
+      expect((await service.getDetail(coworker, id)).meeting.status).toBe('archived');
+      expect((await service.listInsights(coworker, id)).items).toHaveLength(1);
+      await expect(service.process(creator, id, {})).rejects.toBeInstanceOf(ConflictException);
+
+      const restored = await service.unarchive(creator, id);
+      expect(restored).toMatchObject({ status: 'awaiting_review', archivedAt: null });
+      expect(await titles()).toContain(id);
+      expect(notifications.onTransition).not.toHaveBeenCalled();
+    });
+
+    it('needs the edit right, refuses a meeting being recorded or processed', async () => {
+      const { service } = build();
+      const id = await addMeeting({ by: creator, status: 'completed' });
+      await expect(service.archive(coworker, id)).rejects.toThrow(MEETING_READ_ONLY_MESSAGE);
+      await service.archive(owner, id);
+      await expect(service.unarchive(coworker, id)).rejects.toBeInstanceOf(ForbiddenException);
+      for (const status of ['recording', 'analyzing']) {
+        const busy = await addMeeting({ by: creator, status });
+        await expect(service.archive(creator, busy)).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'meeting_busy' }),
+        });
+        expect((await meetingRow(busy)).status).toBe(status);
+      }
+    });
+  });
+
+  describe('list filters', () => {
+    it('narrows by type, status, date range and owner, never beyond the company', async () => {
+      const { service } = build();
+      const tag = `Filtre ${randomUUID().slice(0, 8)}`;
+      const a = await addMeeting({ by: creator, title: `${tag} A`, meetingType: 'recruitment-interview', status: 'completed', startedAt: new Date('2026-10-01T09:00:00Z') });
+      const b = await addMeeting({ by: owner, title: `${tag} B`, meetingType: 'daily-standup', status: 'published', startedAt: new Date('2026-10-10T23:30:00Z') });
+      const c = await addMeeting({ by: creator, title: `${tag} C`, meetingType: 'daily-standup', status: 'failed', startedAt: new Date('2026-10-15T09:00:00Z') });
+      await addMeeting({ by: foreign, title: `${tag} X`, meetingType: 'daily-standup' });
+      const ids = async (opts: any, who: Actor = coworker) =>
+        (await service.list(who.workspaceId, { limit: 100, q: tag, ...opts }, who)).items.map((m: any) => m.id).sort();
+
+      expect(await ids({})).toEqual([a, b, c].sort());
+      expect(await ids({ type: 'daily-standup' })).toEqual([b, c].sort());
+      expect(await ids({ type: 'daily-standup,recruitment-interview' })).toEqual([a, b, c].sort());
+      expect(await ids({ status: 'completed,failed' })).toEqual([a, c].sort());
+      expect(await ids({ from: '2026-10-02', to: '2026-10-10' })).toEqual([b]);
+      expect(await ids({ to: '2026-10-01' })).toEqual([a]);
+      expect(await ids({ ownerId: creator.id })).toEqual([a, c].sort());
+      // A coworker may filter on anyone of the company (company-wide read);
+      // another company's owner id or meetings never appear.
+      expect(await ids({ ownerId: foreign.id })).toEqual([]);
+      // scope=mine and ownerId intersect.
+      expect(await ids({ mine: true, ownerId: owner.id }, creator)).toEqual([]);
+      const total = await service.list(ws1, { limit: 1, q: tag, type: 'daily-standup' }, coworker);
+      expect(total.total).toBe(2);
+
+      await expect(service.list(ws1, { status: 'done' }, coworker)).rejects.toThrow('Statut inconnu');
+      await expect(service.list(ws1, { from: '2026-10-10', to: '2026-10-01' }, coworker)).rejects.toThrow('Période invalide');
+    });
+  });
+
   describe('saved AI insights', () => {
     it('the creator saves a Q&A and an analysis; every member lists them, newest first, with the author', async () => {
       const { service } = build();

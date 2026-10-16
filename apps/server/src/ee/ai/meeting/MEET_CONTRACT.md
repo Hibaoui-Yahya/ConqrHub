@@ -286,3 +286,66 @@ Errors:
 The response is 204. The answer is 404 (`Élément introuvable.`) if the item is
 not one of this meeting's insights, and 403 for read-only callers. This
 removes only the saved item, never the meeting.
+
+---
+
+## 3. Archive and unarchive
+
+Archiving is **not** a deletion. The transcript, documents, proposals, audio,
+insights and Hub pages all stay, and an archived meeting stays readable
+through every `GET`. Archive and unarchive use the same edit rule as rename:
+the creator or an Owner/Admin, and 403 for anyone else. They send no
+notification and no e-mail.
+
+### `POST /ai/meeting/:id/archive` (new)
+
+There is no body. The response is 200 with the meeting (the same shape as
+`PATCH /:id`): `status: "archived"` and `archivedAt` set. Calling it on an
+already archived meeting returns the meeting unchanged.
+
+- It is refused with 409 `code: "meeting_busy"` while the meeting is
+  recording or processing.
+- While a meeting is archived, these are refused with 409
+  `code: "meeting_archived"` (unarchive first):
+  - `POST /:id/process`;
+  - `POST /:id/transcript/speakers` with `confirm: true`;
+  - `POST /:id/documents/:docId/publish`;
+  - `POST /:id/publish-bundle`.
+
+  Renaming, markers, insights, evaluations and proposals keep working.
+
+### `POST /ai/meeting/:id/unarchive` (new)
+
+There is no body. The response is 200 with the meeting, restored to the status
+it had when it was archived (from the timeline), and `archivedAt: null`. If
+that status would restart work, or is unknown, the meeting becomes
+`completed`. Calling it on a meeting that is not archived returns the meeting
+unchanged.
+
+Meeting objects (`GET /`, `GET /:id`, `PATCH /:id`, …) gain the additive field
+`archivedAt` (ISO date or `null`).
+
+---
+
+## 4. List filters: `GET /ai/meeting` (changed, additive)
+
+The existing parameters are unchanged: `limit` (1–100, default 50), `offset`,
+`q` (searches the title and the transcript) and `scope` (`mine` | `all`).
+
+New parameters:
+
+| param | value | effect |
+| --- | --- | --- |
+| `type` | meeting type(s), comma-separated, e.g. `recruitment-interview,daily-standup` | `meetingType` in the list |
+| `status` | status(es), comma-separated, from the `meeting_status` enum | `status` in the list. An unknown value gets 400 `Statut inconnu : « … ».` |
+| `from` | ISO date `2026-10-01` or date-time | `startedAt ≥ from`. A bare date means 00:00 UTC |
+| `to` | ISO date or date-time | `startedAt ≤ to`. A bare date covers the **whole UTC day**. `from` after `to` gets 400 `Période invalide…` |
+| `ownerId` | user uuid | meetings created by that person |
+| `archived` | `exclude` (default) \| `include` \| `only` | archived meetings are **hidden by default**. `status=archived` implies `include` |
+
+The filters only narrow the list. Read access is unchanged: every member
+already reads every meeting of their own company, so `ownerId` may name any
+colleague. A person of another company matches nothing. `scope=mine` and
+`ownerId` intersect. The response is still `{ items, total }`, and `total`
+counts the filtered list. For local-time day boundaries, send date-times with
+an offset (`2026-10-16T00:00:00+02:00`).

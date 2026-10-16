@@ -98,6 +98,7 @@ import {
   MAX_INSIGHTS_PER_MEETING,
   normalizeInsight,
 } from './meeting-insights.util';
+import { dateRange, parseStatuses, splitList } from './meeting-list.util';
 import {
   applyEvaluationEdit,
   buildEvaluationMarkdown,
@@ -657,6 +658,17 @@ export class MeetingService {
       q?: string;
       /** Only the caller's own meetings (the Home "À traiter" list). */
       mine?: boolean;
+      /** Meeting type(s), comma-separated. */
+      type?: string;
+      /** Status(es), comma-separated. */
+      status?: string;
+      /** startedAt range (ISO date or date-time, both inclusive). */
+      from?: string;
+      to?: string;
+      /** Creator of the meeting. */
+      ownerId?: string;
+      /** Archived meetings: hidden by default. */
+      archived?: 'exclude' | 'include' | 'only';
     },
     actor?: MeetingActor,
   ) {
@@ -666,15 +678,44 @@ export class MeetingService {
     // Unified search: a word of the title or of the transcript. "%" and
     // "_" in the query are literal, not wildcards.
     const pattern = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+    const types = splitList(opts.type);
+    const statusFilter = parseStatuses(opts.status);
+    if (statusFilter.ok === false) {
+      throw new BadRequestException(`Statut inconnu : « ${statusFilter.unknown} ».`);
+    }
+    const statuses = statusFilter.statuses;
+    const range = dateRange(opts.from, opts.to);
+    if (range.invalid) {
+      throw new BadRequestException('Période invalide : « from » doit précéder « to ».');
+    }
+    if (opts.ownerId !== undefined && !isMeetingId(opts.ownerId)) {
+      throw new BadRequestException('Identifiant de personne invalide.');
+    }
+    // Asking for the "archived" status shows archived meetings.
+    const archived =
+      opts.archived ?? (statuses.includes('archived') ? 'include' : 'exclude');
     const base = () => {
       let query = this.db
         .selectFrom('meetings')
         .where('workspaceId', '=', workspaceId)
         .where('deletedAt', 'is', null);
       // Every active member of the company reads every meeting (LTC-03);
-      // "mine" narrows the list to the caller's own meetings (Home).
+      // "mine" narrows the list to the caller's own meetings (Home). The
+      // filters below only narrow it further, never widen it.
       if (opts.mine && actor?.id) {
         query = query.where('userId', '=', actor.id);
+      }
+      if (opts.ownerId) query = query.where('userId', '=', opts.ownerId);
+      if (types.length) query = query.where('meetingType', 'in', types);
+      if (statuses.length) query = query.where('status', 'in', statuses as any);
+      if (range.from) query = query.where('startedAt', '>=', range.from);
+      if (range.toExclusive) query = query.where('startedAt', '<', range.toExclusive);
+      if (archived === 'exclude') {
+        query = query.where('archivedAt', 'is', null).where('status', '!=', 'archived');
+      } else if (archived === 'only') {
+        query = query.where((eb) =>
+          eb.or([eb('archivedAt', 'is not', null), eb('status', '=', 'archived')]),
+        );
       }
       if (pattern) {
         query = query.where((eb) =>
@@ -785,6 +826,117 @@ export class MeetingService {
     }
 
     return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  // ──────────── archive (MEET_CONTRACT.md §3) ────────────
+
+  /**
+   * Put a meeting aside: status "archived" and archived_at, nothing else.
+   * Not a deletion — every record, file and page stays; the list hides it
+   * by default and unarchive restores the status it had. Same edit rule as
+   * rename. Never while recording or processing. Status and timeline event
+   * are written directly: an archive is not news, so no notification.
+   */
+  async archive(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (meeting.status === 'archived') {
+      return this.toCamelMeeting(meeting, actor);
+    }
+    if (
+      ['recording', 'created', 'stopping'].includes(meeting.status) ||
+      PROCESSING_STATUSES.has(meeting.status) ||
+      mayBeLive(await this.pipelineJobState(meetingId))
+    ) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'meeting_busy',
+        message:
+          'Cette réunion est en cours d’enregistrement ou de traitement : archivez-la quand le traitement sera terminé.',
+      });
+    }
+    await this.db.transaction().execute(async (trx) => {
+      const updated = await trx
+        .updateTable('meetings')
+        .set({ status: 'archived', archivedAt: new Date() })
+        .where('id', '=', meetingId)
+        .where('status', '=', meeting.status)
+        .where('deletedAt', 'is', null)
+        .executeTakeFirst();
+      if (Number(updated.numUpdatedRows ?? 0) === 0) return;
+      await trx
+        .insertInto('meetingProcessingEvents')
+        .values({
+          meetingId,
+          event: 'transition',
+          fromStatus: meeting.status,
+          toStatus: 'archived',
+          actorId: actor.id,
+          detail: jsonbDetail({ archived: true }),
+        })
+        .execute();
+    });
+    return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  /** Back to the status the meeting had when it was archived. */
+  async unarchive(actor: MeetingActor, meetingId: string) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (meeting.status !== 'archived') {
+      return this.toCamelMeeting(meeting, actor);
+    }
+    const archivedFrom = await this.db
+      .selectFrom('meetingProcessingEvents')
+      .select('fromStatus')
+      .where('meetingId', '=', meetingId)
+      .where('event', '=', 'transition')
+      .where('toStatus', '=', 'archived')
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    const previous = archivedFrom?.fromStatus ?? null;
+    // A status that would restart work (or an unknown one) comes back as
+    // "completed": unarchiving never resumes a recording or a run.
+    const restored =
+      previous &&
+      previous !== 'archived' &&
+      !PROCESSING_STATUSES.has(previous) &&
+      !['recording', 'created', 'stopping', 'deleted', 'deletion_pending'].includes(previous)
+        ? previous
+        : 'completed';
+    await this.db.transaction().execute(async (trx) => {
+      const updated = await trx
+        .updateTable('meetings')
+        .set({ status: restored as any, archivedAt: null })
+        .where('id', '=', meetingId)
+        .where('status', '=', 'archived')
+        .where('deletedAt', 'is', null)
+        .executeTakeFirst();
+      if (Number(updated.numUpdatedRows ?? 0) === 0) return;
+      await trx
+        .insertInto('meetingProcessingEvents')
+        .values({
+          meetingId,
+          event: 'transition',
+          fromStatus: 'archived',
+          toStatus: restored,
+          actorId: actor.id,
+          detail: jsonbDetail({ unarchived: true }),
+        })
+        .execute();
+    });
+    return this.toCamelMeeting(await this.getMeetingOrThrow(meetingId), actor);
+  }
+
+  /** Changes that would move an archived meeting's status wait for unarchive. */
+  private assertNotArchived(meeting: { status: string }) {
+    if (meeting.status === 'archived') {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'meeting_archived',
+        message: 'Cette réunion est archivée : désarchivez-la avant de la traiter ou de la publier.',
+      });
+    }
   }
 
   // ──────────── markers ("Marquer un moment") ────────────
@@ -1063,6 +1215,7 @@ export class MeetingService {
     },
   ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertNotArchived(meeting);
 
     if (!opts.force && !PROCESSABLE_STATUSES.has(meeting.status)) {
       throw new BadRequestException(
@@ -1326,6 +1479,7 @@ export class MeetingService {
     },
   ) {
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    if (req.confirm) this.assertNotArchived(meeting);
     if (req.confirm && PROCESSING_STATUSES.has(meeting.status) &&
         mayBeLive(await this.pipelineJobState(meetingId))) {
       throw new ConflictException(
@@ -1544,6 +1698,7 @@ export class MeetingService {
   ) {
     const actor = this.actorOf(user, workspaceId);
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertNotArchived(meeting);
     // The meeting's own permission is not enough: filing in Hub also needs
     // the right to create pages in that space.
     await this.assertCanPublishIn(user, workspaceId, opts.spaceId);
@@ -1769,6 +1924,7 @@ export class MeetingService {
       this.actorOf(user, workspaceId),
       meetingId,
     );
+    this.assertNotArchived(meeting);
     if (PROCESSING_STATUSES.has(meeting.status)) {
       throw new BadRequestException(
         'Le traitement de cette réunion n’est pas terminé. Publiez-la quand l’analyse sera prête.',
@@ -4969,6 +5125,8 @@ export class MeetingService {
       failureReason: row.failureReason,
       cost: this.parseJson(row.cost),
       publishedAt: row.publishedAt,
+      // Additive: set while the meeting is archived (MEET_CONTRACT.md §3).
+      archivedAt: row.archivedAt ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       deletedAt: row.deletedAt,
