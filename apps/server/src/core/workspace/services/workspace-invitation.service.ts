@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { UserRole } from '../../../common/helpers/types/permission';
 import { AcceptInviteDto, InviteUserDto } from '../dto/invitation.dto';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { InjectKysely } from 'nestjs-kysely';
@@ -120,6 +122,12 @@ export class WorkspaceInvitationService {
     authUser: User,
   ): Promise<void> {
     const { emails, role, groupIds } = inviteUserDto;
+
+    // An invitation may not grant more than its author holds: only an owner
+    // can invite an owner (role changes enforce the same ceiling).
+    if (role === UserRole.OWNER && authUser.role !== UserRole.OWNER) {
+      throw new ForbiddenException('Only an owner can invite an owner');
+    }
 
     let invites: WorkspaceInvitation[] = [];
 

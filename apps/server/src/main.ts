@@ -13,6 +13,11 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyIp from 'fastify-ip';
 import { InternalLogFilter } from './common/logger/internal-log-filter';
 import { NO_WORKSPACE_REQUIRED_URL_PREFIXES } from './common/middlewares/domain-exempt-routes';
+import {
+  csrfModeFromEnv,
+  registerCsrfProtection,
+} from './common/security/csrf-protection';
+import { allowedOriginsFromEnv } from './common/security/allowed-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -64,6 +69,15 @@ async function bootstrap() {
   await app.register(fastifyIp);
   await app.register(fastifyMultipart);
   await app.register(fastifyCookie);
+
+  // On HTTPS the session cookie is SameSite=None, so it rides cross-site
+  // requests: unsafe cookie-authenticated requests must prove they come from
+  // a trusted origin (see csrf-protection.ts).
+  registerCsrfProtection(
+    app.getHttpAdapter().getInstance(),
+    allowedOriginsFromEnv(),
+    csrfModeFromEnv(),
+  );
 
   // NOTE: the OAuth token/consent/register endpoints receive
   // `application/x-www-form-urlencoded` bodies (RFC 6749 §4.1.3). We do NOT
@@ -145,8 +159,9 @@ async function bootstrap() {
   // Strict, credentialed CORS for the app API: only the configured origin (and
   // its subdomains) may read cookie-authenticated responses. `cb(null, false)`
   // (not `cb(Error)`) on a disallowed origin: we omit the ACAO header so the
-  // browser blocks the cross-origin read, WITHOUT 500-ing the request. CSRF on
-  // state-changing calls is separately covered by the SameSite=Lax auth cookie.
+  // browser blocks the cross-origin read, WITHOUT 500-ing the request. CORS
+  // only stops cross-origin READS; forged state-changing requests are refused
+  // by registerCsrfProtection above (the cookie is SameSite=None on HTTPS).
   const strictOrigin = (origin: string, cb: (e: Error | null, ok: boolean) => void) => {
     // Same-origin (Postman, curl, server-to-server) requests have no Origin.
     if (!origin) return cb(null, true);

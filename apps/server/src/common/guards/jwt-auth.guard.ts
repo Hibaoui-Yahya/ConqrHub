@@ -1,8 +1,13 @@
 import {
   ExecutionContext,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import {
+  clearAuthCookie,
+  usesAuthCookie,
+} from '../../core/auth/auth-cookie.util';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { Reflector } from '@nestjs/core';
@@ -33,11 +38,27 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   handleRequest(err: any, user: any, info: any, ctx: ExecutionContext) {
     if (err || !user) {
+      // A session cookie that no longer authenticates (revoked, expired,
+      // other workspace) is cleared on the 401, so the browser stops sending
+      // it and the sign-in page cannot bounce on it. An outage (503) is NOT a
+      // logout: the cookie is kept and the client retries.
+      if (!(err instanceof ServiceUnavailableException)) {
+        this.clearStaleSessionCookie(ctx);
+      }
       throw err || new UnauthorizedException();
     }
 
     this.setJoinedWorkspacesCookie(user, ctx);
     return user;
+  }
+
+  private clearStaleSessionCookie(ctx: ExecutionContext) {
+    if (ctx.getType() !== 'http') return;
+    const req = ctx.switchToHttp().getRequest();
+    const res = ctx.switchToHttp().getResponse();
+    if (usesAuthCookie(req) && typeof res?.clearCookie === 'function') {
+      clearAuthCookie(res, this.environmentService);
+    }
   }
 
   setJoinedWorkspacesCookie(user: any, ctx: ExecutionContext) {

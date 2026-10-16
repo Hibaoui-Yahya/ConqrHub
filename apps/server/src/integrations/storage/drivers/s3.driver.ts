@@ -1,4 +1,9 @@
-import { S3StorageConfig, StorageDriver, StorageOption } from '../interfaces';
+import {
+  S3StorageConfig,
+  SignedUrlResponseOverrides,
+  StorageDriver,
+  StorageOption,
+} from '../interfaces';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -216,10 +221,20 @@ export class S3Driver implements StorageDriver {
     return `${this.config.baseUrl ?? this.config.endpoint}/${this.config.bucket}/${filePath}`;
   }
 
-  async getSignedUrl(filePath: string, expiresIn: number): Promise<string> {
+  async getSignedUrl(
+    filePath: string,
+    expiresIn: number,
+    response?: SignedUrlResponseOverrides,
+  ): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.config.bucket,
       Key: filePath,
+      ...(response?.contentType
+        ? { ResponseContentType: response.contentType }
+        : {}),
+      ...(response?.contentDisposition
+        ? { ResponseContentDisposition: response.contentDisposition }
+        : {}),
     });
     return await getSignedUrl(this.s3Client, command, { expiresIn });
   }

@@ -36,6 +36,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { Queue } from 'bullmq';
 import { AccountEmailService } from '../../../integrations/mail/account-email.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SESSIONS_REVOKED_EVENT,
+  SessionsRevokedEvent,
+} from '../../session/session-events';
 import {
   generateRandomSuffixNumbers,
   diffAuditTrackedFields,
@@ -75,7 +80,14 @@ export class WorkspaceService {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
     @Optional() private readonly accountEmails?: AccountEmailService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
+
+  /** Drops the user's live connections now that their sessions are revoked. */
+  private notifySessionsRevoked(userId: string, workspaceId: string) {
+    const event: SessionsRevokedEvent = { userId, workspaceId, all: true };
+    this.eventEmitter?.emit(SESSIONS_REVOKED_EVENT, event);
+  }
 
   async findById(workspaceId: string) {
     return this.workspaceRepo.findById(workspaceId);
@@ -778,6 +790,7 @@ export class WorkspaceService {
       );
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+    this.notifySessionsRevoked(userId, workspaceId);
 
     await this.accountEmails?.accessRemoved(user);
 
@@ -900,6 +913,7 @@ export class WorkspaceService {
 
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+    this.notifySessionsRevoked(userId, workspaceId);
 
     // `user` still holds the address the deletion just overwrote.
     await this.accountEmails?.accessRemoved(user, true);

@@ -30,6 +30,11 @@ import {
   type MeetingActor,
 } from './meeting-access.util';
 import {
+  audioResponseHeaders,
+  detectAudioContainer,
+  storageFileName,
+} from './meeting-media.util';
+import {
   formatMeetingDateTime,
   reportLabels,
   reportLanguageInstruction,
@@ -458,8 +463,42 @@ export class MeetingService {
             maxBytes: limits.maxBytes,
           });
         }
+        // After the access checks, so a caller without access learns nothing
+        // about the meeting from a format error. A part carrying its own
+        // header is sniffed; a continuation part has no header and inherits
+        // the container of the header part it continues (same source, the
+        // latest one before it), which was itself sniffed when it landed.
+        let detected: { mime: string; ext: string } | null;
+        if (continuation) {
+          const base = others
+            .filter(
+              (chunk) =>
+                chunk.source === meta.source &&
+                !chunk.continuation &&
+                Number(chunk.sequence) < meta.sequence,
+            )
+            .sort((a, b) => Number(b.sequence) - Number(a.sequence))[0];
+          const baseExt =
+            typeof base?.path === 'string'
+              ? base.path.split('.').pop()?.toLowerCase()
+              : undefined;
+          detected =
+            base && typeof base.mime === 'string' && baseExt
+              ? { mime: base.mime, ext: baseExt }
+              : null;
+          if (!detected) {
+            throw new BadRequestException(
+              'Ce morceau est une suite, mais aucun morceau avec en-tête audio ne le précède pour cette source.',
+            );
+          }
+        } else {
+          detected = detectAudioContainer(file);
+          if (!detected) {
+            throw new BadRequestException('Unsupported audio format');
+          }
+        }
         const prefix = meeting.audioStoragePrefix || `meetings/${meetingId}`;
-        const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.webm`;
+        const chunkPath = `${prefix}/chunks/${meta.source}-${meta.sequence}-${randomUUID()}.${detected.ext}`;
         await this.storage.upload(chunkPath, file);
         uploadedPath = chunkPath;
         replacedPath = stored?.path ?? null;
@@ -470,7 +509,7 @@ export class MeetingService {
           durationMs: meta.durationMs,
           path: chunkPath,
           bytes: file.length,
-          mime: meta.mime || 'audio/webm',
+          mime: detected.mime,
           sha256,
           ...(continuation ? { continuation: true } : {}),
         };
@@ -1144,6 +1183,12 @@ export class MeetingService {
     if (!opts.consent) {
       throw new BadRequestException('Consent is required to upload a meeting');
     }
+    // The declared type and name come from the client; only the file's own
+    // bytes decide what it is and how it will be served back.
+    const detected = detectAudioContainer(file);
+    if (!detected) {
+      throw new BadRequestException('Unsupported audio format');
+    }
 
     const template = await this.templates.resolveForMeeting(workspaceId, opts.templateId, opts.meetingType);
     const meetingType = opts.templateId && template ? template.baseType : opts.meetingType || template?.baseType || 'generic-meeting';
@@ -1170,7 +1215,7 @@ export class MeetingService {
 
     // Store the file
     const prefix = `meetings/${meeting.id}`;
-    const filePath = `${prefix}/original/${filename}`;
+    const filePath = `${prefix}/original/${storageFileName(filename, detected.ext)}`;
     await this.storage.upload(filePath, file);
 
     await this.db
@@ -1180,7 +1225,7 @@ export class MeetingService {
         audioManifest: JSON.stringify({
           originalPath: filePath,
           sizeBytes: file.length,
-          mime: opts.mime || this.mimeForPath(filename),
+          mime: detected.mime,
         }),
         durationMs: null,
       })
@@ -2659,7 +2704,13 @@ export class MeetingService {
     }
 
     try {
-      const url = await this.storage.getSignedUrl(resolved.filePath, 3600);
+      // The object's stored Content-Type is not trusted (older uploads kept
+      // the client's): force the safe type and disposition on the URL itself.
+      const safe = audioResponseHeaders(resolved.mime);
+      const url = await this.storage.getSignedUrl(resolved.filePath, 3600, {
+        contentType: safe['Content-Type'],
+        contentDisposition: safe['Content-Disposition'],
+      });
       return { url, expiresIn: 3600 };
     } catch (error) {
       if (!isStorageObjectNotFound(error)) throw error;

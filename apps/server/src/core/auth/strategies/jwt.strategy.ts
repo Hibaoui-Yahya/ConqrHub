@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
@@ -14,9 +19,25 @@ import { ModuleRef } from '@nestjs/core';
 import { RedisService } from '@nestjs-labs/nestjs-ioredis';
 import type { Redis } from 'ioredis';
 import type { User, Workspace } from '@docmost/db/types/entity.types';
+import {
+  AuthStateUnavailableException,
+  HubSessionValidator,
+} from '../services/hub-session-validator.service';
+import { SuiteTokenFamilyRepo } from '@docmost/db/repos/auth/suite-token-family.repo';
+import {
+  clientPolicyMode,
+  clientProfiles,
+  epochMatches,
+  familyIsLive,
+  hubSessionEpoch,
+  suiteRouteAllowed,
+  suiteTokenEpoch,
+} from '../idp/suite-token-policy';
+import { ForbiddenException } from '@nestjs/common';
 
-// Short cache TTL. Trades up to N seconds of stale state (e.g., a freshly
-// revoked session) for ~3× fewer DB hits per authenticated request under load.
+// Short cache TTL for the user + workspace objects only. Session validity is
+// never served from this cache: a revoked session must stop working on the
+// very next request, so the user_sessions row is read every time.
 const JWT_VALIDATE_CACHE_TTL_SECONDS = 30;
 
 interface CachedAuthResult {
@@ -37,6 +58,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly environmentService: EnvironmentService,
     private moduleRef: ModuleRef,
     private readonly redisService: RedisService,
+    private readonly sessionValidator: HubSessionValidator,
+    private readonly families: SuiteTokenFamilyRepo,
   ) {
     super({
       jwtFromRequest: (req: FastifyRequest) => {
@@ -90,84 +113,168 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       payload.type === undefined &&
       (payload as { aud?: string }).aud === SUITE_IDP_ACCESS_AUD
     ) {
-      return this.validateSuiteToken(payload);
+      return this.validateSuiteToken(req, payload);
     }
 
     if (payload.type !== JwtType.ACCESS) {
       throw new UnauthorizedException();
     }
+    // Emergency revocation / backup restore: tokens minted under an older
+    // epoch are refused, whatever the (possibly restored) session row says.
+    if (!epochMatches((payload as { ep?: number }).ep, hubSessionEpoch())) {
+      throw new UnauthorizedException();
+    }
 
     const key = this.cacheKey(payload);
+    const sessionId = (payload as JwtPayload).sessionId;
 
-    // Cache hit → skip workspace + user + session DB lookups entirely.
-    // We still keep session-activity tracking because that operation is
-    // already throttled and async (not on the hot path).
-    try {
-      const cached = await this.redis.get(key);
-      if (cached) {
-        const parsed = JSON.parse(cached) as CachedAuthResult;
-        const sessionId = (payload as JwtPayload).sessionId;
-        if (sessionId) {
-          req.raw.sessionId = sessionId;
-          this.sessionActivityService.trackActivity(
+    // The session row is authoritative and is checked on every request, cache
+    // hit or not: a logout, device revocation, password reset or deactivation
+    // must take effect immediately (deactivation revokes the sessions in the
+    // same transaction). Throws 401 when revoked, 503 when unreadable. The
+    // cache read runs alongside it; its result is used only if the check passes.
+    const [, cached] = await Promise.all([
+      sessionId
+        ? this.sessionValidator.assertSessionActive({
+            sub: payload.sub,
+            workspaceId: payload.workspaceId,
             sessionId,
-            payload.sub,
-            payload.workspaceId,
-          );
-        }
-        return parsed;
+          })
+        : undefined,
+      this.readCache(key),
+    ]);
+
+    // Cache hit → skip the workspace + user lookups. Session-activity
+    // tracking is throttled and async (not on the hot path).
+    if (cached) {
+      if (sessionId) {
+        req.raw.sessionId = sessionId;
+        this.sessionActivityService.trackActivity(
+          sessionId,
+          payload.sub,
+          payload.workspaceId,
+        );
       }
-    } catch (err) {
-      // Redis unreachable / parse error — fall through to authoritative DB
-      // lookups so auth still works when the cache layer is down.
-      this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
+      return cached;
     }
 
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    const { workspace, user } = await this.loadWorkspaceAndUser(payload);
 
-    if (!workspace) {
-      throw new UnauthorizedException();
-    }
-    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
-
-    if (!user || isUserDisabled(user)) {
-      throw new UnauthorizedException();
-    }
-
-    if ((payload as JwtPayload).sessionId) {
-      const sessionId = (payload as JwtPayload).sessionId;
-      const session = await this.userSessionRepo.findActiveById(sessionId);
-      if (!session || session.userId !== payload.sub || session.workspaceId !== payload.workspaceId) {
-        throw new UnauthorizedException();
-      }
+    if (sessionId) {
       req.raw.sessionId = sessionId;
       this.sessionActivityService.trackActivity(sessionId, payload.sub, payload.workspaceId);
     }
 
-    // Best-effort cache write; never let a Redis hiccup fail the request.
+    await this.writeCache(key, { user, workspace });
+    return { user, workspace };
+  }
+
+  /** Cached user + workspace, or null. Redis down or bad data is a miss. */
+  private async readCache(key: string): Promise<CachedAuthResult | null> {
+    try {
+      const cached = await this.redis.get(key);
+      return cached ? (JSON.parse(cached) as CachedAuthResult) : null;
+    } catch (err) {
+      // Fall through to the authoritative DB lookups so auth still works
+      // when the cache layer is down.
+      this.logger.debug(`JWT cache read failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Best-effort cache write; never let a Redis hiccup fail the request. */
+  private async writeCache(key: string, value: CachedAuthResult): Promise<void> {
     try {
       await this.redis.set(
         key,
-        JSON.stringify({ user, workspace } satisfies CachedAuthResult),
+        JSON.stringify(value),
         'EX',
         JWT_VALIDATE_CACHE_TTL_SECONDS,
       );
     } catch (err) {
       this.logger.debug(`JWT cache write failed: ${(err as Error).message}`);
     }
-
-    return { user, workspace };
   }
 
-  /** Stateless (no Hub session row): resolve and validate user + workspace. */
+  /**
+   * Suite access tokens are short-lived but NOT stateless any more: the token
+   * family they belong to is read on every request, so an access token issued
+   * before a logout, revocation or deactivation stops working at once. The
+   * client's route profile is enforced here, on the Hub, not only by the
+   * client's own proxy. Unreadable state is a 503, never an acceptance.
+   */
   private async validateSuiteToken(
-    payload: (JwtPayload | JwtApiKeyPayload) & { jti?: string },
+    req: any,
+    payload: (JwtPayload | JwtApiKeyPayload) & {
+      jti?: string;
+      fid?: string;
+      azp?: string;
+      ep?: number;
+    },
   ): Promise<CachedAuthResult> {
-    const workspace = await this.workspaceRepo.findById(payload.workspaceId);
+    if (!payload.fid || !epochMatches(payload.ep, suiteTokenEpoch())) {
+      throw new UnauthorizedException();
+    }
+    // The family row is authoritative and read on every request (it also
+    // carries the user's disabled state). The user + workspace cache, shared
+    // in shape with Hub sessions, is read alongside it and used only once the
+    // family is known to be live.
+    const key = `jwt:auth:${payload.workspaceId}:suite:${payload.fid}`;
+    const [family, cached] = await Promise.all([
+      this.families.findForRequest(payload.fid).catch((err) => {
+        this.logger.error(`Token family lookup failed: ${(err as Error)?.message ?? err}`);
+        throw new AuthStateUnavailableException();
+      }),
+      this.readCache(key),
+    ]);
+    if (
+      !familyIsLive(family, {
+        userId: payload.sub,
+        workspaceId: payload.workspaceId,
+        clientId: payload.azp,
+      })
+    ) {
+      throw new UnauthorizedException();
+    }
+    const url: string = req?.raw?.url ?? req?.url ?? '';
+    const method: string = req?.method ?? req?.raw?.method ?? 'GET';
+    if (!suiteRouteAllowed(clientProfiles(), payload.azp, method, url, req?.body)) {
+      const route = `${method} ${url.split('?')[0]}`;
+      if (clientPolicyMode() === 'report') {
+        this.logger.warn(`Suite client ${payload.azp} outside its profile: ${route}`);
+      } else {
+        this.logger.warn(`Suite client ${payload.azp} refused: ${route}`);
+        throw new ForbiddenException('Route not allowed for this client');
+      }
+    }
+    if (cached) return cached;
+    const result = await this.loadWorkspaceAndUser(payload);
+    await this.writeCache(key, result);
+    return result;
+  }
+
+  /**
+   * Workspace + active user, read from the database. An unreadable database
+   * is a 503, never a 401: an outage must not look like a revoked login.
+   */
+  private async loadWorkspaceAndUser(
+    payload: { sub: string; workspaceId: string },
+  ): Promise<CachedAuthResult> {
+    let workspace: Workspace | undefined;
+    let user: User | undefined;
+    try {
+      [workspace, user] = await Promise.all([
+        this.workspaceRepo.findById(payload.workspaceId),
+        this.userRepo.findById(payload.sub, payload.workspaceId),
+      ]);
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      this.logger.error(`Auth lookup failed: ${(err as Error)?.message ?? err}`);
+      throw new AuthStateUnavailableException();
+    }
     if (!workspace) {
       throw new UnauthorizedException();
     }
-    const user = await this.userRepo.findById(payload.sub, payload.workspaceId);
     if (!user || isUserDisabled(user)) {
       throw new UnauthorizedException();
     }

@@ -305,7 +305,9 @@ suite('ConqrMeet contract routes', () => {
     });
     async function recordAndTranscribe(service: MeetingService, languageConfig?: Record<string, unknown>) {
       const started = await service.start(ws1, creator.id, { title: 'Langue', consent: true, languageConfig });
-      await service.ingestChunk(creator, started.id, Buffer.from('audio'), {
+      // A WebM (EBML) header: chunks are sniffed before they are stored.
+      const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('audio')]);
+      await service.ingestChunk(creator, started.id, webm, {
         source: 'mic',
         sequence: 0,
         startMs: 0,

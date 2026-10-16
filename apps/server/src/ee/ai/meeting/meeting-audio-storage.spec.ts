@@ -4,6 +4,7 @@ import * as postgres from 'postgres';
 import { randomUUID } from 'node:crypto';
 import { MeetingService } from './meeting.service';
 import { mixMeetingPlayback } from './meeting-audio.util';
+import { detectAudioContainer } from './meeting-media.util';
 
 // Unused document/provider constructors are injected below. Keep their ESM
 // editor/SDK dependencies outside this audio + PostgreSQL integration test.
@@ -21,6 +22,20 @@ jest.mock('./meeting-audio.util', () => ({
   // No ffmpeg in unit runs: "cannot measure" keeps the existing path.
   inspectAudioSignal: jest.fn(async () => null),
 }));
+// The test bytes are short labels ('mic', 'remote'…) that the fake STT echoes
+// back. Container sniffing has its own spec (meeting-media.util.spec.ts); here
+// a label counts as WebM, and one test below restores the real check.
+jest.mock('./meeting-media.util', () => {
+  const actual = jest.requireActual('./meeting-media.util');
+  return {
+    ...actual,
+    detectAudioContainer: jest.fn(
+      (buf: Buffer) =>
+        actual.detectAudioContainer(buf) ??
+        (buf?.length ? { mime: 'audio/webm', ext: 'webm' } : null),
+    ),
+  };
+});
 
 // This integration spec runs against a disposable local PostgreSQL container.
 const suite = process.env.MEETING_TEST_DATABASE_URL ? describe : describe.skip;
@@ -249,6 +264,50 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       if (before === undefined) delete process.env.MEETING_CAPTURE_MAX_MINUTES;
       else process.env.MEETING_CAPTURE_MAX_MINUTES = before;
     }
+  });
+
+  it('sniffs a header part, and a continuation part inherits the container of the part it continues', async () => {
+    const actual = jest.requireActual('./meeting-media.util');
+    const detect = detectAudioContainer as jest.Mock;
+    // A header part that is not audio is refused (the real sniffing).
+    detect.mockImplementationOnce(actual.detectAudioContainer);
+    await expect(
+      service.ingestChunk(actor, meetingId, Buffer.from('<html>'), meta('mic')),
+    ).rejects.toThrow('Unsupported audio format');
+
+    // A continuation with no header part before it is refused.
+    await expect(
+      service.ingestChunk(actor, meetingId, Buffer.from('tail'), {
+        ...meta('system'),
+        sequence: 1,
+        continuation: true,
+      }),
+    ).rejects.toThrow('aucun morceau avec en-tête');
+
+    // A real WebM header part, then headerless continuation bytes: the
+    // continuation is not sniffed and takes the header part's type.
+    const ebml = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81]);
+    detect.mockImplementation(actual.detectAudioContainer);
+    try {
+      await service.ingestChunk(actor, meetingId, ebml, meta('mic'));
+      const next = await service.ingestChunk(actor, meetingId, Buffer.from([0x00, 0x01, 0x02]), {
+        ...meta('mic'),
+        sequence: 1,
+        startMs: 3000,
+        continuation: true,
+      });
+      expect(next).toMatchObject({ duplicate: false });
+    } finally {
+      detect.mockImplementation(
+        (buf: Buffer) =>
+          actual.detectAudioContainer(buf) ??
+          (buf?.length ? { mime: 'audio/webm', ext: 'webm' } : null),
+      );
+    }
+    const chunks = (await meeting()).audioManifest.chunks;
+    const continued = chunks.find((c: any) => c.sequence === 1);
+    expect(continued).toMatchObject({ continuation: true, mime: 'audio/webm' });
+    expect(continued.path).toMatch(/\.webm$/);
   });
 
   it('stop refuses while sequences are missing and changes nothing', async () => {

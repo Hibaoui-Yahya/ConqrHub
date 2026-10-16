@@ -16,6 +16,7 @@ import {
   useRevokeAllSessionsMutation,
 } from "@/features/session/queries/session-query";
 import { formattedDate } from "@/lib/time";
+import useAuth from "@/features/auth/hooks/use-auth";
 
 const PAGE_SIZE = 5;
 
@@ -24,6 +25,7 @@ export default function SessionList() {
   const { data: sessions, isLoading } = useGetSessionsQuery();
   const revokeSessionMutation = useRevokeSessionMutation();
   const revokeAllSessionsMutation = useRevokeAllSessionsMutation();
+  const { logoutAllDevices } = useAuth();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const otherSessions = sessions?.filter((s) => !s?.isCurrentDevice) ?? [];
@@ -64,6 +66,25 @@ export default function SessionList() {
 
   return (
     <Stack>
+      <div>
+        <Text fw={500}>{t("Sign out everywhere")}</Text>
+        <Group justify="space-between" align="center" mt={4}>
+          <Text size="sm" c="dimmed">
+            {t(
+              "End every session, including this one, in ConqrHub and ConqrMeet",
+            )}
+          </Text>
+          <Button
+            variant="outline"
+            color="red"
+            size="xs"
+            onClick={() => void logoutAllDevices()}
+          >
+            {t("Sign out everywhere")}
+          </Button>
+        </Group>
+      </div>
+      <Divider />
       {otherSessions.length > 0 && (
         <>
           <div>

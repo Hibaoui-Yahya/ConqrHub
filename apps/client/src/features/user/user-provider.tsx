@@ -13,6 +13,9 @@ import { useCollabToken } from "@/features/auth/queries/auth-query.tsx";
 import { Error404 } from "@/components/ui/error-404.tsx";
 import { useEntitlements } from "@/ee/entitlement/use-entitlements";
 import { entitlementAtom } from "@/ee/entitlement/entitlement-atom";
+import api from "@/lib/api-client";
+import APP_ROUTE from "@/lib/app-route.ts";
+import { onLoggedOutElsewhere } from "@/features/auth/lib/auth-broadcast.ts";
 
 export function UserProvider({ children }: React.PropsWithChildren) {
   const [, setCurrentUser] = useAtom(currentUserAtom);
@@ -41,11 +44,32 @@ export function UserProvider({ children }: React.PropsWithChildren) {
       console.log("ws connected");
     });
 
+    // The server drops the socket when this session is revoked (logout from
+    // ConqrMeet or another device, password change, deactivation). Ask the
+    // API once: a revoked session answers 401 and the client goes to sign-in;
+    // an outage keeps the user where they are.
+    const recheckSession = () => {
+      api.post("/users/me").catch(() => undefined);
+    };
+    newSocket.on("Unauthorized", recheckSession);
+    newSocket.on("disconnect", (reason) => {
+      if (reason === "io server disconnect") recheckSession();
+    });
+
     return () => {
       console.log("ws disconnected");
       newSocket.disconnect();
     };
   }, [isError, isLoading]);
+
+  // Another tab of this browser signed out: leave too.
+  useEffect(
+    () =>
+      onLoggedOutElsewhere(() => {
+        window.location.replace(APP_ROUTE.AUTH.LOGIN);
+      }),
+    [],
+  );
 
   useQuerySubscription();
   useTreeSocket();

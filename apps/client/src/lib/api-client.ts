@@ -77,7 +77,10 @@ function redirectToLogin() {
     "/invites",
   ];
   if (!exemptPaths.some((path) => window.location.pathname.startsWith(path))) {
-    const redirectTo = window.location.pathname;
+    // Keep the whole deep link (query and fragment too, e.g. a search or an
+    // anchor in a page); getPostLoginRedirect re-checks it is same-origin.
+    const redirectTo =
+      window.location.pathname + window.location.search + window.location.hash;
     if (redirectTo === APP_ROUTE.HOME) {
       window.location.href = APP_ROUTE.AUTH.LOGIN;
     } else {

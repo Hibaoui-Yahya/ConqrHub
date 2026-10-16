@@ -11,9 +11,17 @@ import {
 } from '../../common/middlewares/audit-context.middleware';
 import * as Bowser from 'bowser';
 import { AccountEmailService } from '../../integrations/mail/account-email.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SESSIONS_REVOKED_EVENT, SessionsRevokedEvent } from './session-events';
+import { SuiteTokenFamilyRepo } from '@docmost/db/repos/auth/suite-token-family.repo';
 
 const MAX_SESSIONS_PER_USER = 25;
 const RETENTION_DAYS = 7;
+
+function retentionDays(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
 
 @Injectable()
 export class SessionService {
@@ -25,6 +33,8 @@ export class SessionService {
     private readonly environmentService: EnvironmentService,
     private readonly cls: ClsService,
     @Optional() private readonly accountEmails?: AccountEmailService,
+    @Optional() private readonly events?: EventEmitter2,
+    @Optional() private readonly suiteTokenFamilies?: SuiteTokenFamilyRepo,
   ) {}
 
   @Interval('session-cleanup', 24 * 60 * 60 * 1000)
@@ -32,6 +42,12 @@ export class SessionService {
     try {
       await this.userSessionRepo.deleteStale(RETENTION_DAYS);
       await this.userSessionRepo.trimExcessSessions(MAX_SESSIONS_PER_USER);
+      // Suite token families die with their session (triggers); the rows and
+      // their audit trail are only dropped after the retention periods.
+      await this.suiteTokenFamilies?.purge(
+        retentionDays('SUITE_TOKEN_FAMILY_RETENTION_DAYS', 30),
+        retentionDays('SUITE_SESSION_EVENT_RETENTION_DAYS', 400),
+      );
       this.logger.debug('Session cleanup completed');
     } catch (err) {
       this.logger.error('Session cleanup failed', err);
@@ -102,6 +118,7 @@ export class SessionService {
     workspaceId: string,
   ): Promise<void> {
     await this.userSessionRepo.revokeById(sessionId, userId, workspaceId);
+    this.notifyRevoked({ userId, workspaceId, sessionIds: [sessionId] });
   }
 
   async revokeAllOtherSessions(
@@ -114,6 +131,22 @@ export class SessionService {
       userId,
       workspaceId,
     );
+    this.notifyRevoked({ userId, workspaceId, allExcept: currentSessionId });
+  }
+
+  /** "Log out from all devices": every session of the user, this one too. */
+  async revokeAllSessions(userId: string, workspaceId: string): Promise<void> {
+    await this.userSessionRepo.revokeByUserId(userId, workspaceId);
+    this.notifyRevoked({ userId, workspaceId, all: true });
+  }
+
+  /** Lets long-lived connections drop now; the database stays the authority. */
+  notifyRevoked(event: SessionsRevokedEvent): void {
+    try {
+      this.events?.emit(SESSIONS_REVOKED_EVENT, event);
+    } catch (err) {
+      this.logger.warn(`Revocation event not delivered: ${(err as Error)?.message}`);
+    }
   }
 
   private parseDeviceName(userAgent: string | null): string | null {
