@@ -30,8 +30,12 @@
 @media (max-width: 767px) {
   .suiteHeader {
     padding-inline: 8px;
-    grid-template-columns: minmax(0, 1fr) minmax(120px, 42vw) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 8px;
+  }
+
+  .searchSlot {
+    display: none;
   }
 }
 
