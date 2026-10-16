@@ -84,8 +84,6 @@ export interface ReportLabels {
   noOwner: string;
   lowConfidence: string;
   agreed: string;
-  possibleDuplicate: string;
-  noProject: string;
 }
 
 const FR_LABELS: ReportLabels = {
@@ -105,8 +103,6 @@ const FR_LABELS: ReportLabels = {
   noOwner: 'Aucun responsable n’a été nommé pendant la réunion.',
   lowConfidence: 'Confiance faible : vérifiez l’extrait cité.',
   agreed: 'Convenu pendant la réunion.',
-  possibleDuplicate: 'Une tâche ConqrPlan semblable existe peut-être déjà : vérifiez avant de créer.',
-  noProject: 'Aucun projet ConqrPlan n’est associé à l’espace de cette réunion : choisissez le projet.',
 };
 
 const EN_LABELS: ReportLabels = {
@@ -126,8 +122,6 @@ const EN_LABELS: ReportLabels = {
   noOwner: 'No owner was stated in the meeting.',
   lowConfidence: 'Low confidence — check the quoted evidence.',
   agreed: 'Agreed during the meeting.',
-  possibleDuplicate: 'A similar ConqrPlan work item may already exist: check before creating.',
-  noProject: 'No ConqrPlan project is mapped to this meeting’s space: choose the project.',
 };
 
 export function reportLabels(lang: ReportLanguage): ReportLabels {

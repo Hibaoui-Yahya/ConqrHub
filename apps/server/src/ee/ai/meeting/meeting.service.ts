@@ -27,7 +27,6 @@ import {
   canEditMeeting,
   isMeetingId,
   MEETING_READ_ONLY_MESSAGE,
-  meetingSpaceIds,
   type MeetingActor,
 } from './meeting-access.util';
 import {
@@ -100,18 +99,7 @@ import {
   normalizeInsight,
 } from './meeting-insights.util';
 import { dateRange, parseStatuses, splitList } from './meeting-list.util';
-import {
-  duplicateSearchQuery,
-  LIKELY_DUPLICATE_SIMILARITY,
-  matchEvidenceSegments,
-  rankDuplicateCandidates,
-  resolveMappedProject,
-} from './meeting-proposals.util';
-
 import { reportLanguageCandidate, sttLanguage } from './meeting-stt-language.util';
-
-/** One work-item search while generating proposals. */
-const DUPLICATE_CHECK_TIMEOUT_MS = 5_000;
 import {
   applyEvaluationEdit,
   buildEvaluationMarkdown,
@@ -2328,14 +2316,7 @@ export class MeetingService {
   // ──────────── approve safe proposals ────────────
 
   async approveSafeProposals(actor: MeetingActor, meetingId: string) {
-    const meeting = await this.getEditableMeeting(actor, meetingId);
-    // The space may have been mapped (or the meeting published) since the
-    // proposals were generated: a project found now satisfies projectId.
-    let mappedProject: string | null | undefined;
-    const projectNow = async () =>
-      mappedProject !== undefined
-        ? mappedProject
-        : (mappedProject = (await this.resolveMeetingProject(meeting)).projectId);
+    await this.getEditableMeeting(actor, meetingId);
 
     const safeProposals = await this.db
       .selectFrom('meetingActionProposals')
@@ -2354,20 +2335,11 @@ export class MeetingService {
       // Validate before approving
       const validation =
         this.parseJson<Record<string, unknown>>(p.validation) || {};
-      const payload = {
-        ...(this.parseJson<Record<string, unknown>>(p.payload) ?? {}),
-        ...(this.parseJson<Record<string, unknown>>(p.editedPayload) ?? {}),
-      };
-      let missingFields = ((validation.missingFields as string[]) || []).filter(
-        (f) => !(f === 'projectId' && String(payload.projectId ?? '').trim()),
-      );
-      if (missingFields.includes('projectId') && (await projectNow())) {
-        missingFields = missingFields.filter((f) => f !== 'projectId');
-      }
+      const missingFields = (validation.missingFields as string[]) || [];
       if (missingFields.length > 0) {
         skipped.push({
           id: p.id,
-          reason: `Champs requis manquants : ${missingFields.join(', ')}`,
+          reason: `Missing required fields: ${missingFields.join(', ')}`,
         });
         continue;
       }
@@ -2537,14 +2509,10 @@ export class MeetingService {
         );
         return;
       }
-      // A proposal made before the meeting had a mapped space (e.g. it was
-      // published afterwards) takes the space's project now.
-      const projectId =
-        String(payload.projectId ?? '').trim() ||
-        ((await this.resolveMeetingProject(meeting)).projectId ?? '');
+      const projectId = String(payload.projectId ?? '').trim();
       if (!projectId) {
         await fail(
-          'Aucun projet ConqrPlan n’est indiqué pour cette tâche : choisissez le projet (projectId), puis relancez.',
+          'A ConqrPlane project is required — set projectId and retry.',
         );
         return;
       }
@@ -4940,13 +4908,7 @@ export class MeetingService {
    * the idempotency key never lets a retry insert a duplicate.
    */
   private async generateProposals(
-    meeting: {
-      id: string;
-      workspaceId: string;
-      userId: string;
-      spaceId?: string | null;
-      settings?: unknown;
-    },
+    meeting: { id: string; workspaceId: string },
     text: string,
     transcriptVersion: number,
     language: ReportLanguage = 'fr',
@@ -4975,32 +4937,12 @@ export class MeetingService {
           : [];
       if (!Array.isArray(items)) return;
 
-      const drafts = items.slice(0, 12).flatMap((item, index) => {
+      const rows = items.slice(0, 12).flatMap((item, index) => {
         const it = (item ?? {}) as Record<string, unknown>;
         const title = String(it.title ?? '')
           .trim()
           .slice(0, 200);
-        return title ? [{ it, index, title }] : [];
-      });
-      if (drafts.length === 0) {
-        await this.write((trx) =>
-          trx
-            .deleteFrom('meetingActionProposals')
-            .where('meetingId', '=', meetingId)
-            .where('status', 'in', ['proposed', 'draft'])
-            .execute(),
-        );
-        return;
-      }
-      // Context shared by every proposal: the transcript segments the
-      // quotes come from, and the ConqrPlan project of the meeting's space.
-      const { segments } = await this.latestTranscriptText(meetingId);
-      const project = await this.resolveMeetingProject(meeting);
-      const duplicates = await Promise.all(
-        drafts.map((d) => this.duplicateCheck(meeting, d.title, project.projectId)),
-      );
-
-      const rows = drafts.map(({ it, index, title }, i) => {
+        if (!title) return [];
         const owner = typeof it.owner === 'string' ? it.owner.trim() : '';
         const dueDate = typeof it.dueDate === 'string' ? it.dueDate.trim() : '';
         const quote =
@@ -5009,53 +4951,42 @@ export class MeetingService {
           typeof it.confidence === 'number' && Number.isFinite(it.confidence)
             ? Math.max(0, Math.min(1, it.confidence))
             : 0.5;
-        const duplicate = duplicates[i];
         const warnings: string[] = [];
         if (!owner) warnings.push(labels.noOwner);
         if (confidence < 0.6) warnings.push(labels.lowConfidence);
-        if (!project.projectId) warnings.push(labels.noProject);
-        if (duplicate.likelyDuplicate) warnings.push(labels.possibleDuplicate);
-        const missingFields = project.projectId ? [] : ['projectId'];
-        return {
-          meetingId,
-          workspaceId: meeting.workspaceId,
-          kind: 'work_item',
-          targetApp: 'conqrplane',
-          title,
-          payload: JSON.stringify({
+        return [
+          {
+            meetingId,
+            workspaceId: meeting.workspaceId,
+            kind: 'work_item',
+            targetApp: 'conqrplane',
             title,
-            description: String(it.description ?? '')
-              .trim()
-              .slice(0, 2000),
-            owner: owner || null,
-            dueDate: dueDate || null,
-            ...(project.projectId ? { projectId: project.projectId } : {}),
-          }),
-          reason:
-            String(it.description ?? '')
-              .trim()
-              .slice(0, 500) || labels.agreed,
-          evidence: JSON.stringify(
-            quote ? [{ segmentIds: matchEvidenceSegments(quote, segments), quote }] : [],
-          ),
-          confidence,
-          commitment: it.commitment === 'tentative' ? 'tentative' : 'firm',
-          // A likely duplicate is never approved in bulk ("approve safe").
-          riskLevel: duplicate.likelyDuplicate ? 'normal' : 'safe',
-          validation: JSON.stringify({
-            warnings,
-            missingFields,
-            project: {
-              projectId: project.projectId,
-              source: project.source,
-              candidates: project.candidates,
-            },
-          }),
-          duplicateCheck: JSON.stringify(duplicate),
-          status: 'proposed',
-          idempotencyKey: `meeting:${meetingId}:v${transcriptVersion}:${index}`,
-          transcriptVersion,
-        };
+            payload: JSON.stringify({
+              title,
+              description: String(it.description ?? '')
+                .trim()
+                .slice(0, 2000),
+              owner: owner || null,
+              dueDate: dueDate || null,
+            }),
+            reason:
+              String(it.description ?? '')
+                .trim()
+                .slice(0, 500) || labels.agreed,
+            evidence: JSON.stringify(quote ? [{ segmentIds: [], quote }] : []),
+            confidence,
+            commitment: it.commitment === 'tentative' ? 'tentative' : 'firm',
+            riskLevel: 'safe',
+            validation: JSON.stringify({
+              warnings,
+              missingFields: ['projectId'],
+            }),
+            duplicateCheck: JSON.stringify({ searched: false, candidates: [] }),
+            status: 'proposed',
+            idempotencyKey: `meeting:${meetingId}:v${transcriptVersion}:${index}`,
+            transcriptVersion,
+          },
+        ];
       });
       await this.write(async (trx) => {
         await trx
@@ -5074,104 +5005,6 @@ export class MeetingService {
       if (err instanceof StaleRunError) throw err;
       this.logger.warn(
         `Meeting ${meetingId}: proposal generation failed: ${(err as Error).message}`,
-      );
-    }
-  }
-
-  /**
-   * The ConqrPlan project of a meeting, from the project↔space mappings of
-   * its spaces (its own space, then the space it was published into). No
-   * space, no mapping or several projects → null: the reviewer chooses.
-   */
-  private async resolveMeetingProject(meeting: {
-    workspaceId: string;
-    spaceId?: string | null;
-    settings?: unknown;
-  }): Promise<{
-    projectId: string | null;
-    candidates: string[];
-    source: 'space_mapping' | 'ambiguous' | 'no_mapping' | 'no_space' | 'lookup_failed';
-  }> {
-    const spaceIds = meetingSpaceIds({
-      spaceId: meeting.spaceId ?? null,
-      settings: this.parseJson(meeting.settings),
-    });
-    if (spaceIds.length === 0) return { projectId: null, candidates: [], source: 'no_space' };
-    try {
-      const rows = await this.db
-        .selectFrom('integrationProjectSpaceMappings')
-        .select(['planeProjectId', 'mappingKind'])
-        .where('workspaceId', '=', meeting.workspaceId)
-        .where('spaceId', 'in', spaceIds)
-        .where('deletedAt', 'is', null)
-        .execute();
-      const resolved = resolveMappedProject(rows);
-      return {
-        ...resolved,
-        source: resolved.projectId ? 'space_mapping' : rows.length ? 'ambiguous' : 'no_mapping',
-      };
-    } catch (err) {
-      this.logger.warn(
-        `Meeting project mapping lookup failed: ${(err as Error).message}`,
-      );
-      return { projectId: null, candidates: [], source: 'lookup_failed' };
-    }
-  }
-
-  /**
-   * Existing ConqrPlan work items with nearly the same title, through the
-   * work-item search, as the meeting's creator (read scope). Bounded by
-   * DUPLICATE_CHECK_TIMEOUT_MS; Plan not connected, slow or failing → the
-   * proposal is kept with `searched: false` and a reason, never dropped.
-   */
-  /** A property so tests can shorten it. */
-  private duplicateCheckTimeoutMs = DUPLICATE_CHECK_TIMEOUT_MS;
-
-  private async duplicateCheck(
-    meeting: { workspaceId: string; userId: string },
-    title: string,
-    projectId: string | null,
-  ): Promise<Record<string, unknown> & { likelyDuplicate?: boolean }> {
-    const skipped = (reason: string, extra: Record<string, unknown> = {}) => ({
-      searched: false,
-      reason,
-      candidates: [],
-      ...extra,
-    });
-    if (typeof this.plane?.isEnabled !== 'function' || !this.plane.isEnabled()) {
-      return skipped('plan_not_connected');
-    }
-    const query = duplicateSearchQuery(title);
-    if (!query) return skipped('empty_title');
-    try {
-      const delegation = this.delegatedTokens.mintForPlane({
-        hubUserId: meeting.userId,
-        hubWorkspaceId: meeting.workspaceId,
-        scope: [DELEGATED_SCOPES.workItemRead],
-      });
-      const { results } = await withTimeout(
-        this.plane.searchWorkItems(
-          { query, limit: 10, ...(projectId ? { projectId } : {}) },
-          { delegation: delegation.token, correlationId: delegation.jti },
-        ),
-        this.duplicateCheckTimeoutMs,
-      );
-      const candidates = rankDuplicateCandidates(title, results ?? []);
-      return {
-        searched: true,
-        searchedAt: new Date().toISOString(),
-        query,
-        projectId,
-        scope: projectId ? 'project' : 'workspace',
-        candidates,
-        likelyDuplicate: (candidates[0]?.similarity ?? 0) >= LIKELY_DUPLICATE_SIMILARITY,
-      };
-    } catch (err) {
-      if (err instanceof StaleRunError) throw err;
-      const msg = (err instanceof Error ? err.message : String(err)).slice(0, 200);
-      this.logger.warn(`Duplicate check unavailable for "${title.slice(0, 60)}": ${msg}`);
-      return skipped(
-        (err as Error)?.name === 'PipelineTimeoutError' ? 'timeout' : 'unavailable',
       );
     }
   }
