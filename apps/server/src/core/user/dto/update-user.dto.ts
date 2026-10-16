@@ -107,6 +107,11 @@ export class FirstRunDto {
   @IsBoolean()
   hubTourSeen?: boolean;
 
+  /** Set by ConqrMeet (through its BFF), so its tour shows once per person. */
+  @IsOptional()
+  @IsBoolean()
+  meetTourSeen?: boolean;
+
   /** Role shown on the profile and used to pick the onboarding track. */
   @IsOptional()
   @IsString()

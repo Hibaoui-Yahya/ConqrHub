@@ -9,12 +9,12 @@ import {
 } from "@tabler/icons-react";
 import { Group, Button, Badge, Text } from "@mantine/core";
 import React, { useState, useMemo, useEffect } from "react";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
-import { searchSpotlightStore } from "../constants.ts";
+import { searchSpotlight, searchSpotlightStore } from "../constants.ts";
 import classes from "./search-spotlight.module.css";
 import { federatedSearch } from "@/features/integration/services/integration-service";
 import api from "@/lib/api-client";
@@ -63,6 +63,8 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
   const hasAttachmentIndexing = useHasFeature(Feature.ATTACHMENT_INDEXING);
   const [query, setQuery] = useState("");
   const [debouncedSearchQuery] = useDebouncedValue(query, 300);
+  // Phones: the search takes the whole screen, like a native app.
+  const isPhone = useMediaQuery("(max-width: 36em)") ?? false;
   const [filters, setFilters] = useState<{
     spaceId?: string | null;
     contentType?: string;
@@ -181,7 +183,9 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
     <>
       <Spotlight.Root
         size="xl"
-        maxHeight={600}
+        fullScreen={isPhone}
+        radius={isPhone ? 0 : undefined}
+        maxHeight={isPhone ? "calc(100dvh - 120px)" : 600}
         store={searchSpotlightStore}
         query={query}
         onQueryChange={setQuery}
@@ -200,6 +204,8 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
             placeholder={isAiMode ? t("Ask a question...") : t("Search...")}
             leftSection={<IconSearch size={20} stroke={1.5} />}
             style={{ flex: 1 }}
+            // 16px on phones, or iOS zooms the page on focus.
+            styles={isPhone ? { input: { fontSize: 16 } } : undefined}
             onKeyDown={(e) => {
               if (e.key === "Enter" && isAiMode && query.trim() && !isAiLoading) {
                 e.preventDefault();
@@ -211,6 +217,17 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
             context={{ kind: "search" }}
             onTranscript={(text) => setQuery(text)}
           />
+          {/* Full screen on a phone: no Escape key, so a visible way out. */}
+          {isPhone && (
+            <Button
+              variant="subtle"
+              color="dark"
+              size="compact-sm"
+              onClick={() => searchSpotlight.close()}
+            >
+              {t("Cancel")}
+            </Button>
+          )}
           {isAiMode && hasAiFeature && (
             <Button
               size="xs"

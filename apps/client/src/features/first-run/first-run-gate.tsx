@@ -7,6 +7,20 @@ import { hubTourOpenAtom, useFirstRun } from "./first-run.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
 
 /**
+ * The welcome and the tour only start where the person begins a visit (the
+ * home page). A link to a page, from an e-mail or from ConqrMeet, always
+ * opens that page; the welcome waits for the next visit to the home page.
+ */
+function isEntryRoute(pathname: string): boolean {
+  return pathname === "/" || pathname.startsWith("/home");
+}
+
+// At most once per page load each: if saving the state fails, the person is
+// not sent back on every return to the home page (next visit retries).
+let welcomeOffered = false;
+let tourOffered = false;
+
+/**
  * Inside the signed-in layout: sends a first-time user to the welcome
  * steps, then opens the ConqrHub tour once on the home page. The account
  * menu can reopen the tour at any time.
@@ -19,16 +33,25 @@ export function FirstRunGate() {
   const { isAdmin } = useUserRole();
 
   useEffect(() => {
-    if (!enabled || !user) return;
+    if (!enabled || !user || !isEntryRoute(location.pathname)) return;
     if (!state.onboardedAt) {
+      if (welcomeOffered) return;
+      welcomeOffered = true;
       navigate("/welcome", { replace: true });
       return;
     }
-    if (!state.hubTourSeenAt && location.pathname.startsWith("/home")) {
+    if (!state.hubTourSeenAt && !tourOffered) {
+      tourOffered = true;
       setOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, user?.id, state.onboardedAt, state.hubTourSeenAt]);
+  }, [
+    enabled,
+    user?.id,
+    state.onboardedAt,
+    state.hubTourSeenAt,
+    location.pathname,
+  ]);
 
   if (!enabled) return null;
 

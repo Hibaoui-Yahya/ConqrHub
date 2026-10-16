@@ -85,16 +85,15 @@ export function AppHeader() {
           </Link>
         </Group>
 
-        <div>
-          <Group visibleFrom="sm">
-            <SearchControl onClick={searchSpotlight.open} />
-          </Group>
-          <Group hiddenFrom="sm">
-            <SearchMobileControl onSearch={searchSpotlight.open} />
-          </Group>
+        <div className={classes.searchSlot}>
+          <SearchControl onClick={searchSpotlight.open} />
         </div>
 
         <Group className={classes.headerEnd} gap={8} wrap="nowrap">
+          {/* Phone: search is an icon with the others, not alone mid-bar. */}
+          <Box hiddenFrom="sm">
+            <SearchMobileControl onSearch={searchSpotlight.open} />
+          </Box>
           <UnstyledButton
             component={Link}
             to="/ai"
