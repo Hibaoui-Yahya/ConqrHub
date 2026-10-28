@@ -1,10 +1,15 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  MEETING_PAGE_RETAINED_MESSAGE,
+  meetingDerivedPageIdsIn,
+} from '../../page/services/meeting-derived-pages';
 import { CreateSpaceDto } from '../dto/create-space.dto';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { SpaceRepo } from '@docmost/db/repos/space/space.repo';
@@ -272,6 +277,16 @@ export class SpaceService {
     const space = await this.spaceRepo.findById(spaceId, workspaceId);
     if (!space) {
       throw new NotFoundException('Space not found');
+    }
+
+    // Deleting a space deletes its pages for good; pages made from a
+    // meeting are kept until the retention review (meeting-derived-pages.ts).
+    const retained = await meetingDerivedPageIdsIn(this.db, {
+      workspaceId,
+      spaceId,
+    });
+    if (retained.length > 0) {
+      throw new ConflictException(MEETING_PAGE_RETAINED_MESSAGE);
     }
 
     await this.spaceRepo.deleteSpace(spaceId, workspaceId);
