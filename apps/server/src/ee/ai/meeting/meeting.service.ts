@@ -80,6 +80,7 @@ import {
   TranscriptSpeaker,
   transcriptToText,
 } from './meeting-transcript.util';
+import { dropChannelEchoes } from './meeting-echo.util';
 import { AiProviderService } from '../providers/ai-provider.service';
 import {
   inspectAudioSignal,
@@ -1480,6 +1481,9 @@ export class MeetingService {
       : [];
     return {
       ...transcript,
+      // Microphone lines that repeat the meeting audio (speakers without
+      // headphones); removeChannelEchoes takes them out.
+      echoLines: dropChannelEchoes(transcript.segments as TranscriptSegment[]).dropped.length,
       linkedUsers: Object.fromEntries(
         members.map((m) => [m.id, { id: m.id, name: m.name ?? null, avatarUrl: m.avatarUrl ?? null }]),
       ),
@@ -3866,6 +3870,22 @@ export class MeetingService {
       );
     }
 
+    // Without headphones the microphone also recorded the call from the
+    // speakers: keep the meeting-audio copy of those sentences only.
+    if (multiChannel) {
+      const { kept, dropped } = dropChannelEchoes(segments);
+      if (dropped.length > 0) {
+        segments.splice(0, segments.length, ...kept);
+        this.logger.log(
+          `Meeting ${meetingId}: ${dropped.length} microphone line(s) repeated the meeting audio and were left out`,
+        );
+        await this.logEvent(meetingId, 'channel_echo_removed', null, null, {
+          removed: dropped.length,
+          automatic: true,
+        });
+      }
+    }
+
     // Interleave mic and system turns on the shared timeline.
     numberMeetingSpeakers(segments);
     await this.correctMeetingText(segments);
@@ -4155,6 +4175,112 @@ export class MeetingService {
    * is written: the client shows the changes and confirms them through
    * reviewSpeakers({ reassign }).
    */
+  /**
+   * Take out the microphone lines that repeat the meeting audio (the call
+   * heard through the speakers, meeting-echo.util.ts) as a new transcript
+   * version. Earlier versions and the audio are kept. When the analysis
+   * already ran it is run again, so the report stops counting them twice.
+   */
+  async removeChannelEchoes(
+    actor: MeetingActor,
+    meetingId: string,
+    baseVersion: number,
+  ) {
+    const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertNotArchived(meeting);
+    if (PROCESSING_STATUSES.has(meeting.status) &&
+        mayBeLive(await this.pipelineJobState(meetingId))) {
+      throw new ConflictException(
+        'Le traitement de cette réunion est en cours. Retirez les doublons quand il sera terminé.',
+      );
+    }
+    if ((await this.latestTranscriptVersion(meetingId)) !== baseVersion) {
+      throw new ConflictException(
+        'La transcription a changé entre-temps. Rechargez la page, puis réessayez.',
+      );
+    }
+    const transcript = await this.db
+      .selectFrom('meetingTranscripts')
+      .selectAll()
+      .where('meetingId', '=', meetingId)
+      .where('version', '=', baseVersion)
+      .executeTakeFirst();
+    if (!transcript) {
+      throw new NotFoundException(`Transcript version ${baseVersion} not found`);
+    }
+    const segments =
+      this.parseJson<TranscriptSegment[]>(transcript.segments) || [];
+    const speakers =
+      this.parseJson<Record<string, TranscriptSpeaker>>(transcript.speakers) ||
+      {};
+    const { kept, dropped } = dropChannelEchoes(segments);
+    if (dropped.length === 0) {
+      return { removed: 0, version: baseVersion, reanalysis: false };
+    }
+    // Voices heard only through the speakers disappear with their lines.
+    const inUse = new Set(kept.map((s) => String(s.speaker)));
+    for (const label of Object.keys(speakers)) {
+      if (!inUse.has(label)) delete speakers[label];
+    }
+
+    const version = baseVersion + 1;
+    try {
+      await this.db
+        .insertInto('meetingTranscripts')
+        .values({
+          meetingId,
+          version,
+          kind: transcript.kind,
+          status: transcript.status,
+          provider: transcript.provider,
+          language: transcript.language,
+          segments: JSON.stringify(kept),
+          speakers: JSON.stringify(speakers),
+          isProvisional: transcript.isProvisional,
+          editedFromVersion: baseVersion,
+          createdBy: actor.id,
+        })
+        .executeTakeFirst();
+    } catch (err) {
+      // Another edit created this version first.
+      if ((err as { code?: string })?.code === '23505') {
+        throw new ConflictException(
+          'La transcription a changé entre-temps. Rechargez la page, puis réessayez.',
+        );
+      }
+      throw err;
+    }
+    await this.db
+      .updateTable('meetings')
+      .set({ transcript: transcriptToText(kept, speakers) })
+      .where('id', '=', meetingId)
+      .executeTakeFirst();
+    await this.db
+      .insertInto('meetingProcessingEvents')
+      .values({
+        meetingId,
+        event: 'channel_echo_removed',
+        fromStatus: meeting.status,
+        toStatus: meeting.status,
+        actorId: actor.id,
+        detail: jsonbDetail({ removed: dropped.length, version }),
+      })
+      .executeTakeFirst();
+
+    // Before the speakers are confirmed the analysis has not run yet: their
+    // confirmation starts it. Afterwards, regenerate it from this version.
+    const reanalysis =
+      meeting.status !== 'speakers_pending_review' && this.ai.isAvailable();
+    if (reanalysis) {
+      await this.kickPipeline(meetingId, meeting.status, 'analyzing', {
+        actorId: actor.id,
+        echoesRemoved: version,
+        reanalysis: true,
+      });
+    }
+    return { removed: dropped.length, version, reanalysis };
+  }
+
   async attributeSpeakers(
     actor: MeetingActor,
     meetingId: string,

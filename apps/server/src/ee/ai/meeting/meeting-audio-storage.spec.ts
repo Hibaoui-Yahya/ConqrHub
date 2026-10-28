@@ -379,6 +379,32 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     expect((await meeting()).durationMs).toBe(3000);
   });
 
+  it('keeps one copy of a sentence the microphone also heard from the speakers', async () => {
+    const sentence = "Ah oui, c'est ça, dans tous les onglets.";
+    (service as any).stt.transcribeDiarized.mockImplementation(async (audio: Buffer) => {
+      const fromMic = audio.toString() === 'mic';
+      return {
+        text: sentence,
+        language: 'fr',
+        segments: [
+          { text: sentence, startMs: fromMic ? 50 : 0, endMs: 1800, speakerId: 'speaker_1' },
+          ...(fromMic ? [{ text: 'Je note.', startMs: 2500, endMs: 2900, speakerId: 'speaker_2' }] : []),
+        ],
+      };
+    });
+    await Promise.all([
+      service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),
+      service.ingestChunk(actor, meetingId, Buffer.from('remote'), meta('system')),
+    ]);
+    const sources = await (service as any).resolveAudioSources(await meeting());
+    const result = await (service as any).transcribeMeeting(meetingId, sources);
+    expect(result.segments.map((s: any) => [s.channel, s.text])).toEqual([
+      ['system', sentence],
+      ['mic', 'Je note.'],
+    ]);
+    expect(result.text.split(sentence).length - 1).toBe(1);
+  });
+
   it('persists combined playback as an object while retaining both inputs with the production Postgres.js driver', async () => {
     await Promise.all([
       service.ingestChunk(actor, meetingId, Buffer.from('mic'), meta('mic')),

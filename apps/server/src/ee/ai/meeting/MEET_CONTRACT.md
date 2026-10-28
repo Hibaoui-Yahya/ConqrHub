@@ -404,6 +404,21 @@ The body is unchanged: `{ baseVersion, renames?, merges?, userLinks?, reassign?,
 `linkedUsers: { "<userId>": { id, name, avatarUrl } }` describes the linked
 people who are still members of the company.
 
+`echoLines: number` (additive) counts the microphone lines of this version
+that repeat the meeting audio: without headphones the microphone also hears
+the call through the speakers (see `meeting-echo.util.ts`).
+
+### `POST /ai/meeting/:id/transcript/remove-echoes` (new)
+
+Body `{ "baseVersion": <int> }`, the latest version. Needs the edit right.
+Writes version `baseVersion + 1` without those microphone lines (earlier
+versions and the audio are kept), drops speakers left without a line, and
+re-runs the analysis when it already ran (not before the speakers are
+confirmed). Answers `{ removed, version, reanalysis }`; `removed: 0` writes
+nothing. `409` when processing is running or the transcript changed since
+`baseVersion`. New transcriptions leave these lines out automatically
+(event `channel_echo_removed`).
+
 ---
 
 ## 7. Per-meeting language

@@ -36,6 +36,7 @@ import { MeetingAccessGuard } from './meeting-access.guard';
 import { GenerateEvaluationDto, SaveEvaluationDto } from './dto/evaluation.dto';
 import { ReviewMeetingDto } from './dto/review-meeting.dto';
 import { AttributeSpeakersDto } from './dto/attribute-speakers.dto';
+import { RemoveEchoesDto } from './dto/remove-echoes.dto';
 import { LinkableMembersDto, ReviewSpeakersDto } from './dto/review-speakers.dto';
 import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
@@ -468,6 +469,23 @@ export class MeetingController {
       q: query?.q,
       limit: query?.limit,
     });
+  }
+
+  // ──────────── POST /:id/transcript/remove-echoes ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/transcript/remove-echoes')
+  async removeEchoes(
+    @Param('id') id: string,
+    @Body() dto: RemoveEchoesDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.meetingService.removeChannelEchoes(
+      actor(user, workspace),
+      id,
+      dto.baseVersion,
+    );
   }
 
   // ──────────── POST /:id/transcript/attribute (AI turn attribution proposal) ────────────

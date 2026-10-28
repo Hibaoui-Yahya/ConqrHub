@@ -428,6 +428,7 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
         ['retry', () => service.retryProcessing(coworker, meetingId)],
         ['speakers', () => service.reviewSpeakers(coworker, meetingId, { baseVersion: 1, renames: { 'Speaker 1': 'X' }, confirm: true })],
         ['attribute', () => service.attributeSpeakers(coworker, meetingId, 1)],
+        ['remove-echoes', () => service.removeChannelEchoes(coworker, meetingId, 1)],
         ['approve', () => service.approveProposal(coworker, meetingId, proposalId, {})],
         ['reject', () => service.rejectProposal(coworker, meetingId, proposalId)],
         ['approve-safe', () => service.approveSafeProposals(coworker, meetingId)],
@@ -499,6 +500,74 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
         service.publishBundle(ws2, meetingId, { spaceId }, userOf(foreign)),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect((await service.list(ws2, {}, foreign)).items.map((m) => m.id)).not.toContain(meetingId);
+    });
+  });
+
+  describe('the call heard through the speakers (microphone echo)', () => {
+    const remote = "Ah oui, c'est ça, dans tous les onglets du profil.";
+    async function withEcho(status: string) {
+      const id = await addMeeting({ by: creator, status });
+      const segments = [
+        { id: 'sys', speaker: 'Speaker 1', channel: 'system', text: remote, rawText: remote, startMs: 7000, endMs: 9000, confidence: null, attribution: 'acoustic' },
+        { id: 'echo', speaker: 'Speaker 2', channel: 'mic', text: remote, rawText: remote, startMs: 7050, endMs: 9050, confidence: null, attribution: 'acoustic' },
+        { id: 'own', speaker: 'Speaker 3', channel: 'mic', text: 'Je note, je regarde ça cet après-midi.', rawText: 'Je note, je regarde ça cet après-midi.', startMs: 10000, endMs: 12000, confidence: null, attribution: 'acoustic' },
+      ];
+      const speakers = Object.fromEntries(
+        ['Speaker 1', 'Speaker 2', 'Speaker 3'].map((label) => [label, { label, displayName: null, userId: null, confidence: null }]),
+      );
+      await db
+        .insertInto('meetingTranscripts')
+        .values({
+          meetingId: id,
+          version: 1,
+          kind: 'canonical',
+          status: 'confirmed',
+          provider: 'mistral',
+          language: 'fr',
+          segments: sql`${JSON.stringify(segments)}::jsonb`,
+          speakers: sql`${JSON.stringify(speakers)}::jsonb`,
+        })
+        .execute();
+      return id;
+    }
+
+    it('counts the repeated lines, removes them as a new version and keeps the original', async () => {
+      const id = await withEcho('speakers_pending_review');
+      const { service } = build();
+      expect((await service.getTranscript(coworker, id)).echoLines).toBe(1);
+
+      const result = await service.removeChannelEchoes(creator, id, 1);
+      expect(result).toEqual({ removed: 1, version: 2, reanalysis: false });
+
+      const v2 = await service.getTranscript(creator, id);
+      expect(v2.version).toBe(2);
+      expect((v2.segments as Array<{ id: string }>).map((s) => s.id)).toEqual(['sys', 'own']);
+      expect(Object.keys(v2.speakers)).toEqual(['Speaker 1', 'Speaker 3']);
+      expect(v2.echoLines).toBe(0);
+      const v1 = await service.getTranscript(creator, id, 1);
+      expect(v1.segments).toHaveLength(3);
+      const text = (await meetingRow(id)).transcript as string;
+      expect(text.split(remote).length - 1).toBe(1);
+      expect(await count('meetingProcessingEvents', id, (q) => q.where('event', '=', 'channel_echo_removed'))).toBe(1);
+      // Speakers not confirmed yet: their confirmation starts the analysis.
+      expect((await meetingRow(id)).status).toBe('speakers_pending_review');
+
+      // A stale base version is refused; nothing left writes nothing.
+      await expect(service.removeChannelEchoes(creator, id, 1)).rejects.toBeInstanceOf(ConflictException);
+      expect(await service.removeChannelEchoes(creator, id, 2)).toEqual({ removed: 0, version: 2, reanalysis: false });
+      expect(await count('meetingTranscripts', id)).toBe(2);
+    });
+
+    it('re-runs the analysis when it had already run on the doubled transcript', async () => {
+      const id = await withEcho('awaiting_review');
+      const { service } = build();
+      const result = await service.removeChannelEchoes(admin, id, 1);
+      expect(result).toEqual({ removed: 1, version: 2, reanalysis: true });
+      for (let i = 0; i < 100 && (await meetingRow(id)).status !== 'awaiting_review'; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      expect((await meetingRow(id)).status).toBe('awaiting_review');
+      expect(await count('meetingProcessingEvents', id, (q) => q.where('toStatus', '=', 'analyzing'))).toBeGreaterThan(0);
     });
   });
 
