@@ -113,14 +113,16 @@ describe('MeetingService evaluation', () => {
     expect(noTr.ai.generate).not.toHaveBeenCalled();
   });
 
-  it('lets coworkers read but not generate or edit the evaluation of a meeting they did not create', async () => {
+  it('Strict Private: nobody but the creator generates or edits the evaluation, Owners included', async () => {
     const coworker = { id: 'u-other', role: 'member', workspaceId: 'w1' };
     const { service, ai, updates } = setup({ aiAnswer: goodAnswer });
-    await expect(service.generateEvaluation(coworker, 'm1', undefined)).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(service.saveEvaluation(coworker, 'm1', { status: 'validated' })).rejects.toBeInstanceOf(ForbiddenException);
+    for (const who of [coworker, { ...coworker, role: 'admin' }, { ...coworker, role: 'owner' }]) {
+      await expect(service.generateEvaluation(who, 'm1', undefined)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.saveEvaluation(who, 'm1', { status: 'validated' })).rejects.toBeInstanceOf(NotFoundException);
+    }
     expect(ai.generate).not.toHaveBeenCalled();
     expect(updates).toHaveLength(0);
-    const ev = await service.generateEvaluation({ ...coworker, role: 'owner' }, 'm1', undefined);
+    const ev = await service.generateEvaluation(owner, 'm1', undefined);
     expect(ev.status).toBe('draft');
   });
 
@@ -129,9 +131,9 @@ describe('MeetingService evaluation', () => {
     await service.generateEvaluation(owner, 'm1', undefined);
     const stored = JSON.parse(updates[0].settings);
     const { service: s2, updates: u2 } = setup({ settings: stored });
-    const ev = await s2.saveEvaluation({ id: 'u-rec', role: 'admin', workspaceId: 'w1' }, 'm1', { status: 'validated', items: [{ criterionId: 'skills', level: 2, comment: 'Vu au CV.' }] });
+    const ev = await s2.saveEvaluation(owner, 'm1', { status: 'validated', items: [{ criterionId: 'skills', level: 2, comment: 'Vu au CV.' }] });
     expect(ev.status).toBe('validated');
-    expect(ev.validatedById).toBe('u-rec');
+    expect(ev.validatedById).toBe(owner.id);
     expect(ev.items.find((i) => i.criterionId === 'skills')).toMatchObject({ level: 2, comment: 'Vu au CV.' });
     expect(JSON.parse(u2[0].settings).evaluation.status).toBe('validated');
     await expect(setup({}).service.saveEvaluation(owner, 'm1', {})).rejects.toBeInstanceOf(BadRequestException);

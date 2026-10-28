@@ -87,12 +87,12 @@ describe('pipeline stages and recovery scope (LTC-01)', () => {
   });
 });
 
-describe('meeting edit rule (LTC-03)', () => {
+describe('meeting edit rule (Strict Private)', () => {
   const meeting = { userId: 'creator', workspaceId: 'w1' };
-  it('allows the creator and Owners/Admins of the same workspace only', () => {
+  it('allows the creator of the same workspace only, never Owners or Admins', () => {
     expect(canEditMeeting(meeting, { id: 'creator', role: 'member', workspaceId: 'w1' })).toBe(true);
-    expect(canEditMeeting(meeting, { id: 'x', role: 'admin', workspaceId: 'w1' })).toBe(true);
-    expect(canEditMeeting(meeting, { id: 'x', role: 'owner', workspaceId: 'w1' })).toBe(true);
+    expect(canEditMeeting(meeting, { id: 'x', role: 'admin', workspaceId: 'w1' })).toBe(false);
+    expect(canEditMeeting(meeting, { id: 'x', role: 'owner', workspaceId: 'w1' })).toBe(false);
     expect(canEditMeeting(meeting, { id: 'x', role: 'member', workspaceId: 'w1' })).toBe(false);
     expect(canEditMeeting(meeting, { id: 'x', role: null, workspaceId: 'w1' })).toBe(false);
     // Never across workspaces, even for an owner or the same user id.

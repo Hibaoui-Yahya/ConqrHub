@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingService } from './meeting.service';
+import { MEETING_PUBLISH_SUSPENDED_MESSAGE } from './meeting-access.util';
 
 // Collaborators are doubles below; keep their ESM editor/SDK dependencies out.
 jest.mock('../../../core/page/services/page.service', () => ({
@@ -13,10 +14,13 @@ jest.mock('../providers/ai-provider.service', () => ({
 /**
  * "Publier dans Hub" and its re-synchronisation: permission on the space,
  * pages refreshed only when untouched in Hub, deleted pages made again.
+ * LTC Strict Private, phase 0: publishing is suspended for everyone; the
+ * publication logic below is kept, and tested with the suspension lifted,
+ * for the phase that brings it back.
  */
 describe('MeetingService.publishBundle', () => {
-  // An admin publishing a coworker's meeting (creator: u-owner).
-  const user = { id: 'u-pub', role: 'admin' } as any;
+  // The creator of the meeting (Strict Private: nobody else publishes it).
+  const user = { id: 'u-owner', role: 'member' } as any;
   const T0 = '2026-10-13T10:00:00.000Z';
 
   function setup(opts: {
@@ -26,6 +30,8 @@ describe('MeetingService.publishBundle', () => {
     pages?: Record<string, { id: string; updatedAt: string; deletedAt?: string | null }>;
     status?: string;
     documents?: Array<{ id: string; title: string; publishBlocker: string | null }>;
+    /** Keep the phase-0 suspension (default: lifted, to test the publication). */
+    suspended?: boolean;
   }) {
     const updates: any[] = [];
     const db: any = {
@@ -89,6 +95,9 @@ describe('MeetingService.publishBundle', () => {
       settings: opts.settings ?? null,
       };
     });
+    if (!opts.suspended) {
+      jest.spyOn(service as any, 'assertPublishingAllowed').mockImplementation(() => undefined);
+    }
     jest.spyOn(service as any, 'localeContext').mockResolvedValue({
       language: 'fr',
       sharedTimeZone: 'America/Toronto',
@@ -111,17 +120,26 @@ describe('MeetingService.publishBundle', () => {
     const { service, pages, updates } = setup({});
     const res = await service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, user);
     expect(pages.create).toHaveBeenCalledTimes(2);
-    expect((pages.create.mock.calls[0] as any[])[0]).toBe('u-pub');
+    expect((pages.create.mock.calls[0] as any[])[0]).toBe('u-owner');
     expect(res.synced).toEqual({ firstPublication: true, meetingPage: 'create', transcriptPage: 'create' });
     const settings = JSON.parse(updates[0].settings);
     expect(settings.publishedBundle).toMatchObject({ meetingPageId: 'new-1', transcriptPageId: 'new-2', spaceId: 'space-1' });
     expect(updates[0].status).toBe('published');
   });
 
-  it('lets a member read but not publish a coworker meeting, before touching Hub', async () => {
+  it('is suspended in phase 0: the creator gets 403, before touching Hub', async () => {
+    const suspended = setup({ suspended: true });
+    const err = await suspended.service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, user).then(() => null, (e) => e);
+    expect([err?.constructor?.name, err?.message]).toEqual([ForbiddenException.name, MEETING_PUBLISH_SUSPENDED_MESSAGE]);
+    expect(suspended.pages.create).not.toHaveBeenCalled();
+    expect(suspended.spaceAbility.createForUser).not.toHaveBeenCalled();
+  });
+
+  it('a colleague, an Admin or an Owner gets "not found" for a meeting they did not create, before touching Hub', async () => {
     const { service, pages, spaceAbility } = setup({});
-    const member = { id: 'u-member', role: 'member' } as any;
-    await expect(service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, member)).rejects.toBeInstanceOf(ForbiddenException);
+    for (const who of [{ id: 'u-member', role: 'member' }, { id: 'u-admin', role: 'admin' }, { id: 'u-boss', role: 'owner' }]) {
+      await expect(service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, who as any)).rejects.toBeInstanceOf(NotFoundException);
+    }
     expect(pages.create).not.toHaveBeenCalled();
     expect(spaceAbility.createForUser).not.toHaveBeenCalled();
     // The creator still needs the space's own permission (checked next).

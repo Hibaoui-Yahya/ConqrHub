@@ -30,10 +30,14 @@ describe('meeting audio links during storage cutover', () => {
     });
   });
 
-  it("resolves the file inside the caller's workspace", async () => {
+  it('resolves the file for the caller, who must be able to read the meeting', async () => {
     const { fake, get } = setup();
     await get();
-    expect(fake.resolveAudioFile).toHaveBeenCalledWith('meeting-id', 'original', 'workspace-id');
+    expect(fake.resolveAudioFile).toHaveBeenCalledWith(
+      { id: 'user-id', role: 'member', workspaceId: 'workspace-id' },
+      'meeting-id',
+      'original',
+    );
   });
 
   it('keeps existing signed S3 playback compatible', async () => {
