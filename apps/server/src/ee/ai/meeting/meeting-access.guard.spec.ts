@@ -1,6 +1,5 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { MeetingAccessGuard } from './meeting-access.guard';
-import { MEETING_READ_ONLY_MESSAGE } from './meeting-access.util';
 
 describe('MeetingAccessGuard', () => {
   const M1 = '0192f1a0-0000-7000-8000-000000000001';
@@ -38,21 +37,22 @@ describe('MeetingAccessGuard', () => {
       }),
     }) as any;
 
-  it('lets every member of the company read, not only the author or a space member', async () => {
-    await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }))).resolves.toBe(true);
-    await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }))).resolves.toBe(true);
-    await expect(guard.canActivate(ctx(M1, { id: 'sophie', role: 'admin' }))).resolves.toBe(true);
+  it('lets the creator read and change their meeting', async () => {
+    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+      await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }, 'w1', method))).resolves.toBe(true);
+    }
   });
 
-  it('lets readers read but not change: 403 in French for a coworker, creator and managers pass', async () => {
-    for (const method of ['DELETE', 'POST', 'PATCH']) {
-      await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }, 'w1', method))).rejects.toThrow(
-        new ForbiddenException(MEETING_READ_ONLY_MESSAGE),
-      );
+  it('answers 404 to a colleague, an Admin and an Owner of the company, whatever the method', async () => {
+    for (const who of [
+      { id: 'karim', role: 'member' },
+      { id: 'sophie', role: 'admin' },
+      { id: 'olivier', role: 'owner' },
+    ]) {
+      for (const method of ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE']) {
+        await expect(guard.canActivate(ctx(M1, who, 'w1', method))).rejects.toBeInstanceOf(NotFoundException);
+      }
     }
-    await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }, 'w1', 'DELETE'))).resolves.toBe(true);
-    await expect(guard.canActivate(ctx(M1, { id: 'sophie', role: 'admin' }, 'w1', 'PATCH'))).resolves.toBe(true);
-    await expect(guard.canActivate(ctx(M1, { id: 'olivier', role: 'owner' }, 'w1', 'POST'))).resolves.toBe(true);
   });
 
   it('answers 404 to another company (even an owner), a deleted meeting or an unknown id', async () => {

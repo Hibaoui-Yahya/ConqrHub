@@ -47,9 +47,8 @@ import { audioResponseHeaders } from './meeting-media.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 
-/** Every route works in the caller's workspace with the caller's role:
- *  members read every meeting of the company; the creator and
- *  Owners/Admins change it (LTC-03). */
+/** Every route works in the caller's workspace. Strict Private: the
+ *  creator alone reads and changes a meeting; the role grants nothing. */
 function actor(user: User, workspace: Workspace): MeetingActor {
   return { id: user.id, role: user.role, workspaceId: workspace.id };
 }
@@ -69,7 +68,9 @@ export function parseLanguageConfig(raw: unknown): Record<string, unknown> | und
 }
 
 // MeetingAccessGuard: every /:id route answers 404 unless the meeting is a
-// live meeting of the caller's company (company-wide read, LTC-03).
+// live meeting the caller created (Strict Private). Every route of this
+// controller is either /:id, the list, or a creation (start, upload);
+// meeting-routes.spec.ts fails if a new route is none of these.
 @UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
 @RequireAiFeature('stt')
 @Controller('ai/meeting')
@@ -231,7 +232,7 @@ export class MeetingController {
         limit: query.limit,
         offset: query.offset,
         q: query.q,
-        // Home: only the caller's own meetings; otherwise company-wide.
+        // Always the caller's own meetings now; kept for the Meet client.
         mine: query.scope === 'mine',
         type: query.type,
         status: query.status,

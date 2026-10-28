@@ -1,7 +1,7 @@
 /**
  * Filters of GET /ai/meeting (MEET_CONTRACT.md §4). Pure; unit-tested in
  * meeting-list.util.spec.ts. Filters only ever narrow the list: who may
- * read which meeting is decided elsewhere (company-wide read, LTC-03).
+ * read which meeting is decided elsewhere (Strict Private: its creator).
  */
 
 /** Every value of the meeting_status enum. */

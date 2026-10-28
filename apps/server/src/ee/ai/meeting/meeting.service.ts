@@ -25,7 +25,9 @@ import {
 } from '../../../integrations/queue/constants';
 import {
   canEditMeeting,
+  canReadMeeting,
   isMeetingId,
+  MEETING_PUBLISH_SUSPENDED_MESSAGE,
   MEETING_READ_ONLY_MESSAGE,
   type MeetingActor,
 } from './meeting-access.util';
@@ -260,17 +262,23 @@ export class MeetingService {
   // ──────────── access (LTC-03 / LTC-04) ────────────
 
   /**
-   * A meeting the actor's workspace owns and nobody deleted. Missing,
-   * deleted and foreign meetings are all "not found" — the caller learns
-   * nothing about meetings it may not see.
+   * A meeting the actor may read (canReadMeeting: their own) that nobody
+   * deleted. Missing, deleted, foreign and colleagues' meetings are all
+   * "not found" — the caller learns nothing about meetings it may not see.
+   * MeetingAccessGuard checks the same rule first; this keeps it true for
+   * any caller that does not go through the guard.
    */
   private async getReadableMeeting(actor: MeetingActor, meetingId: string) {
-    return this.getMeetingOrThrow(meetingId, {
+    const meeting = await this.getMeetingOrThrow(meetingId, {
       workspaceId: actor.workspaceId,
     });
+    if (!canReadMeeting(meeting, actor)) {
+      throw new NotFoundException('Meeting not found');
+    }
+    return meeting;
   }
 
-  /** Same, plus the edit rule: the creator or an Owner/Admin. */
+  /** Same, plus the edit rule (today the same person: the creator). */
   private async getEditableMeeting(actor: MeetingActor, meetingId: string) {
     const meeting = await this.getReadableMeeting(actor, meetingId);
     if (!canEditMeeting(meeting, actor)) {
@@ -392,7 +400,8 @@ export class MeetingService {
         if (
           !meeting ||
           meeting.deletedAt ||
-          meeting.workspaceId !== actor.workspaceId
+          meeting.workspaceId !== actor.workspaceId ||
+          !canReadMeeting(meeting, actor)
         )
           throw new NotFoundException('Meeting not found');
         if (!canEditMeeting(meeting, actor)) {
@@ -740,12 +749,13 @@ export class MeetingService {
         .selectFrom('meetings')
         .where('workspaceId', '=', workspaceId)
         .where('deletedAt', 'is', null);
-      // Every active member of the company reads every meeting (LTC-03);
-      // "mine" narrows the list to the caller's own meetings (Home). The
-      // filters below only narrow it further, never widen it.
-      if (opts.mine && actor?.id) {
-        query = query.where('userId', '=', actor.id);
-      }
+      // Strict Private: the list holds the caller's own meetings and
+      // nothing else, whatever their role ("mine" is therefore implied).
+      // No caller, no meetings. The filters below only narrow it further,
+      // never widen it.
+      query = actor?.id
+        ? query.where('userId', '=', actor.id)
+        : query.where(sql<boolean>`false`);
       if (opts.ownerId) query = query.where('userId', '=', opts.ownerId);
       if (types.length) query = query.where('meetingType', 'in', types);
       if (statuses.length) query = query.where('status', 'in', statuses as any);
@@ -1855,6 +1865,7 @@ export class MeetingService {
   ) {
     const actor = this.actorOf(user, workspaceId);
     const meeting = await this.getEditableMeeting(actor, meetingId);
+    this.assertPublishingAllowed();
     this.assertNotArchived(meeting);
     // The meeting's own permission is not enough: filing in Hub also needs
     // the right to create pages in that space.
@@ -2040,6 +2051,16 @@ export class MeetingService {
     return { id: user.id, role: user.role, workspaceId };
   }
 
+  /**
+   * Publishing copies a meeting into Hub pages that follow their space's
+   * permissions, not the meeting's: on LTC that is the whole company. Until
+   * private sharing exists (later phase), no meeting is published — first
+   * publication and re-synchronisation alike.
+   */
+  private assertPublishingAllowed(): void {
+    throw new ForbiddenException(MEETING_PUBLISH_SUSPENDED_MESSAGE);
+  }
+
   async assertCanPublishIn(user: User, workspaceId: string, spaceId: string) {
     const space = await this.db
       .selectFrom('spaces')
@@ -2081,6 +2102,7 @@ export class MeetingService {
       this.actorOf(user, workspaceId),
       meetingId,
     );
+    this.assertPublishingAllowed();
     this.assertNotArchived(meeting);
     if (PROCESSING_STATUSES.has(meeting.status)) {
       throw new BadRequestException(
@@ -2642,12 +2664,13 @@ export class MeetingService {
 
   /** Resolve the stored audio file backing a target, with its MIME type. */
   private async resolveAudioFile(
+    actor: MeetingActor,
     meetingId: string,
     target: string,
-    workspaceId?: string,
   ): Promise<{ filePath: string; mime: string }> {
     // Deleted meetings never stream audio (LTC-04); the file is retained.
-    const meeting = await this.getMeetingOrThrow(meetingId, { workspaceId });
+    // Only a reader of the meeting gets its audio, URL or stream.
+    const meeting = await this.getReadableMeeting(actor, meetingId);
     const manifest = this.parseAudioManifest(meeting.audioManifest);
 
     let filePath: string | null = null;
@@ -2690,11 +2713,7 @@ export class MeetingService {
     meetingId: string,
     target: string = 'original',
   ) {
-    const resolved = await this.resolveAudioFile(
-      meetingId,
-      target,
-      actor.workspaceId,
-    );
+    const resolved = await this.resolveAudioFile(actor, meetingId, target);
 
     if (this.storage.getDriverName() === 'local') {
       // Local storage can't emit signed URLs. Return a path that plays
@@ -2732,9 +2751,9 @@ export class MeetingService {
     target: string = 'original',
   ): Promise<{ stream: Readable; mime: string }> {
     const { filePath, mime } = await this.resolveAudioFile(
+      actor,
       meetingId,
       target,
-      actor.workspaceId,
     );
     const stream = await this.storage.readStream(filePath);
     return { stream, mime };

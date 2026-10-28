@@ -5,33 +5,39 @@ import {
   meetingSpaceIds,
 } from './meeting-access.util';
 
-// The company rule: every member reads; the creator, Owners and Admins edit.
+// LTC Strict Private, phase 0: the creator alone reads and edits; no role
+// and no space gives access.
 describe('canReadMeeting', () => {
   const meeting = { userId: 'annie', workspaceId: 'w1', spaceId: null, settings: { publishedBundle: { spaceId: 'lumen' } } };
 
-  it('lets every member of the company read, whatever their spaces', () => {
+  it('lets the creator read', () => {
     expect(canReadMeeting(meeting, { id: 'annie', role: 'member', workspaceId: 'w1' })).toBe(true);
-    expect(canReadMeeting(meeting, { id: 'marc', role: 'member', workspaceId: 'w1' })).toBe(true);
-    expect(canReadMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w1' })).toBe(true);
-    expect(canReadMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w1' })).toBe(true);
   });
 
-  it('never crosses companies, even for an owner', () => {
+  it('refuses colleagues, Admins and Owners of the company, and members of its spaces', () => {
+    expect(canReadMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w1' })).toBe(false);
+    expect(canReadMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w1' })).toBe(false);
+    expect(canReadMeeting(meeting, { id: 'olivier', role: 'owner', workspaceId: 'w1' })).toBe(false);
+  });
+
+  it('never crosses companies, even for the same id, and refuses an empty actor or meeting', () => {
     expect(canReadMeeting(meeting, { id: 'annie', role: 'owner', workspaceId: 'w2' })).toBe(false);
     expect(canReadMeeting(meeting, { id: '', role: 'owner', workspaceId: 'w1' })).toBe(false);
+    expect(canReadMeeting({ userId: '', workspaceId: 'w1' }, { id: '', role: 'member', workspaceId: 'w1' })).toBe(false);
+    expect(canReadMeeting(meeting, { id: 'annie', role: 'member', workspaceId: '' })).toBe(false);
   });
 });
 
 describe('canEditMeeting', () => {
   const meeting = { userId: 'annie', workspaceId: 'w1' };
 
-  it('lets the creator, Owners and Admins edit', () => {
+  it('lets the creator edit', () => {
     expect(canEditMeeting(meeting, { id: 'annie', role: 'member', workspaceId: 'w1' })).toBe(true);
-    expect(canEditMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w1' })).toBe(true);
-    expect(canEditMeeting(meeting, { id: 'olivier', role: 'owner', workspaceId: 'w1' })).toBe(true);
   });
 
-  it('refuses other members and other companies', () => {
+  it('refuses Owners, Admins, other members and other companies', () => {
+    expect(canEditMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w1' })).toBe(false);
+    expect(canEditMeeting(meeting, { id: 'olivier', role: 'owner', workspaceId: 'w1' })).toBe(false);
     expect(canEditMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w1' })).toBe(false);
     expect(canEditMeeting(meeting, { id: 'annie', role: 'member', workspaceId: 'w2' })).toBe(false);
     expect(canEditMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w2' })).toBe(false);

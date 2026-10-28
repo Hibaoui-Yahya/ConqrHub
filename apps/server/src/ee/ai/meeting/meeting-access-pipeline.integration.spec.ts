@@ -13,7 +13,7 @@ import { MeetingService } from './meeting.service';
 import { MeetingTemplateService } from './meeting-template.service';
 import { MeetingPipelineProcessor } from './meeting-pipeline.processor';
 import { BUILTIN_TEMPLATES } from './meeting-template.util';
-import { MEETING_READ_ONLY_MESSAGE } from './meeting-access.util';
+import { MEETING_PUBLISH_SUSPENDED_MESSAGE } from './meeting-access.util';
 import { pipelineJobId, STALE_FAILURE_MESSAGE, StaleRunError } from './meeting-processing.util';
 import { mixMeetingPlayback } from './meeting-audio.util';
 import { QueueJob } from '../../../integrations/queue/constants';
@@ -34,7 +34,7 @@ jest.mock('./meeting-audio.util', () => ({
 }));
 
 /**
- * LTC-01 / LTC-03 / LTC-04 against the real Hub schema (run the Hub
+ * LTC-01 / Strict Private / LTC-04 against the real Hub schema (run the Hub
  * migrations into MEETING_TEST_DATABASE_URL first) and, for the durable
  * queue, a real Redis (MEETING_TEST_REDIS_URL).
  */
@@ -155,7 +155,7 @@ function aiDouble(handler: AiHandler) {
   return ai;
 }
 
-suite('meetings: company read access, creator/admin edits, deletion, durable processing', () => {
+suite('meetings: Strict Private access, deletion, durable processing', () => {
   let db: Kysely<any>;
   let files: Map<string, Buffer>;
   let storage: any;
@@ -351,9 +351,10 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
     };
   });
 
-  describe('LTC-03 — every member reads, only the creator and Owners/Admins edit', () => {
+  describe('Strict Private (LTC phase 0) — the creator alone reads, changes and deletes', () => {
     let meetingId: string;
     let proposalId: string;
+    let insightId: string;
     beforeEach(async () => {
       meetingId = await addMeeting({ by: creator, withTranscript: true });
       proposalId = randomUUID();
@@ -376,129 +377,171 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
           idempotencyKey: `test:${proposalId}`,
         })
         .execute();
+      insightId = randomUUID();
+      await db
+        .insertInto('meetingInsights')
+        .values({ id: insightId, meetingId, workspaceId: ws1, kind: 'qa', question: 'Budget ?', content: '45 000 $', createdBy: creator.id })
+        .execute();
     });
 
-    it('lets a coworker read the meeting, its transcript, status, documents, proposals and audio', async () => {
+    /** Every read route of the controller (GET /:id/*), as a service call. */
+    const reads = (service: MeetingService): Array<[string, (a: Actor, id: string) => Promise<unknown>]> => [
+      ['detail', (a, id) => service.getDetail(a, id)],
+      ['capture', (a, id) => service.getCaptureState(a, id)],
+      ['status', (a, id) => service.getStatus(a, id)],
+      ['transcript', (a, id) => service.getTranscript(a, id)],
+      ['linkable-members', (a, id) => service.listLinkableMembers(a, id, {})],
+      ['documents', (a, id) => service.listDocuments(a, id)],
+      ['proposals', (a, id) => service.listProposals(a, id)],
+      ['insights', (a, id) => service.listInsights(a, id)],
+      ['audio', (a, id) => service.getAudioUrl(a, id)],
+      ['audio-file', (a, id) => service.getAudioFile(a, id)],
+    ];
+
+    /** Every write route of the controller (POST/PATCH/DELETE /:id/*). */
+    const writes = (service: MeetingService): Array<[string, (a: Actor, id: string) => Promise<unknown>]> => [
+      ['update', (a, id) => service.update(a, id, { title: 'Renommée' })],
+      ['archive', (a, id) => service.archive(a, id)],
+      ['unarchive', (a, id) => service.unarchive(a, id)],
+      ['markers', (a, id) => service.saveMarkers(a, id, [{ atMs: 1000, kind: 'moment' }])],
+      ['ai-output', (a, id) => service.saveAiOutput(a, id, 'summary', 'x')],
+      ['insight-save', (a, id) => service.saveInsight(a, id, { kind: 'qa', question: 'Q ?', content: 'R' })],
+      ['insight-delete', (a, id) => service.deleteInsight(a, id, insightId)],
+      ['process', (a, id) => service.process(a, id, {})],
+      ['retry', (a, id) => service.retryProcessing(a, id)],
+      ['speakers', (a, id) => service.reviewSpeakers(a, id, { baseVersion: 1, renames: { 'Speaker 1': 'X' }, confirm: true })],
+      ['remove-echoes', (a, id) => service.removeChannelEchoes(a, id, 1)],
+      ['attribute', (a, id) => service.attributeSpeakers(a, id, 1)],
+      ['evaluation', (a, id) => service.generateEvaluation(a, id, undefined)],
+      ['evaluation-save', (a, id) => service.saveEvaluation(a, id, {})],
+      ['approve', (a, id) => service.approveProposal(a, id, proposalId, {})],
+      ['reject', (a, id) => service.rejectProposal(a, id, proposalId)],
+      ['approve-safe', (a, id) => service.approveSafeProposals(a, id)],
+      ['review', (a, id) => service.reviewMeeting(a, id, 'complete')],
+      ['publish', (a, id) => service.publishBundle(a.workspaceId, id, { spaceId }, userOf(a))],
+      ['publish-doc', (a, id) => service.publishDocument(userOf(a), a.workspaceId, id, randomUUID(), { spaceId })],
+      ['stop', (a, id) => service.stop(a, id)],
+      ['chunk', (a, id) => service.ingestChunk(a, id, Buffer.from('x'), { source: 'mic', sequence: 0, startMs: 0, durationMs: 1 })],
+      ['delete', (a, id) => service.delete(a, id)],
+    ];
+
+    const outcome = (p: Promise<unknown>) =>
+      p.then(
+        () => 'ok',
+        (e) => e?.constructor?.name,
+      );
+
+    it('lets the creator read everything of the meeting', async () => {
       const { service } = build();
-      const detail = await service.getDetail(coworker, meetingId);
-      expect(detail.meeting.id).toBe(meetingId);
-      expect(detail.meeting.canEdit).toBe(false);
-      expect((await service.getTranscript(coworker, meetingId)).segments).toHaveLength(6);
-      const status = await service.getStatus(coworker, meetingId);
-      expect(status.canEdit).toBe(false);
-      expect(status.processing.canRetry).toBe(false);
-      expect(await service.listDocuments(coworker, meetingId)).toEqual([]);
-      expect(await service.listProposals(coworker, meetingId)).toHaveLength(1);
-      expect((await service.getAudioFile(coworker, meetingId)).mime).toBe('audio/webm');
-      const listed = await service.list(ws1, {}, coworker);
-      expect(listed.items.find((m) => m.id === meetingId)?.canEdit).toBe(false);
-      expect((await service.getDetail(creator, meetingId)).meeting.canEdit).toBe(true);
+      const detail = await service.getDetail(creator, meetingId);
+      expect(detail.meeting.canEdit).toBe(true);
+      expect((await service.getTranscript(creator, meetingId)).segments).toHaveLength(6);
+      expect(await service.listProposals(creator, meetingId)).toHaveLength(1);
+      await expect(service.listInsights(creator, meetingId)).resolves.toBeDefined();
+      expect((await service.getAudioFile(creator, meetingId)).mime).toBe('audio/webm');
+      const listed = await service.list(ws1, { limit: 100 }, creator);
+      expect(listed.items.find((m) => m.id === meetingId)?.canEdit).toBe(true);
     });
 
-    it("lists every meeting of the company for every member; scope=mine keeps the caller's own (Home)", async () => {
+    it('answers "not found" to a colleague, an Admin, an Owner and another company on every read', async () => {
       const { service } = build();
-      const mine = await addMeeting({ by: coworker });
-      const deleted = await addMeeting({ by: creator, deleted: true });
-      const elsewhere = await addMeeting({ by: foreign });
-      for (const reader of [coworker, creator, admin]) {
-        const ids = (await service.list(ws1, { limit: 100 }, reader)).items.map((m) => m.id);
-        expect(ids).toEqual(expect.arrayContaining([meetingId, mine]));
-        expect(ids).not.toContain(deleted);
-        expect(ids).not.toContain(elsewhere);
+      for (const who of [coworker, admin, owner, foreign]) {
+        for (const [name, read] of reads(service)) {
+          expect([who.role, name, await outcome(read(who, meetingId))]).toEqual([
+            who.role,
+            name,
+            NotFoundException.name,
+          ]);
+        }
       }
-      const own = (await service.list(ws1, { limit: 100, mine: true }, coworker)).items;
-      expect(own.map((m) => m.id)).toContain(mine);
-      expect(own.every((m) => m.userId === coworker.id)).toBe(true);
-      expect(own.find((m) => m.id === mine)?.canEdit).toBe(true);
-      const creatorOwn = (await service.list(ws1, { limit: 100, mine: true }, creator)).items.map((m) => m.id);
-      expect(creatorOwn).toContain(meetingId);
-      expect(creatorOwn).not.toContain(mine);
-      const foreignIds = (await service.list(ws2, { limit: 100 }, foreign)).items.map((m) => m.id);
-      expect(foreignIds).toContain(elsewhere);
-      expect(foreignIds).not.toContain(meetingId);
     });
 
-    it('refuses every write by a coworker with the French read-only explanation and changes nothing', async () => {
+    it('answers "not found" to a colleague, an Admin and an Owner on every write, and changes nothing', async () => {
       const { service, pages } = build();
-      const writes: Array<[string, () => Promise<unknown>]> = [
-        ['update', () => service.update(coworker, meetingId, { title: 'Renommée' })],
-        ['markers', () => service.saveMarkers(coworker, meetingId, [{ atMs: 1000, kind: 'moment' }])],
-        ['ai-output', () => service.saveAiOutput(coworker, meetingId, 'summary', 'x')],
-        ['process', () => service.process(coworker, meetingId, {})],
-        ['retry', () => service.retryProcessing(coworker, meetingId)],
-        ['speakers', () => service.reviewSpeakers(coworker, meetingId, { baseVersion: 1, renames: { 'Speaker 1': 'X' }, confirm: true })],
-        ['attribute', () => service.attributeSpeakers(coworker, meetingId, 1)],
-        ['remove-echoes', () => service.removeChannelEchoes(coworker, meetingId, 1)],
-        ['approve', () => service.approveProposal(coworker, meetingId, proposalId, {})],
-        ['reject', () => service.rejectProposal(coworker, meetingId, proposalId)],
-        ['approve-safe', () => service.approveSafeProposals(coworker, meetingId)],
-        ['review', () => service.reviewMeeting(coworker, meetingId, 'complete')],
-        ['evaluation', () => service.generateEvaluation(coworker, meetingId, undefined)],
-        ['evaluation-save', () => service.saveEvaluation(coworker, meetingId, {})],
-        ['publish', () => service.publishBundle(ws1, meetingId, { spaceId }, userOf(coworker))],
-        ['publish-doc', () => service.publishDocument(userOf(coworker), ws1, meetingId, randomUUID(), { spaceId })],
-        ['stop', () => service.stop(coworker, meetingId)],
-        ['chunk', () => service.ingestChunk(coworker, meetingId, Buffer.from('x'), { source: 'mic', sequence: 0, startMs: 0, durationMs: 1 })],
-        ['delete', () => service.delete(coworker, meetingId)],
-      ];
-      for (const [name, write] of writes) {
-        const err = await write().then(
-          () => null,
-          (e) => e,
-        );
-        expect([name, err?.constructor?.name, err?.message]).toEqual([
-          name,
-          ForbiddenException.name,
-          MEETING_READ_ONLY_MESSAGE,
-        ]);
+      for (const who of [coworker, admin, owner]) {
+        for (const [name, write] of writes(service)) {
+          expect([who.role, name, await outcome(write(who, meetingId))]).toEqual([
+            who.role,
+            name,
+            NotFoundException.name,
+          ]);
+        }
       }
       const row = await meetingRow(meetingId);
       expect(row.title).toBe('Point budget Atlas');
       expect(row.deletedAt).toBeNull();
+      expect(row.archivedAt).toBeNull();
       expect(row.status).toBe('awaiting_review');
       expect(await count('meetingTranscripts', meetingId)).toBe(1);
+      expect(await count('meetingInsights', meetingId)).toBe(1);
       const proposal = await db.selectFrom('meetingActionProposals').select('status').where('id', '=', proposalId).executeTakeFirstOrThrow();
       expect(proposal.status).toBe('proposed');
       expect(pages.create).not.toHaveBeenCalled();
     });
 
-    it('lets the creator, an Admin and an Owner edit', async () => {
+    it('lists, searches and filters only the caller\'s own meetings, whatever the role or the filters', async () => {
       const { service } = build();
-      expect((await service.update(creator, meetingId, { title: 'Par la créatrice' })).title).toBe('Par la créatrice');
-      expect((await service.update(admin, meetingId, { title: 'Par un admin' })).title).toBe('Par un admin');
-      expect((await service.update(owner, meetingId, { title: 'Par une propriétaire' })).canEdit).toBe(true);
+      const coworkers = await addMeeting({ by: coworker, withTranscript: true });
+      const admins = await addMeeting({ by: admin });
+      const deleted = await addMeeting({ by: creator, deleted: true });
+      const elsewhere = await addMeeting({ by: foreign });
+      await db.updateTable('meetings').set({ transcript: 'Le budget est de quarante-cinq mille dollars.' }).where('id', 'in', [meetingId, coworkers]).execute();
+      const ids = async (who: Actor, opts: Record<string, unknown> = {}) =>
+        (await service.list(who.workspaceId, { limit: 100, ...opts } as any, who)).items.map((m) => m.id);
+
+      expect(await ids(creator)).toContain(meetingId);
+      expect(await ids(creator)).not.toContain(coworkers);
+      for (const who of [coworker, admin, owner]) {
+        const seen = await ids(who);
+        expect(seen).not.toContain(meetingId);
+        expect(seen).not.toContain(deleted);
+        expect(seen).not.toContain(elsewhere);
+      }
+      expect(await ids(coworker)).toEqual([coworkers]);
+      expect(await ids(admin)).toEqual([admins]);
+      expect(await ids(owner)).toEqual([]);
+      // Filters never widen: another person's id, "mine" or not, a word
+      // of the title or of the transcript.
+      expect(await ids(owner, { ownerId: creator.id })).toEqual([]);
+      expect(await ids(owner, { mine: false })).toEqual([]);
+      expect(await ids(owner, { q: 'Atlas' })).toEqual([]);
+      expect(await ids(coworker, { q: 'quarante' })).toEqual([coworkers]);
+      expect(await ids(creator, { q: 'quarante' })).toEqual([meetingId]);
+      // No caller, no meetings.
+      expect((await service.list(ws1, { limit: 100 })).items).toEqual([]);
+      expect(await ids(foreign)).toEqual([elsewhere]);
     });
 
-    it('keeps the space permission as an extra requirement for the creator', async () => {
-      const { service, pages } = build({ canCreatePages: false });
-      await expect(
-        service.publishBundle(ws1, meetingId, { spaceId }, userOf(creator)),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+    it('suspends publishing into Hub, even for the creator with page rights, and creates no page', async () => {
+      const { service, pages } = build();
+      for (const publish of [
+        () => service.publishBundle(ws1, meetingId, { spaceId }, userOf(creator)),
+        () => service.publishDocument(userOf(creator), ws1, meetingId, randomUUID(), { spaceId }),
+      ]) {
+        const err = await publish().then(() => null, (e) => e);
+        expect([err?.constructor?.name, err?.message]).toEqual([
+          ForbiddenException.name,
+          MEETING_PUBLISH_SUSPENDED_MESSAGE,
+        ]);
+      }
       expect(pages.create).not.toHaveBeenCalled();
+    });
+
+    it('lets the creator change and delete their own meeting', async () => {
+      const { service } = build();
+      expect((await service.update(creator, meetingId, { title: 'Par la créatrice' })).title).toBe('Par la créatrice');
+      await service.delete(creator, meetingId);
+      expect((await meetingRow(meetingId)).deletedAt).not.toBeNull();
     });
 
     it('treats another company, an unknown id and a malformed id the same: not found', async () => {
       const { service } = build();
-      const calls: Array<(a: Actor, id: string) => Promise<unknown>> = [
-        (a, id) => service.getDetail(a, id),
-        (a, id) => service.getTranscript(a, id),
-        (a, id) => service.getStatus(a, id),
-        (a, id) => service.listDocuments(a, id),
-        (a, id) => service.listProposals(a, id),
-        (a, id) => service.getAudioFile(a, id),
-        (a, id) => service.update(a, id, { title: 'x' }),
-        (a, id) => service.retryProcessing(a, id),
-        (a, id) => service.delete(a, id),
-        (a, id) => service.ingestChunk(a, id, Buffer.from('x'), { source: 'mic', sequence: 0, startMs: 0, durationMs: 1 }),
-      ];
-      for (const call of calls) {
+      const calls = [...reads(service), ...writes(service)];
+      for (const [, call] of calls) {
         await expect(call(foreign, meetingId)).rejects.toBeInstanceOf(NotFoundException);
-        await expect(call(owner, randomUUID())).rejects.toBeInstanceOf(NotFoundException);
-        await expect(call(owner, 'not-a-uuid')).rejects.toBeInstanceOf(NotFoundException);
+        await expect(call(creator, randomUUID())).rejects.toBeInstanceOf(NotFoundException);
+        await expect(call(creator, 'not-a-uuid')).rejects.toBeInstanceOf(NotFoundException);
       }
-      await expect(
-        service.publishBundle(ws2, meetingId, { spaceId }, userOf(foreign)),
-      ).rejects.toBeInstanceOf(NotFoundException);
       expect((await service.list(ws2, {}, foreign)).items.map((m) => m.id)).not.toContain(meetingId);
     });
   });
@@ -534,7 +577,9 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
     it('counts the repeated lines, removes them as a new version and keeps the original', async () => {
       const id = await withEcho('speakers_pending_review');
       const { service } = build();
-      expect((await service.getTranscript(coworker, id)).echoLines).toBe(1);
+      expect((await service.getTranscript(creator, id)).echoLines).toBe(1);
+      // Kept private: a colleague cannot even see the meeting.
+      await expect(service.getTranscript(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
 
       const result = await service.removeChannelEchoes(creator, id, 1);
       expect(result).toEqual({ removed: 1, version: 2, reanalysis: false });
@@ -561,7 +606,7 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
     it('re-runs the analysis when it had already run on the doubled transcript', async () => {
       const id = await withEcho('awaiting_review');
       const { service } = build();
-      const result = await service.removeChannelEchoes(admin, id, 1);
+      const result = await service.removeChannelEchoes(creator, id, 1);
       expect(result).toEqual({ removed: 1, version: 2, reanalysis: true });
       for (let i = 0; i < 100 && (await meetingRow(id)).status !== 'awaiting_review'; i++) {
         await new Promise((r) => setTimeout(r, 100));
@@ -656,7 +701,7 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
       expect(doc.contentMarkdown).toContain('13 octobre 2026');
       const structured = typeof doc.structured === 'string' ? JSON.parse(doc.structured) : doc.structured;
       expect(structured.generation.status).toBe('complete');
-      expect((await service.listDocuments(owner, meetingId))[0].publishBlocker).toBeNull();
+      expect((await service.listDocuments(creator, meetingId))[0].publishBlocker).toBeNull();
     });
 
     it('a malformed report becomes a visible partial failure, keeps the previous draft and never publishes', async () => {
@@ -682,7 +727,9 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
       // An incomplete legacy report is refused at publication.
       await db.updateTable('meetingDocuments').set({ structured: sql`'{"sections":{"summary":"_Rien de consigné._","actions":"_Rien de consigné._"}}'::jsonb` }).where('meetingId', '=', meetingId).execute();
       const [doc] = await db.selectFrom('meetingDocuments').select('id').where('meetingId', '=', meetingId).execute();
-      await expect(service.publishDocument(userOf(creator), ws1, meetingId, doc.id, { spaceId })).rejects.toBeInstanceOf(BadRequestException);
+      // Publishing into Hub is suspended (Strict Private, phase 0): refused
+      // before the publish blocker is even looked at.
+      await expect(service.publishDocument(userOf(creator), ws1, meetingId, doc.id, { spaceId })).rejects.toBeInstanceOf(ForbiddenException);
       expect(pages.create).not.toHaveBeenCalled();
     });
 
@@ -752,7 +799,7 @@ suite('meetings: company read access, creator/admin edits, deletion, durable pro
       // Still in a processing status but stale: the panel offers the retry.
       const status = await service.getStatus(creator, meetingId);
       expect(status.processing).toMatchObject({ state: 'stale', canRetry: true });
-      await expect(service.retryProcessing(coworker, meetingId)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.retryProcessing(coworker, meetingId)).rejects.toBeInstanceOf(NotFoundException);
       const res = await service.retryProcessing(creator, meetingId);
       expect(res).toEqual({ status: 'normalizing_audio', retried: true });
       // Without a queue the run happens in-process; wait for it.

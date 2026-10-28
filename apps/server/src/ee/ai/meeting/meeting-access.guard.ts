@@ -17,12 +17,11 @@ import {
 
 /**
  * Every /ai/meeting/:id route goes through here: the meeting must exist,
- * not be deleted, and belong to the caller's company — every active member
- * of the company reads it (canReadMeeting). Answers 404 rather than 403 so a
- * meeting id never confirms that another company's interview exists.
- * Changing it (any method but GET) also needs canWriteMeeting — its creator
- * or an Owner/Admin — and is refused with 403 and the French read-only
- * explanation. The service checks writes again.
+ * not be deleted, and be the caller's own (canReadMeeting: its creator in
+ * its company; no role grants access). Anyone else gets 404 rather than 403,
+ * so a meeting id never confirms that a colleague's or another company's
+ * interview exists. Changing it (any method but GET) also needs
+ * canWriteMeeting; the service checks reads and writes again.
  */
 @Injectable()
 export class MeetingAccessGuard implements CanActivate {
