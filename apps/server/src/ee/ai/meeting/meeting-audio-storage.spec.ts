@@ -2,6 +2,7 @@ import { Kysely, CamelCasePlugin, sql } from 'kysely';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
 import { randomUUID } from 'node:crypto';
+import { NotFoundException } from '@nestjs/common';
 import { MeetingService } from './meeting.service';
 import { mixMeetingPlayback } from './meeting-audio.util';
 import { detectAudioContainer } from './meeting-media.util';
@@ -64,7 +65,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     });
     await sql`CREATE TABLE meetings (id uuid PRIMARY KEY, status text, deleted_at timestamptz,
       audio_storage_prefix text, audio_manifest jsonb, duration_ms integer, transcript text,
-      workspace_id uuid, capture_kind text)`.execute(db);
+      workspace_id uuid, user_id uuid, capture_kind text)`.execute(db);
     await sql`CREATE TABLE meeting_segments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), meeting_id uuid,
       source text, sequence integer, start_ms integer, duration_ms integer, text text)`.execute(
       db,
@@ -81,7 +82,8 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
   beforeEach(async () => {
     meetingId = randomUUID();
     files = new Map();
-    actor = { id: randomUUID(), role: 'admin', workspaceId: randomUUID() };
+    // Strict Private: only the meeting's creator records into it.
+    actor = { id: randomUUID(), role: 'member', workspaceId: randomUUID() };
     await db
       .insertInto('meetings')
       .values({
@@ -91,6 +93,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
         durationMs: 0,
         captureKind: 'live',
         workspaceId: actor.workspaceId,
+        userId: actor.id,
       })
       .execute();
     storage = {
@@ -141,6 +144,15 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       .selectAll()
       .where('id', '=', meetingId)
       .executeTakeFirstOrThrow();
+
+  it('an Admin of the same company cannot record into a colleague meeting, and nothing is stored', async () => {
+    const admin = { id: randomUUID(), role: 'admin', workspaceId: actor.workspaceId };
+    await expect(
+      service.ingestChunk(admin, meetingId, Buffer.from('mic'), meta('mic')),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(files.size).toBe(0);
+    expect((await meeting()).audioManifest.chunks ?? []).toHaveLength(0);
+  });
 
   it('retains distinct microphone and system bytes and both manifest entries when uploaded together', async () => {
     await Promise.all([
@@ -241,7 +253,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     expect(mixMeetingPlayback).not.toHaveBeenCalled();
     const manifest = (await meeting()).audioManifest;
     expect(files.get(manifest.playbackPath)?.toString()).toBe('HDR+1+2');
-    expect(await (service as any).resolveAudioFile(meetingId, 'original')).toEqual({
+    expect(await (service as any).resolveAudioFile(actor, meetingId, 'original')).toEqual({
       filePath: manifest.playbackPath,
       mime: 'audio/webm',
     });
@@ -422,7 +434,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
       'combined playback',
     );
     expect(
-      await (service as any).resolveAudioFile(meetingId, 'original'),
+      await (service as any).resolveAudioFile(actor, meetingId, 'original'),
     ).toEqual({ filePath: manifest.playbackPath, mime: 'audio/mp4' });
   });
 
@@ -645,7 +657,7 @@ suite('meeting audio storage with real concurrent PostgreSQL writes', () => {
     const sources = await (service as any).resolveAudioSources(await meeting());
     expect(sources.map((s: any) => s.source)).toEqual(['mic', 'system']);
     expect(
-      await (service as any).resolveAudioFile(meetingId, 'original'),
+      await (service as any).resolveAudioFile(actor, meetingId, 'original'),
     ).toEqual({ filePath: 'combined.m4a', mime: 'audio/mp4' });
   });
 });

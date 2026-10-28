@@ -5,12 +5,10 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { MeetingService } from './meeting.service';
 import { MeetingTemplateService } from './meeting-template.service';
-import { MEETING_READ_ONLY_MESSAGE } from './meeting-access.util';
 
 // Collaborators are doubles; keep their ESM editor/SDK dependencies out.
 jest.mock('../../../core/page/services/page.service', () => ({
@@ -142,16 +140,19 @@ suite('ConqrMeet contract routes', () => {
       expect(archived).toMatchObject({ status: 'archived', archivedAt: expect.any(Date) });
       expect(await service.archive(creator, id)).toMatchObject({ status: 'archived' }); // idempotent
 
-      const titles = async (opts: any = {}) =>
-        (await service.list(ws1, { limit: 100, q: 'À archiver', ...opts }, coworker)).items.map((m: any) => m.id);
+      const titles = async (opts: any = {}, who: Actor = creator) =>
+        (await service.list(ws1, { limit: 100, q: 'À archiver', ...opts }, who)).items.map((m: any) => m.id);
       expect(await titles()).not.toContain(id);
       expect(await titles({ archived: 'include' })).toContain(id);
       expect(await titles({ archived: 'only' })).toEqual([id]);
       expect(await titles({ status: 'archived' })).toEqual([id]);
+      // Strict Private: an archived meeting stays its creator's alone.
+      expect(await titles({ archived: 'include' }, coworker)).not.toContain(id);
 
-      // Data stays and remains readable.
-      expect((await service.getDetail(coworker, id)).meeting.status).toBe('archived');
-      expect((await service.listInsights(coworker, id)).items).toHaveLength(1);
+      // Data stays and remains readable by its creator.
+      expect((await service.getDetail(creator, id)).meeting.status).toBe('archived');
+      expect((await service.listInsights(creator, id)).items).toHaveLength(1);
+      await expect(service.getDetail(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.process(creator, id, {})).rejects.toBeInstanceOf(ConflictException);
 
       const restored = await service.unarchive(creator, id);
@@ -160,12 +161,16 @@ suite('ConqrMeet contract routes', () => {
       expect(notifications.onTransition).not.toHaveBeenCalled();
     });
 
-    it('needs the edit right, refuses a meeting being recorded or processed', async () => {
+    it('only its creator archives it, refuses a meeting being recorded or processed', async () => {
       const { service } = build();
       const id = await addMeeting({ by: creator, status: 'completed' });
-      await expect(service.archive(coworker, id)).rejects.toThrow(MEETING_READ_ONLY_MESSAGE);
-      await service.archive(owner, id);
-      await expect(service.unarchive(coworker, id)).rejects.toBeInstanceOf(ForbiddenException);
+      // Strict Private: a coworker or a company Owner gets 404, never 403.
+      await expect(service.archive(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.archive(owner, id)).rejects.toBeInstanceOf(NotFoundException);
+      expect((await meetingRow(id)).status).toBe('completed');
+      await service.archive(creator, id);
+      await expect(service.unarchive(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unarchive(owner, id)).rejects.toBeInstanceOf(NotFoundException);
       for (const status of ['recording', 'analyzing']) {
         const busy = await addMeeting({ by: creator, status });
         await expect(service.archive(creator, busy)).rejects.toMatchObject({
@@ -177,30 +182,47 @@ suite('ConqrMeet contract routes', () => {
   });
 
   describe('list filters', () => {
-    it('narrows by type, status, date range and owner, never beyond the company', async () => {
+    it('narrows the caller own meetings by type, status, date range and owner, never beyond them', async () => {
       const { service } = build();
       const tag = `Filtre ${randomUUID().slice(0, 8)}`;
       const a = await addMeeting({ by: creator, title: `${tag} A`, meetingType: 'recruitment-interview', status: 'completed', startedAt: new Date('2026-10-01T09:00:00Z') });
       const b = await addMeeting({ by: owner, title: `${tag} B`, meetingType: 'daily-standup', status: 'published', startedAt: new Date('2026-10-10T23:30:00Z') });
       const c = await addMeeting({ by: creator, title: `${tag} C`, meetingType: 'daily-standup', status: 'failed', startedAt: new Date('2026-10-15T09:00:00Z') });
       await addMeeting({ by: foreign, title: `${tag} X`, meetingType: 'daily-standup' });
-      const ids = async (opts: any, who: Actor = coworker) =>
+      const ids = async (opts: any, who: Actor = creator) =>
         (await service.list(who.workspaceId, { limit: 100, q: tag, ...opts }, who)).items.map((m: any) => m.id).sort();
 
-      expect(await ids({})).toEqual([a, b, c].sort());
-      expect(await ids({ type: 'daily-standup' })).toEqual([b, c].sort());
-      expect(await ids({ type: 'daily-standup,recruitment-interview' })).toEqual([a, b, c].sort());
+      // Strict Private: the list holds the caller's own meetings only.
+      expect(await ids({})).toEqual([a, c].sort());
+      expect(await ids({}, owner)).toEqual([b]);
+      expect(await ids({}, coworker)).toEqual([]);
+      expect(await ids({ type: 'daily-standup' })).toEqual([c]);
+      expect(await ids({ type: 'daily-standup,recruitment-interview' })).toEqual([a, c].sort());
       expect(await ids({ status: 'completed,failed' })).toEqual([a, c].sort());
-      expect(await ids({ from: '2026-10-02', to: '2026-10-10' })).toEqual([b]);
+      expect(await ids({ from: '2026-10-02', to: '2026-10-15' })).toEqual([c]);
+      expect(await ids({ from: '2026-10-02', to: '2026-10-10' }, owner)).toEqual([b]);
       expect(await ids({ to: '2026-10-01' })).toEqual([a]);
       expect(await ids({ ownerId: creator.id })).toEqual([a, c].sort());
-      // A coworker may filter on anyone of the company (company-wide read);
-      // another company's owner id or meetings never appear.
+      // ownerId never widens: a colleague's or another company's id matches nothing.
+      expect(await ids({ ownerId: owner.id })).toEqual([]);
+      expect(await ids({ ownerId: creator.id }, coworker)).toEqual([]);
       expect(await ids({ ownerId: foreign.id })).toEqual([]);
-      // scope=mine and ownerId intersect.
-      expect(await ids({ mine: true, ownerId: owner.id }, creator)).toEqual([]);
-      const total = await service.list(ws1, { limit: 1, q: tag, type: 'daily-standup' }, coworker);
+      // The total counts after the access filter, before pagination.
+      const total = await service.list(ws1, { limit: 1, q: tag }, creator);
+      expect(total.items).toHaveLength(1);
       expect(total.total).toBe(2);
+      // List items are light: content is read meeting by meeting.
+      await db
+        .updateTable('meetings')
+        .set({ transcript: 'mes attentes salariales', settings: sql`${JSON.stringify({ evaluation: { status: 'validated' }, template: { id: 't', name: 'Entrevue' } })}::jsonb` })
+        .where('id', '=', a)
+        .execute();
+      const light = (await service.list(ws1, { limit: 100, q: tag }, creator)).items.find((m: any) => m.id === a);
+      expect(light).not.toHaveProperty('transcript');
+      expect(light).not.toHaveProperty('aiOutputs');
+      expect(light).not.toHaveProperty('cost');
+      expect(light.settings).toEqual({ template: { id: 't', name: 'Entrevue' } });
+      expect((await service.getDetail(creator, a)).meeting.transcript).toBe('mes attentes salariales');
 
       await expect(service.list(ws1, { status: 'done' }, coworker)).rejects.toThrow('Statut inconnu');
       await expect(service.list(ws1, { from: '2026-10-10', to: '2026-10-01' }, coworker)).rejects.toThrow('Période invalide');
@@ -246,8 +268,10 @@ suite('ConqrMeet contract routes', () => {
         confirm: true,
       });
       expect(result).toMatchObject({ confirmed: true, version: 2, edited: true });
-      const transcript = await service.getTranscript(coworker, id);
+      const transcript = await service.getTranscript(creator, id);
       expect(transcript.version).toBe(2);
+      // Being named in a transcript grants no access to it.
+      await expect(service.getTranscript(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
       expect(transcript.speakers).toMatchObject({
         'Speaker 1': { userId: owner.id, displayName: 'Alice' }, // a reviewed name is kept
         'Speaker 2': { userId: coworker.id, displayName: 'Colin Coworker' },
@@ -277,7 +301,7 @@ suite('ConqrMeet contract routes', () => {
       expect(await versions(id)).toBe(1);
     });
 
-    it('lists linkable members of the meeting\'s company only, to editors, with id, name and avatar', async () => {
+    it('lists linkable members of the meeting\'s company only, to its creator, with id, name and avatar', async () => {
       const { service } = build();
       const id = await twoSpeakerMeeting();
       const all = await service.listLinkableMembers(creator, id, { limit: 50 });
@@ -287,10 +311,12 @@ suite('ConqrMeet contract routes', () => {
       expect(Object.keys(all.items[0]).sort()).toEqual(['avatarUrl', 'id', 'name']);
       const found = await service.listLinkableMembers(creator, id, { q: 'colin' });
       expect(found.items.map((m: any) => m.id)).toEqual([coworker.id]);
-      const page = await service.listLinkableMembers(owner, id, { limit: 1 });
+      const page = await service.listLinkableMembers(creator, id, { limit: 1 });
       expect(page.items).toHaveLength(1);
       expect(page.hasMore).toBe(true);
-      await expect(service.listLinkableMembers(coworker, id)).rejects.toThrow(MEETING_READ_ONLY_MESSAGE);
+      // Strict Private: the company's members list is not a way into the meeting.
+      await expect(service.listLinkableMembers(owner, id)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.listLinkableMembers(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.listLinkableMembers(foreign, id)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -355,7 +381,7 @@ suite('ConqrMeet contract routes', () => {
   });
 
   describe('saved AI insights', () => {
-    it('the creator saves a Q&A and an analysis; every member lists them, newest first, with the author', async () => {
+    it('the creator saves a Q&A and an analysis and lists them newest first; nobody else reads them', async () => {
       const { service } = build();
       const id = await addMeeting({ by: creator });
       const qa = await service.saveInsight(creator, id, {
@@ -372,18 +398,23 @@ suite('ConqrMeet contract routes', () => {
         author: { id: creator.id, name: 'Carla Creator' },
         canDelete: true,
       });
-      const analysis = await service.saveInsight(owner, id, {
+      const analysis = await service.saveInsight(creator, id, {
         kind: 'communication-analysis',
         question: 'ignored',
         content: '## Équilibre de parole',
       });
       expect(analysis.question).toBeNull();
 
-      const listed = await service.listInsights(coworker, id);
+      const listed = await service.listInsights(creator, id);
       expect(listed.items.map((i: any) => i.id)).toEqual([analysis.id, qa.id]);
-      expect(listed.items.every((i: any) => i.canDelete === false)).toBe(true);
-      expect((await service.listInsights(coworker, id, 'qa')).items.map((i: any) => i.id)).toEqual([qa.id]);
-      await expect(service.listInsights(coworker, id, 'summary')).rejects.toBeInstanceOf(BadRequestException);
+      expect(listed.items.every((i: any) => i.canDelete === true)).toBe(true);
+      expect((await service.listInsights(creator, id, 'qa')).items.map((i: any) => i.id)).toEqual([qa.id]);
+      await expect(service.listInsights(creator, id, 'summary')).rejects.toBeInstanceOf(BadRequestException);
+      // Strict Private: a coworker or a company Owner reads none of them.
+      await expect(service.listInsights(coworker, id)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.saveInsight(owner, id, { kind: 'qa', question: 'Q', content: 'R' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it('a coworker cannot save or delete; another company sees nothing', async () => {
@@ -392,8 +423,8 @@ suite('ConqrMeet contract routes', () => {
       const saved = await service.saveInsight(creator, id, { kind: 'qa', question: 'Q', content: 'R' });
       await expect(
         service.saveInsight(coworker, id, { kind: 'qa', question: 'Q', content: 'R' }),
-      ).rejects.toThrow(MEETING_READ_ONLY_MESSAGE);
-      await expect(service.deleteInsight(coworker, id, saved.id)).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.deleteInsight(coworker, id, saved.id)).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.listInsights(foreign, id)).rejects.toBeInstanceOf(NotFoundException);
       expect((await service.listInsights(creator, id)).items).toHaveLength(1);
     });
