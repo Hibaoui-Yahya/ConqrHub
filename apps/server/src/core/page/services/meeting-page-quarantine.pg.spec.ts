@@ -140,6 +140,15 @@ suite('LTC quarantine of meeting pages', () => {
     // The trash list filters through the same query.
     const visibleTrash = await repo.filterAccessiblePageIds({ pageIds: [docPage, ordinary], userId: owner, spaceId: space } as any);
     expect(visibleTrash).toEqual([ordinary]);
+    // Restore, preview (/pages/info) and the restriction routes all decide
+    // with canUserEditPage: only the creator may act, whatever the role.
+    const edit = (userId: string, pageId: string) => repo.canUserEditPage(userId, pageId);
+    for (const pageId of [docPage, bundlePage, childPage]) {
+      expect(await edit(owner, pageId)).toEqual({ hasAnyRestriction: true, canAccess: false, canEdit: false });
+      expect(await edit(colleague, pageId)).toEqual({ hasAnyRestriction: true, canAccess: false, canEdit: false });
+      expect(await edit(creator, pageId)).toEqual({ hasAnyRestriction: true, canAccess: true, canEdit: true });
+    }
+    expect((await edit(owner, ordinary)).hasAnyRestriction).toBe(false);
     const audits = await db.selectFrom('audit').select(['event', 'resourceId']).where('workspaceId', '=', ws).execute();
     expect(audits.map((a) => a.resourceId).sort()).toEqual([docPage, bundlePage].sort());
     expect(audits.every((a) => a.event === 'page.restricted')).toBe(true);
