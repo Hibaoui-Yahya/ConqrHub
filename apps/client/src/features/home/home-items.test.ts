@@ -33,7 +33,7 @@ describe("buildTodo", () => {
     expect(items[1].actorName).toBe("Sophie");
   });
 
-  it("adds my meetings to review or publish, once per meeting", () => {
+  it("adds my meetings to review, once per meeting; never 'ready to publish' while publishing is suspended", () => {
     const items = buildTodo(
       [n({ id: "m", type: "meeting.review_needed", data: { meetingId: "m1", meetingTitle: "Entrevue" } })],
       [
@@ -43,10 +43,8 @@ describe("buildTodo", () => {
         { id: "m4", title: "En cours", status: "analyzing", startedAt: "2026-10-12T09:00:00Z" },
       ],
     );
-    expect(items.map((i) => [i.meetingId, i.kind])).toEqual([
-      ["m1", "meeting-review"],
-      ["m2", "meeting-publish"],
-    ]);
+    // m2 is done but unpublished: Strict Private phase 0 offers no publish task.
+    expect(items.map((i) => [i.meetingId, i.kind])).toEqual([["m1", "meeting-review"]]);
   });
 
   it("separates speakers to confirm and failed meetings, failed first", () => {

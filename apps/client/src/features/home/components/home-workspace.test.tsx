@@ -59,7 +59,10 @@ const renderHome = () =>
 beforeEach(() => {
   state.user = { user: { id: "annie", name: "Annie Bissonnette" } };
   state.workspace = { settings: { ai: { chat: true } } };
-  state.meetings = [{ id: "m1", title: "Entrevue — Julie Tremblay", status: "completed", startedAt: "2026-10-13T09:00:00Z" }];
+  state.meetings = [
+    { id: "m1", title: "Entrevue — Julie Tremblay", status: "awaiting_review", startedAt: "2026-10-13T09:00:00Z" },
+    { id: "m2", title: "Point équipe", status: "completed", startedAt: "2026-10-12T09:00:00Z" },
+  ];
   state.notifications = [
     { id: "n1", type: "page.user_mention", readAt: null, createdAt: "2026-10-13T10:00:00Z", actor: { name: "Sophie" }, page: { title: "Procédure", slugId: "p1" }, space: { slug: "rh" } },
   ];
@@ -83,7 +86,9 @@ describe("HomeWorkspace", () => {
     expect(titles[0].compareDocumentPosition(titles[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(titles[1].compareDocumentPosition(titles[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(await screen.findByText("Sophie mentioned you in « Procédure »")).toBeTruthy();
-    expect(await screen.findByText("Ready to publish: Entrevue — Julie Tremblay")).toBeTruthy();
+    expect(await screen.findByText("Meeting to review: Entrevue — Julie Tremblay")).toBeTruthy();
+    // Strict Private phase 0: publishing is suspended, so no publish task.
+    expect(screen.queryByText(/Ready to publish/)).toBeNull();
     // my own edit is in "Reprendre", not repeated in "Nouveau"
     expect(screen.getAllByText("Notes de calibrage")).toHaveLength(1);
     expect(screen.getByText("Politique de télétravail")).toBeTruthy();

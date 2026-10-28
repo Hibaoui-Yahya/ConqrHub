@@ -11,6 +11,10 @@
 
 export const HOME_MAX_ROWS = 5;
 
+/** LTC Strict Private, phase 0: Hub refuses to publish a meeting (403), so
+ *  the Home never offers "Ready to publish". Back with private sharing. */
+export const MEETING_PUBLISHING_SUSPENDED = true;
+
 /** Notification types that call for an action on the Home. */
 export const ACTIONABLE_TYPES = new Set([
   "comment.user_mention",
@@ -133,7 +137,9 @@ export function buildTodo(
     if (SPEAKER_STATUSES.has(m.status)) kind = "meeting-speakers";
     else if (REVIEW_STATUSES.has(m.status)) kind = "meeting-review";
     else if (FAILED_STATUSES.has(m.status)) kind = "meeting-failed";
-    else if (DONE_STATUSES.has(m.status) && !published) kind = "meeting-publish";
+    else if (DONE_STATUSES.has(m.status) && !published && !MEETING_PUBLISHING_SUSPENDED) {
+      kind = "meeting-publish";
+    }
     if (!kind) continue;
     meetingsSeen.add(m.id);
     items.push({ key: `meeting:${m.id}`, kind, at: m.updatedAt ?? m.startedAt, meetingId: m.id, meetingTitle: m.title });
