@@ -90,6 +90,28 @@ describe('MeetingTemplateService', () => {
     expect(items.every((t) => t.builtin && t.isDefault && t.status === 'published')).toBe(true);
   });
 
+  it('counts usage over the caller own meetings only (Strict Private), and not at all without a caller', async () => {
+    const seen: any[][] = [];
+    const selectFrom = db.selectFrom;
+    db.selectFrom = (table: string) => {
+      const q = selectFrom(table);
+      if (table !== 'meetings') return q;
+      const conds: any[] = [];
+      seen.push(conds);
+      const where = q.where;
+      q.where = (a: any, b: any, c: any) => {
+        conds.push([a, b, c]);
+        return where(a, b, c);
+      };
+      return q;
+    };
+    await service.list(W, { id: 'u1', role: 'admin', workspaceId: W } as any);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual(expect.arrayContaining([['workspaceId', '=', W], ['userId', '=', 'u1']]));
+    await service.list(W);
+    expect(seen).toHaveLength(1);
+  });
+
   it('derives a draft from a built-in, keeps its spec, never touches the built-in', async () => {
     const t = await service.create(W, 'u1', { name: 'Entrevue LTC — Cadre', baseId: 'recruitment-interview' });
     expect(t).toMatchObject({ builtin: false, baseType: 'recruitment-interview', status: 'draft', version: 0, published: null, isDefault: false, createdBy: 'u1' });

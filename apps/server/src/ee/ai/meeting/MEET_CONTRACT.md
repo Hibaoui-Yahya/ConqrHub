@@ -343,12 +343,17 @@ New parameters:
 | `ownerId` | user uuid | meetings created by that person |
 | `archived` | `exclude` (default) \| `include` \| `only` | archived meetings are **hidden by default**. `status=archived` implies `include` |
 
-The filters only narrow the list. Read access is unchanged: every member
-already reads every meeting of their own company, so `ownerId` may name any
-colleague. A person of another company matches nothing. `scope=mine` and
-`ownerId` intersect. The response is still `{ items, total }`, and `total`
-counts the filtered list. For local-time day boundaries, send date-times with
-an offset (`2026-10-16T00:00:00+02:00`).
+The filters only narrow the list. Strict Private (LTC, phase 0): the list
+holds the caller's own meetings and nothing else, whatever their role, so
+`ownerId` naming a colleague or a person of another company matches nothing,
+and `scope=all` is the same as `scope=mine`. The response is still
+`{ items, total }`, and `total` counts the filtered list. For local-time day
+boundaries, send date-times with an offset (`2026-10-16T00:00:00+02:00`).
+
+A list item is lighter than `GET /ai/meeting/:id` (changed): it carries no
+`transcript`, `aiOutputs` or `cost`, and `settings` keeps only
+`template.{id, name}` and `publishedBundle.meetingPageId`. Evaluation,
+markers and every other setting are read from the meeting itself.
 
 ---
 

@@ -26,7 +26,7 @@ describe('meeting audio links during storage cutover', () => {
     storage.getSignedUrl.mockRejectedValueOnce(new StorageObjectNotFoundError('Local-only object'));
     expect(await get('system')).toEqual({
       url: '/hubapi/ai/meeting/meeting-id/audio/file?target=system',
-      expiresIn: 3600,
+      expiresIn: 120,
     });
   });
 
@@ -42,7 +42,14 @@ describe('meeting audio links during storage cutover', () => {
 
   it('keeps existing signed S3 playback compatible', async () => {
     const { get } = setup();
-    expect(await get()).toEqual({ url: 'https://private.example/synthetic-signed-audio', expiresIn: 3600 });
+    expect(await get()).toEqual({ url: 'https://private.example/synthetic-signed-audio', expiresIn: 120 });
+  });
+
+  it('signs the recording for 120 s only: a signed URL works for whoever holds it', async () => {
+    const { storage, get } = setup();
+    await get();
+    expect(storage.getSignedUrl).toHaveBeenCalledTimes(1);
+    expect((storage.getSignedUrl.mock.calls[0] as unknown[])[1]).toBe(120);
   });
 
   it('does not hide storage authorization or provider failures', async () => {

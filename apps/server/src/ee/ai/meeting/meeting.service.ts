@@ -34,6 +34,7 @@ import {
 import {
   audioResponseHeaders,
   detectAudioContainer,
+  MEETING_AUDIO_URL_TTL_SECONDS,
   storageFileName,
 } from './meeting-media.util';
 import {
@@ -106,7 +107,12 @@ import {
   MAX_INSIGHTS_PER_MEETING,
   normalizeInsight,
 } from './meeting-insights.util';
-import { dateRange, parseStatuses, splitList } from './meeting-list.util';
+import {
+  dateRange,
+  parseStatuses,
+  splitList,
+  toMeetingListItem,
+} from './meeting-list.util';
 import { reportLanguageCandidate, sttLanguage } from './meeting-stt-language.util';
 import {
   applyEvaluationEdit,
@@ -792,7 +798,8 @@ export class MeetingService {
     ]);
 
     return {
-      items: items.map((m) => this.toCamelMeeting(m, actor)),
+      // Light items: content is read meeting by meeting (Strict Private).
+      items: items.map((m) => toMeetingListItem(this.toCamelMeeting(m, actor))),
       total: Number(countResult?.count ?? 0),
     };
   }
@@ -2720,27 +2727,37 @@ export class MeetingService {
       // through ConqrMeet's BFF: it attaches the Bearer token and the
       // /api/ai/meeting/* allowlist covers this stream route.
       const query = target === 'original' ? '' : `?target=${target}`;
+      // The stream route rechecks access on every request; the validity
+      // only tells the player when to ask again.
       return {
         url: `/hubapi/ai/meeting/${meetingId}/audio/file${query}`,
-        expiresIn: 3600,
+        expiresIn: MEETING_AUDIO_URL_TTL_SECONDS,
       };
     }
 
     try {
       // The object's stored Content-Type is not trusted (older uploads kept
       // the client's): force the safe type and disposition on the URL itself.
+      // Short-lived: a signed URL keeps working for whoever holds it.
       const safe = audioResponseHeaders(resolved.mime);
-      const url = await this.storage.getSignedUrl(resolved.filePath, 3600, {
-        contentType: safe['Content-Type'],
-        contentDisposition: safe['Content-Disposition'],
-      });
-      return { url, expiresIn: 3600 };
+      const url = await this.storage.getSignedUrl(
+        resolved.filePath,
+        MEETING_AUDIO_URL_TTL_SECONDS,
+        {
+          contentType: safe['Content-Type'],
+          contentDisposition: safe['Content-Disposition'],
+        },
+      );
+      return { url, expiresIn: MEETING_AUDIO_URL_TTL_SECONDS };
     } catch (error) {
       if (!isStorageObjectNotFound(error)) throw error;
       // A cutover file may still reside on the retained volume. The stream
       // endpoint rechecks access and lets the storage fallback read its bytes.
       const query = target === 'original' ? '' : `?target=${encodeURIComponent(target)}`;
-      return { url: `/hubapi/ai/meeting/${meetingId}/audio/file${query}`, expiresIn: 3600 };
+      return {
+        url: `/hubapi/ai/meeting/${meetingId}/audio/file${query}`,
+        expiresIn: MEETING_AUDIO_URL_TTL_SECONDS,
+      };
     }
   }
 

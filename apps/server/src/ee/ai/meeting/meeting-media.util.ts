@@ -86,6 +86,14 @@ export function playableAudioType(
 }
 
 /**
+ * Validity of a signed recording link, in seconds. A signed URL is a bearer
+ * pass: whoever holds it reads the audio until it expires, even after their
+ * access is gone (Strict Private, phase 0). ConqrMeet's players ask for a
+ * new link when this one goes stale.
+ */
+export const MEETING_AUDIO_URL_TTL_SECONDS = 120;
+
+/**
  * Response headers for streaming stored meeting audio. A type outside the
  * closed list is downgraded to an opaque download. Every response forbids
  * sniffing and runs under a sandboxing CSP, so even a mislabelled file cannot

@@ -1,4 +1,60 @@
-import { dateRange, parseStatuses, splitList } from './meeting-list.util';
+import {
+  dateRange,
+  listSettings,
+  parseStatuses,
+  splitList,
+  toMeetingListItem,
+} from './meeting-list.util';
+
+describe('meeting list items (Strict Private, phase 0)', () => {
+  const full = {
+    id: 'm1',
+    title: 'Entrevue — Analyste',
+    status: 'completed',
+    userId: 'u1',
+    canEdit: true,
+    transcript: 'Speaker 1: mes attentes salariales…',
+    aiOutputs: { summary: 'Résumé confidentiel' },
+    cost: { usd: 0.42 },
+    settings: {
+      template: { id: 't1', name: 'Entrevue', version: 3, spec: { grid: {} } },
+      publishedBundle: { meetingPageId: 'p1', transcriptPageId: 'p2', spaceId: 's1' },
+      evaluation: { status: 'validated', overall: { recommendation: 'advance' } },
+      markers: [{ kind: 'compensation', note: 'salaire' }],
+    },
+  };
+
+  it('drops the transcript, AI outputs, cost and every sensitive setting', () => {
+    const item = toMeetingListItem(full);
+    expect(item).not.toHaveProperty('transcript');
+    expect(item).not.toHaveProperty('aiOutputs');
+    expect(item).not.toHaveProperty('cost');
+    expect(item.settings).toEqual({
+      template: { id: 't1', name: 'Entrevue' },
+      publishedBundle: { meetingPageId: 'p1' },
+    });
+    expect(JSON.stringify(item)).not.toMatch(/salari|confidentiel|validated|compensation/);
+  });
+
+  it('keeps what the lists show', () => {
+    expect(toMeetingListItem(full)).toMatchObject({
+      id: 'm1',
+      title: 'Entrevue — Analyste',
+      status: 'completed',
+      userId: 'u1',
+      canEdit: true,
+    });
+  });
+
+  it('reads odd settings safely', () => {
+    expect(listSettings(null)).toBeNull();
+    expect(listSettings('{"evaluation":{}}')).toBeNull();
+    expect(listSettings([])).toBeNull();
+    expect(listSettings({ template: { id: 7 }, publishedBundle: {} })).toEqual({
+      template: { id: null, name: null },
+    });
+  });
+});
 
 describe('meeting list filters', () => {
   it('splits comma lists without blanks or duplicates', () => {

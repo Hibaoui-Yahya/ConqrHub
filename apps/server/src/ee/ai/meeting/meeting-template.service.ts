@@ -66,8 +66,14 @@ export class MeetingTemplateService {
       .execute();
   }
 
-  /** Meetings started with each template since the 1st of the month. */
-  private async usage(workspaceId: string): Promise<Record<string, number>> {
+  /** The caller's own meetings started with each template since the 1st of
+   *  the month. Strict Private: colleagues' meetings are not counted, not
+   *  even as a number. No caller, no counts. */
+  private async usage(
+    workspaceId: string,
+    userId: string | undefined,
+  ): Promise<Record<string, number>> {
+    if (!userId) return {};
     const since = new Date();
     since.setDate(1);
     since.setHours(0, 0, 0, 0);
@@ -78,6 +84,7 @@ export class MeetingTemplateService {
         sql<string>`count(*)::int`.as('count'),
       ])
       .where('workspaceId', '=', workspaceId)
+      .where('userId', '=', userId)
       .where('deletedAt', 'is', null)
       .where('startedAt', '>=', since)
       .groupBy(sql`coalesce(settings->'template'->>'id', meeting_type)`)
@@ -89,7 +96,10 @@ export class MeetingTemplateService {
   }
 
   async list(workspaceId: string, actor?: MeetingActor): Promise<MeetingTemplate[]> {
-    const [rows, usage] = await Promise.all([this.customRows(workspaceId), this.usage(workspaceId)]);
+    const [rows, usage] = await Promise.all([
+      this.customRows(workspaceId),
+      this.usage(workspaceId, actor?.id),
+    ]);
     const custom = rows.map((r) => this.rowToTemplate(r));
     const defaultsByBase = new Set(custom.filter((t) => t.isDefault).map((t) => t.baseType));
     const builtins = BASE_TYPES.map((id) => builtinTemplate(id, !defaultsByBase.has(id)));
