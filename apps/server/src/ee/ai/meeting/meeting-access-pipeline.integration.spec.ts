@@ -512,6 +512,54 @@ suite('meetings: Strict Private access, deletion, durable processing', () => {
       expect(await ids(foreign)).toEqual([elsewhere]);
     });
 
+    it("never returns another person's meeting or transcript, whatever the search, filters or pagination", async () => {
+      const { service } = build();
+      const secret = `SECRETCOLLEGUE${randomUUID().slice(0, 8)}`;
+      const theirs: string[] = [];
+      for (const status of ['awaiting_review', 'completed', 'failed']) {
+        theirs.push(await addMeeting({ by: coworker, status }));
+      }
+      const archivedTheirs = await addMeeting({ by: coworker, status: 'completed' });
+      theirs.push(archivedTheirs);
+      await db.updateTable('meetings').set({ archivedAt: new Date() }).where('id', '=', archivedTheirs).execute();
+      await db.updateTable('meetings').set({ transcript: `Le salaire visé est confidentiel. ${secret}` }).where('id', 'in', theirs).execute();
+      const mineExtra = await addMeeting({ by: creator, status: 'completed' });
+      await db.updateTable('meetings').set({ transcript: 'Point budget sans secret.' }).where('id', 'in', [meetingId, mineExtra]).execute();
+
+      const searches = ['', 'Atlas', secret, secret.slice(0, 6), 'salaire', '%', '_', "' or 1=1 --"];
+      const archived = [undefined, 'exclude', 'include', 'only'] as const;
+      const owners = [undefined, coworker.id, creator.id];
+      const statuses = [undefined, 'awaiting_review', 'completed,failed,archived'];
+      let calls = 0;
+      for (const q of searches) for (const arch of archived) for (const ownerId of owners) for (const status of statuses) {
+        const res = await service.list(ws1, { limit: 100, q, archived: arch as any, ownerId, status, mine: false }, creator);
+        calls++;
+        const wire = JSON.stringify(res);
+        expect([q, arch, ownerId, status, wire.includes(secret)]).toEqual([q, arch, ownerId, status, false]);
+        expect(res.items.every((m) => m.userId === creator.id)).toBe(true);
+        expect(res.items.some((m) => theirs.includes(m.id))).toBe(false);
+        expect(res.total).toBe(res.items.length);
+      }
+      expect(calls).toBe(searches.length * archived.length * owners.length * statuses.length);
+
+      // Pagination: walking every page, one meeting at a time, yields exactly
+      // the caller's own meetings, and the total never counts anyone else's.
+      for (const who of [creator, coworker, admin, owner]) {
+        const seen: string[] = [];
+        let total = -1;
+        for (let offset = 0; offset < 50; offset++) {
+          const page = await service.list(ws1, { limit: 1, offset, archived: 'include' }, who);
+          total = page.total;
+          if (!page.items.length) break;
+          expect(page.items[0].userId).toBe(who.id);
+          seen.push(page.items[0].id);
+        }
+        const own = await db.selectFrom('meetings').select('id').where('userId', '=', who.id).where('workspaceId', '=', ws1).where('deletedAt', 'is', null).execute();
+        expect(seen.sort()).toEqual(own.map((m) => m.id).sort());
+        expect(total).toBe(own.length);
+      }
+    });
+
     it('suspends publishing into Hub, even for the creator with page rights, and creates no page', async () => {
       const { service, pages } = build();
       for (const publish of [

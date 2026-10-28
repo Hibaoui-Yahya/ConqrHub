@@ -113,8 +113,26 @@ suite('LTC quarantine of meeting pages', () => {
     expect(await access(colleague)).toEqual([true, true, true, true]);
   });
 
+  it('apply is refused without the reviewed list, or with a list that differs from the plan; nothing is written', async () => {
+    const ltc = { RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse', QUARANTINE_APPLY: 'yes-ltc' };
+    expect(() => run(ltc)).toThrow();
+    expect(() => run({ ...ltc, QUARANTINE_EXPECT: docPage })).toThrow();
+    // Same number of pages, but not the same pages.
+    expect(() => run({ ...ltc, QUARANTINE_EXPECT: [docPage, ordinary].join(',') })).toThrow();
+    expect(() => run({ ...ltc, QUARANTINE_EXPECT: [docPage, bundlePage, ordinary].join(',') })).toThrow();
+    expect(await db.selectFrom('pageAccess').selectAll().execute()).toEqual([]);
+    expect(await db.selectFrom('audit').selectAll().where('workspaceId', '=', ws).execute()).toEqual([]);
+  });
+
   it('apply: only the creator reaches the meeting pages and what is under them; Owner and colleague do not', async () => {
-    const report = run({ RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse', QUARANTINE_APPLY: 'yes-ltc' });
+    const plan = run({ RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse' });
+    expect(plan.expect.split(',').sort()).toEqual([docPage, bundlePage].sort());
+    const report = run({
+      RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse',
+      QUARANTINE_APPLY: 'yes-ltc',
+      // The list as a person would paste it back: upper case, spaces, any order.
+      QUARANTINE_EXPECT: plan.expect.split(',').reverse().map((id: string) => ` ${id.toUpperCase()} `).join(','),
+    });
     expect(report.summary).toEqual({ pages: 2, restricted: 2, toRestrict: 0, alreadyRestricted: 0 });
     expect(await access(creator)).toEqual([true, true, true, true]);
     expect(await access(colleague)).toEqual([false, false, false, true]);
@@ -127,8 +145,10 @@ suite('LTC quarantine of meeting pages', () => {
     expect(audits.every((a) => a.event === 'page.restricted')).toBe(true);
   });
 
-  it('a second apply changes nothing', async () => {
+  it('a second apply changes nothing (the plan is empty, so is the list to approve)', async () => {
     const before = await db.selectFrom('pagePermissions').select(sql<number>`count(*)::int`.as('n')).executeTakeFirst();
+    const plan = run({ RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse' });
+    expect(plan.expect).toBe('');
     const report = run({ RAILWAY_ENVIRONMENT_NAME: 'client-latetechercheuse', QUARANTINE_APPLY: 'yes-ltc' });
     expect(report.summary).toEqual({ pages: 2, restricted: 0, toRestrict: 0, alreadyRestricted: 2 });
     const after = await db.selectFrom('pagePermissions').select(sql<number>`count(*)::int`.as('n')).executeTakeFirst();

@@ -64,8 +64,9 @@ suite('meeting-derived Hub pages are retained', () => {
         userId: user,
         title: 'Entrevue',
         status: 'completed',
-        // Older rows hold a JSON string scalar (double-encoded jsonb).
-        settings: o.doubleEncoded ? sql`to_jsonb(${json}::text)` : sql`${json}::jsonb`,
+        // A real jsonb object, or (older rows) a JSON string scalar holding
+        // it. Bound as text: postgres.js JSON-encodes values bound to ::jsonb.
+        settings: o.doubleEncoded ? sql`to_jsonb(${json}::text)` : sql`${json}::text::jsonb`,
         deletedAt: o.deleted ? new Date() : null,
       })
       .execute();
@@ -142,6 +143,61 @@ suite('meeting-derived Hub pages are retained', () => {
     expect((await meetingDerivedPageIdsIn(db, { workspaceId: ws, spaceId: space })).length).toBe(5);
     expect(await meetingDerivedPageIdsIn(db, { workspaceId: ws, spaceId: emptySpace })).toEqual([]);
     expect(await meetingDerivedPageIdsIn(db, { workspaceId: otherWs })).toEqual([foreignPage]);
+  });
+
+  it('false negatives: triple-encoded settings, upper-case ids, a meeting page moved to another space', async () => {
+    const tripled = await page();
+    const once = JSON.stringify({ publishedBundle: { meetingPageId: tripled } });
+    // Three levels of string around the object, the most the meeting
+    // service's parseJson unwraps. Sent as text: postgres.js would JSON-encode
+    // a value bound straight to ::jsonb once more.
+    const triple = JSON.stringify(JSON.stringify(JSON.stringify(once)));
+    await db
+      .insertInto('meetings')
+      .values({ id: randomUUID(), workspaceId: ws, userId: user, title: 'x', status: 'completed', settings: sql`${triple}::text::jsonb` })
+      .execute();
+    const upper = await page();
+    await meeting({ settings: { publishedBundle: { transcriptPageId: upper.toUpperCase() } } });
+    const elsewhere = randomUUID();
+    await db.insertInto('spaces').values({ id: elsewhere, workspaceId: ws, slug: `m-${elsewhere.slice(0, 6)}`, name: 'Ailleurs' }).execute();
+    const moved = await page();
+    await document(await meeting(), moved);
+    await db.updateTable('pages').set({ spaceId: elsewhere }).where('id', '=', moved).execute();
+
+    const ids = await meetingDerivedPageIdsIn(db, { workspaceId: ws });
+    expect(ids).toEqual(expect.arrayContaining([tripled, upper, moved]));
+    expect(await meetingDerivedPageIdsIn(db, { workspaceId: ws, spaceId: elsewhere })).toEqual([moved]);
+  });
+
+  it('false positives and robustness: odd data is ignored, never an error; other companies never match', async () => {
+    const ordinary = await page({ trashedDaysAgo: 1 });
+    // Odd settings must never break detection (it guards every deletion).
+    await meeting({ settings: { publishedBundle: { meetingPageId: '------------------------------------' } } });
+    await meeting({ settings: { publishedBundle: { meetingPageId: ordinary + 'x', transcriptPageId: 42 } } });
+    await meeting({ settings: { publishedBundle: 'not an object' } });
+    await db
+      .insertInto('meetings')
+      .values({ id: randomUUID(), workspaceId: ws, userId: user, title: 'x', status: 'completed', settings: sql`to_jsonb('not json at all'::text)` })
+      .execute();
+    // A meeting of this company pointing at another company's page.
+    const foreign = await page({ spaceId: otherSpace, workspaceId: otherWs });
+    await meeting({ settings: { publishedBundle: { meetingPageId: foreign } } });
+
+    const ids = await meetingDerivedPageIdsIn(db, { workspaceId: ws });
+    expect(ids).not.toContain(ordinary);
+    expect(ids).not.toContain(foreign);
+    expect(await meetingDerivedPageIdsIn(db, { workspaceId: ws, underPageId: ordinary })).toEqual([]);
+    expect(await meetingDerivedPageIdsIn(db, { workspaceId: otherWs, underPageId: foreign })).toEqual([]);
+  });
+
+  it('deliberately conservative: a page filed under a meeting page is protected too', async () => {
+    const meetingPage = await page();
+    await document(await meeting(), meetingPage);
+    const filedUnder = await page({ parent: meetingPage });
+    expect(await meetingDerivedPageIdsIn(db, { workspaceId: ws, underPageId: filedUnder })).toEqual([filedUnder]);
+    // Moved out again, it is an ordinary page.
+    await db.updateTable('pages').set({ parentPageId: null }).where('id', '=', filedUnder).execute();
+    expect(await meetingDerivedPageIdsIn(db, { workspaceId: ws, underPageId: filedUnder })).toEqual([]);
   });
 
   it('the trash purge skips a meeting page (and a trashed parent holding one) but purges the rest', async () => {
