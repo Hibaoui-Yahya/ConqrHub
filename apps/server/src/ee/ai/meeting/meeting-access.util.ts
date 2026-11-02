@@ -1,9 +1,9 @@
 /**
  * Who may do what with a meeting. LTC "Strict Private", phase 0 (owner's
  * approval of 28 Oct 2026): a meeting is private to the person who created
- * it. Only that person reads, changes or deletes it; a workspace Owner or
- * Admin gets nothing from their role, and nobody else in the company sees
- * it. Explicit user and group grants come in a later phase.
+ * it. Only that person changes, deletes or shares it; a workspace Owner or
+ * Admin gets nothing from their role. Sharing, phase 1 (2 Nov 2026): the
+ * creator may let named colleagues or groups READ it (meeting_shares).
  * Disabled accounts never get past JwtAuthGuard.
  * Pure; unit-tested in meeting-access.util.spec.ts.
  */
@@ -29,8 +29,7 @@ export interface MeetingAccessSubject extends MeetingOwnership {
 /** The caller, as MeetingAccessGuard sees it. */
 export type MeetingAccessViewer = MeetingActor;
 
-/** Refusal of a change. Unreachable while only the creator reads a
- *  meeting (anyone else gets a 404 first); kept for a later read-only role. */
+/** Refusal of a change to someone the meeting is shared with (read-only). */
 export const MEETING_READ_ONLY_MESSAGE =
   'Lecture seule : seule la personne qui a créé cette réunion peut la modifier.';
 
@@ -54,8 +53,8 @@ export function isWorkspaceManager(
   return role === UserRole.OWNER || role === UserRole.ADMIN;
 }
 
-/** Its creator, in its own company, and nobody else — whatever their role. */
-export function canReadMeeting(
+/** The person who created the meeting, in its own company. */
+export function isMeetingCreator(
   meeting: MeetingOwnership,
   viewer: MeetingAccessViewer,
 ): boolean {
@@ -65,12 +64,31 @@ export function canReadMeeting(
   );
 }
 
-/** Same rule as reading: the creator alone changes or deletes a meeting. */
+/**
+ * Its creator, or someone it was shared with (sharing, phase 1: a grant to
+ * the person or to one of their groups, looked up by meetingSharedWith),
+ * always in its own company — whatever their role. A grant never crosses
+ * companies, even if a row says so.
+ */
+export function canReadMeeting(
+  meeting: MeetingOwnership,
+  viewer: MeetingAccessViewer,
+  sharedWithViewer = false,
+): boolean {
+  if (isMeetingCreator(meeting, viewer)) return true;
+  if (!sharedWithViewer || !viewer?.id || !viewer.workspaceId || !meeting?.userId) {
+    return false;
+  }
+  return meeting.workspaceId === viewer.workspaceId;
+}
+
+/** The creator alone changes, deletes or shares a meeting; a share is
+ *  read-only. Independent of canReadMeeting on purpose. */
 export function canEditMeeting(
   meeting: MeetingOwnership,
   actor: MeetingActor,
 ): boolean {
-  return canReadMeeting(meeting, actor);
+  return isMeetingCreator(meeting, actor);
 }
 
 /**

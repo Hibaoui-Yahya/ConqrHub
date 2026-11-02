@@ -32,10 +32,11 @@ export class ListMeetingsDto {
   @MaxLength(200)
   q?: string;
 
-  /** "mine": only the caller's own meetings. */
+  /** "mine" (and "all"): the caller's own meetings. "shared": the meetings
+   *  colleagues shared with the caller (sharing, phase 1). */
   @IsOptional()
-  @IsIn(['mine', 'all'])
-  scope?: 'mine' | 'all';
+  @IsIn(['mine', 'all', 'shared'])
+  scope?: 'mine' | 'all' | 'shared';
 
   /** Meeting type(s), comma-separated (e.g. "recruitment-interview,daily-standup"). */
   @IsOptional()

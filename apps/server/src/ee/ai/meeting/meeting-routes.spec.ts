@@ -12,8 +12,8 @@ jest.mock('./meeting.service', () => ({ MeetingService: class {} }));
  * the controller must therefore be either a `:id` route, the list, or a
  * creation (start, upload) — a new route that takes a meeting some other way
  * (body, query) would escape the guard, so this test fails until it is
- * classified here and checked. The 36 routes deployed on LTC on 28 Oct 2026
- * are listed one by one.
+ * classified here and checked. The 36 routes deployed on LTC on 28 Oct 2026,
+ * plus the 4 sharing routes (phase 1, 2 Nov 2026), are listed one by one.
  */
 const EXPECTED: Record<string, 'read' | 'write' | 'list' | 'create'> = {
   'POST start': 'create',
@@ -38,6 +38,11 @@ const EXPECTED: Record<string, 'read' | 'write' | 'list' | 'create'> = {
   'GET :id/transcript': 'read',
   'POST :id/transcript/speakers': 'write',
   'GET :id/linkable-members': 'read',
+  // Sharing, phase 1: readable by the guard, creator-only in the service.
+  'GET :id/shares': 'read',
+  'GET :id/share-targets': 'read',
+  'POST :id/shares': 'write',
+  'DELETE :id/shares/:shareId': 'write',
   'POST :id/transcript/remove-echoes': 'write',
   'POST :id/transcript/attribute': 'write',
   'GET :id/documents': 'read',
@@ -69,9 +74,9 @@ function routes(): string[] {
 }
 
 describe('meeting routes: none escapes MeetingAccessGuard', () => {
-  it('has exactly the 36 known routes', () => {
+  it('has exactly the 40 known routes', () => {
     expect(routes().sort()).toEqual(Object.keys(EXPECTED).sort());
-    expect(Object.keys(EXPECTED)).toHaveLength(36);
+    expect(Object.keys(EXPECTED)).toHaveLength(40);
   });
 
   it('puts every route but the list and the two creations behind a meeting id in the path', () => {

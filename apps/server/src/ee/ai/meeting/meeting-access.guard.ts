@@ -10,18 +10,21 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import {
   canReadMeeting,
   canWriteMeeting,
+  isMeetingCreator,
   isMeetingId,
   isWriteMethod,
   MEETING_READ_ONLY_MESSAGE,
 } from './meeting-access.util';
+import { meetingSharedWith } from './meeting-share.util';
 
 /**
  * Every /ai/meeting/:id route goes through here: the meeting must exist,
- * not be deleted, and be the caller's own (canReadMeeting: its creator in
- * its company; no role grants access). Anyone else gets 404 rather than 403,
- * so a meeting id never confirms that a colleague's or another company's
- * interview exists. Changing it (any method but GET) also needs
- * canWriteMeeting; the service checks reads and writes again.
+ * not be deleted, and be readable by the caller (canReadMeeting: its creator,
+ * or someone it was shared with, in its company; no role grants access).
+ * Anyone else gets 404 rather than 403, so a meeting id never confirms that
+ * a colleague's or another company's meeting exists. Changing it (any method
+ * but GET) also needs canWriteMeeting (the creator): someone it is shared
+ * with gets 403. The service checks reads and writes again.
  */
 @Injectable()
 export class MeetingAccessGuard implements CanActivate {
@@ -45,7 +48,11 @@ export class MeetingAccessGuard implements CanActivate {
       .executeTakeFirst();
     if (!meeting) throw new NotFoundException('Meeting not found');
     const viewer = { id: user.id, role: user.role, workspaceId: workspace.id };
-    if (!canReadMeeting(meeting, viewer)) {
+    // The share lookup runs only for someone other than the creator.
+    const shared =
+      !isMeetingCreator(meeting, viewer) &&
+      (await meetingSharedWith(this.db, id, viewer));
+    if (!canReadMeeting(meeting, viewer, shared)) {
       throw new NotFoundException('Meeting not found');
     }
     if (isWriteMethod(req.method) && !canWriteMeeting(meeting, viewer)) {

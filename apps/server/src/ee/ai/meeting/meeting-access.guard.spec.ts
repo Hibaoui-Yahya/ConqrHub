@@ -1,5 +1,15 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MeetingAccessGuard } from './meeting-access.guard';
+import { meetingSharedWith } from './meeting-share.util';
+
+// Grants (meeting:user:workspace) the share lookup reports; real SQL is
+// covered by meeting-sharing.integration.spec.ts.
+const mockGrants = new Set<string>();
+jest.mock('./meeting-share.util', () => ({
+  meetingSharedWith: jest.fn(async (_db: unknown, meetingId: string, viewer: any) =>
+    mockGrants.has(`${meetingId}:${viewer.id}:${viewer.workspaceId}`),
+  ),
+}));
 
 describe('MeetingAccessGuard', () => {
   const M1 = '0192f1a0-0000-7000-8000-000000000001';
@@ -75,6 +85,37 @@ describe('MeetingAccessGuard', () => {
       },
     };
     await expect(new MeetingAccessGuard(broken).canActivate(ctx(M1, { id: 'annie', role: 'owner' }))).rejects.toThrow('db down');
+  });
+
+  it('lets someone the meeting is shared with read it, and refuses them any change (403)', async () => {
+    mockGrants.add(`${M1}:karim:w1`);
+    try {
+      for (const method of ['GET', 'HEAD']) {
+        await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }, 'w1', method))).resolves.toBe(true);
+      }
+      for (const method of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+        await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }, 'w1', method))).rejects.toBeInstanceOf(ForbiddenException);
+      }
+      // A share for Karim gives nothing to anyone else.
+      await expect(guard.canActivate(ctx(M1, { id: 'sophie', role: 'admin' }))).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      mockGrants.clear();
+    }
+  });
+
+  it('never lets a share cross companies, even if the lookup says so', async () => {
+    mockGrants.add(`${M1}:karim:w2`);
+    try {
+      await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'owner' }, 'w2'))).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      mockGrants.clear();
+    }
+  });
+
+  it('does not look shares up for the creator', async () => {
+    (meetingSharedWith as jest.Mock).mockClear();
+    await guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }));
+    expect(meetingSharedWith).not.toHaveBeenCalled();
   });
 
   it('answers 404 without an authenticated user', async () => {

@@ -17,7 +17,7 @@ describe('MeetingController actor wiring', () => {
     const proxy = new Proxy(service, {
       get: (target, key: string) => (target[key] ??= jest.fn(async () => ({ stream: null, mime: 'audio/webm' }))),
     });
-    return { controller: new MeetingController(proxy as any), service };
+    return { controller: new MeetingController(proxy as any, proxy as any), service };
   }
 
   it('passes the actor to reads, writes, retry and audio', async () => {

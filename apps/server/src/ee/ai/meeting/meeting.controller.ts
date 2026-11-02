@@ -42,13 +42,16 @@ import { PublishDocumentDto } from './dto/publish-document.dto';
 import { ApproveProposalDto } from './dto/approve-proposal.dto';
 import { StopMeetingDto } from './dto/stop-meeting.dto';
 import { ListInsightsDto, SaveInsightDto } from './dto/meeting-insight.dto';
+import { AddMeetingSharesDto, ShareTargetsDto } from './dto/meeting-share.dto';
+import { MeetingShareService } from './meeting-share.service';
 import { MAX_CHUNK_BYTES } from './meeting-capture.util';
 import { audioResponseHeaders } from './meeting-media.util';
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024; // 300 MB uploaded recordings
 
 /** Every route works in the caller's workspace. Strict Private: the
- *  creator alone reads and changes a meeting; the role grants nothing. */
+ *  creator alone changes a meeting, and reads it with the people it shared
+ *  it with (read-only); the role grants nothing. */
 function actor(user: User, workspace: Workspace): MeetingActor {
   return { id: user.id, role: user.role, workspaceId: workspace.id };
 }
@@ -77,7 +80,10 @@ export function parseLanguageConfig(raw: unknown): Record<string, unknown> | und
 export class MeetingController {
   private readonly logger = new Logger(MeetingController.name);
 
-  constructor(private readonly meetingService: MeetingService) {}
+  constructor(
+    private readonly meetingService: MeetingService,
+    private readonly shares: MeetingShareService,
+  ) {}
 
   // ──────────── POST /start ────────────
 
@@ -232,8 +238,9 @@ export class MeetingController {
         limit: query.limit,
         offset: query.offset,
         q: query.q,
-        // Always the caller's own meetings now; kept for the Meet client.
+        // The caller's own meetings, or (scope=shared) the ones shared with them.
         mine: query.scope === 'mine',
+        shared: query.scope === 'shared',
         type: query.type,
         status: query.status,
         from: query.from,
@@ -379,6 +386,54 @@ export class MeetingController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     await this.meetingService.deleteInsight(actor(user, workspace), id, insightId);
+  }
+
+  // ──────────── sharing, phase 1 (creator only; read-only grants) ────────────
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/shares')
+  async listShares(
+    @Param('id') id: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.shares.list(actor(user, workspace), id);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Get(':id/share-targets')
+  async shareTargets(
+    @Param('id') id: string,
+    @Query() query: ShareTargetsDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.shares.targets(actor(user, workspace), id, { q: query?.q, limit: query?.limit });
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/shares')
+  async addShares(
+    @Param('id') id: string,
+    @Body() dto: AddMeetingSharesDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.shares.add(actor(user, workspace), id, {
+      userIds: dto?.userIds,
+      groupIds: dto?.groupIds,
+    });
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id/shares/:shareId')
+  async removeShare(
+    @Param('id') id: string,
+    @Param('shareId') shareId: string,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.shares.remove(actor(user, workspace), id, shareId);
   }
 
   // ──────────── POST /:id/process ────────────

@@ -594,6 +594,28 @@ export interface MeetingSegments {
   text: string;
 }
 
+export interface MeetingShareAudit {
+  action: string;
+  actorId: string | null;
+  createdAt: Generated<Timestamp>;
+  groupId: string | null;
+  id: Generated<string>;
+  meetingId: string;
+  userId: string | null;
+  workspaceId: string;
+}
+
+export interface MeetingShares {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  groupId: string | null;
+  id: Generated<string>;
+  meetingId: string;
+  role: Generated<string>;
+  userId: string | null;
+  workspaceId: string;
+}
+
 export interface MeetingTemplates {
   createdAt: Generated<Timestamp>;
   definition: Json;
@@ -1049,6 +1071,8 @@ export interface DB {
   meetingProcessingEvents: MeetingProcessingEvents;
   meetings: Meetings;
   meetingSegments: MeetingSegments;
+  meetingShareAudit: MeetingShareAudit;
+  meetingShares: MeetingShares;
   meetingTemplates: MeetingTemplates;
   meetingTranscripts: MeetingTranscripts;
   notifications: Notifications;

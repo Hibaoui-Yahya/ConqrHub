@@ -26,11 +26,13 @@ import {
 import {
   canEditMeeting,
   canReadMeeting,
+  isMeetingCreator,
   isMeetingId,
   MEETING_PUBLISH_SUSPENDED_MESSAGE,
   MEETING_READ_ONLY_MESSAGE,
   type MeetingActor,
 } from './meeting-access.util';
+import { meetingSharedWith, sharesReaching } from './meeting-share.util';
 import {
   audioResponseHeaders,
   detectAudioContainer,
@@ -268,17 +270,20 @@ export class MeetingService {
   // ──────────── access (LTC-03 / LTC-04) ────────────
 
   /**
-   * A meeting the actor may read (canReadMeeting: their own) that nobody
-   * deleted. Missing, deleted, foreign and colleagues' meetings are all
-   * "not found" — the caller learns nothing about meetings it may not see.
-   * MeetingAccessGuard checks the same rule first; this keeps it true for
-   * any caller that does not go through the guard.
+   * A meeting the actor may read (canReadMeeting: their own, or one shared
+   * with them) that nobody deleted. Missing, deleted, foreign and colleagues'
+   * unshared meetings are all "not found" — the caller learns nothing about
+   * meetings it may not see. MeetingAccessGuard checks the same rule first;
+   * this keeps it true for any caller that does not go through the guard.
    */
   private async getReadableMeeting(actor: MeetingActor, meetingId: string) {
     const meeting = await this.getMeetingOrThrow(meetingId, {
       workspaceId: actor.workspaceId,
     });
-    if (!canReadMeeting(meeting, actor)) {
+    const shared =
+      !isMeetingCreator(meeting, actor) &&
+      (await meetingSharedWith(this.db, meetingId, actor));
+    if (!canReadMeeting(meeting, actor, shared)) {
       throw new NotFoundException('Meeting not found');
     }
     return meeting;
@@ -714,6 +719,8 @@ export class MeetingService {
       q?: string;
       /** Only the caller's own meetings (the Home "À traiter" list). */
       mine?: boolean;
+      /** Meetings shared with the caller (sharing, phase 1), never their own. */
+      shared?: boolean;
       /** Meeting type(s), comma-separated. */
       type?: string;
       /** Status(es), comma-separated. */
@@ -756,12 +763,19 @@ export class MeetingService {
         .where('workspaceId', '=', workspaceId)
         .where('deletedAt', 'is', null);
       // Strict Private: the list holds the caller's own meetings and
-      // nothing else, whatever their role ("mine" is therefore implied).
-      // No caller, no meetings. The filters below only narrow it further,
-      // never widen it.
-      query = actor?.id
-        ? query.where('userId', '=', actor.id)
-        : query.where(sql<boolean>`false`);
+      // nothing else, whatever their role ("mine" is therefore implied) —
+      // or, with `shared`, only the meetings shared with them (sharing,
+      // phase 1), never their own. No caller, no meetings. The filters
+      // below only narrow it further, never widen it.
+      if (!actor?.id) {
+        query = query.where(sql<boolean>`false`);
+      } else if (opts.shared) {
+        query = query
+          .where('userId', '!=', actor.id)
+          .where('id', 'in', sharesReaching(this.db, actor).select('meetingShares.meetingId'));
+      } else {
+        query = query.where('userId', '=', actor.id);
+      }
       if (opts.ownerId) query = query.where('userId', '=', opts.ownerId);
       if (types.length) query = query.where('meetingType', 'in', types);
       if (statuses.length) query = query.where('status', 'in', statuses as any);
@@ -797,9 +811,24 @@ export class MeetingService {
         .executeTakeFirst(),
     ]);
 
+    // Shared meetings name the colleague who created them.
+    const owners = new Map<string, string | null>();
+    if (opts.shared && items.length) {
+      const ownerRows = await this.db
+        .selectFrom('users')
+        .select(['id', 'name'])
+        .where('workspaceId', '=', workspaceId)
+        .where('id', 'in', [...new Set(items.map((m) => m.userId))])
+        .execute();
+      for (const o of ownerRows) owners.set(o.id, o.name ?? null);
+    }
+
     return {
       // Light items: content is read meeting by meeting (Strict Private).
-      items: items.map((m) => toMeetingListItem(this.toCamelMeeting(m, actor))),
+      items: items.map((m) => {
+        const item = toMeetingListItem(this.toCamelMeeting(m, actor));
+        return opts.shared ? { ...item, ownerName: owners.get(m.userId) ?? null } : item;
+      }),
       total: Number(countResult?.count ?? 0),
     };
   }
@@ -5437,6 +5466,9 @@ export class MeetingService {
     return {
       // Additive (LTC-03): lets the UI hide edits for read-only coworkers.
       canEdit: actor ? canEditMeeting(row, actor) : undefined,
+      // Additive (sharing, phase 1): "owner" for its creator, "shared" for
+      // anyone else who reached it (only a share lets them).
+      access: actor ? (isMeetingCreator(row, actor) ? 'owner' : 'shared') : undefined,
       id: row.id,
       workspaceId: row.workspaceId,
       userId: row.userId,

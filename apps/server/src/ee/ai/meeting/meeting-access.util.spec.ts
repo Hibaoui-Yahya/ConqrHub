@@ -28,6 +28,22 @@ describe('canReadMeeting', () => {
   });
 });
 
+describe('canReadMeeting with a share (phase 1)', () => {
+  const meeting = { userId: 'annie', workspaceId: 'w1' };
+
+  it('lets someone it is shared with read, in the same company only', () => {
+    expect(canReadMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w1' }, true)).toBe(true);
+    expect(canReadMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w2' }, true)).toBe(false);
+    expect(canReadMeeting(meeting, { id: '', role: 'member', workspaceId: 'w1' }, true)).toBe(false);
+    expect(canReadMeeting({ userId: '', workspaceId: 'w1' }, { id: 'karim', role: 'member', workspaceId: 'w1' }, true)).toBe(false);
+  });
+
+  it('a share never lets anyone edit', () => {
+    expect(canEditMeeting(meeting, { id: 'karim', role: 'member', workspaceId: 'w1' })).toBe(false);
+    expect(canEditMeeting(meeting, { id: 'sophie', role: 'admin', workspaceId: 'w1' })).toBe(false);
+  });
+});
+
 describe('canEditMeeting', () => {
   const meeting = { userId: 'annie', workspaceId: 'w1' };
 

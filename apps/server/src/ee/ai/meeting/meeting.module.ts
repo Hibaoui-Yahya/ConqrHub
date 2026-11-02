@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MeetingController } from './meeting.controller';
 import { MeetingService } from './meeting.service';
+import { MeetingShareService } from './meeting-share.service';
 import { MeetingTemplateController } from './meeting-template.controller';
 import { MeetingTemplateService } from './meeting-template.service';
 import { MeetingPipelineProcessor } from './meeting-pipeline.processor';
@@ -19,7 +20,12 @@ import { NotificationModule } from '../../../core/notification/notification.modu
     NotificationModule,
   ],
   controllers: [MeetingController, MeetingTemplateController],
-  providers: [MeetingService, MeetingTemplateService, MeetingPipelineProcessor],
+  providers: [
+    MeetingService,
+    MeetingShareService,
+    MeetingTemplateService,
+    MeetingPipelineProcessor,
+  ],
   exports: [MeetingService, MeetingTemplateService],
 })
 export class MeetingModule {}
