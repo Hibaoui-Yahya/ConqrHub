@@ -237,6 +237,7 @@ export class UserService {
           name: user.name,
           email: user.email,
           workspaceId: workspace.id,
+          locale: user.locale ?? userBefore.locale ?? null,
         },
         userBefore.email,
         user.email,

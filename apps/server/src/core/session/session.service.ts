@@ -78,6 +78,7 @@ export class SessionService {
           name: user.name,
           email: user.email,
           workspaceId: user.workspaceId,
+          locale: user.locale ?? null,
         },
         { id: session.id, deviceName, ipAddress },
       );

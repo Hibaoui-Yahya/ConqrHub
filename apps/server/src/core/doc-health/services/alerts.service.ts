@@ -12,6 +12,7 @@ import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/notification.constants';
 import { DomainService } from '../../../integrations/environment/domain.service';
 import { DocHealthDroppedEmail } from '@docmost/transactional/emails/doc-health-dropped-email';
+import type { MailLanguage } from '@docmost/transactional/i18n';
 
 const ALERT_DEDUPE_MS = 24 * 60 * 60 * 1000; // 24h
 const MIN_THRESHOLD = 0;
@@ -251,18 +252,31 @@ export class HealthAlertsService {
       args.spaceId,
     );
     const dashboardUrl = await this.resolveDashboardUrl(args.workspaceId);
-    const subject = `Santé documentaire de ${scopeLabel} : ${args.score}/100`;
+    const scopeIn = (lang: MailLanguage) =>
+      scopeLabel ??
+      (lang === 'fr'
+        ? args.spaceId
+          ? 'un espace'
+          : 'votre espace'
+        : args.spaceId
+          ? 'a space'
+          : 'your workspace');
 
     await this.notificationService.queueEmail(
       args.userId,
       notification.id,
-      subject,
-      DocHealthDroppedEmail({
-        scopeLabel,
-        score: args.score,
-        threshold: args.threshold,
-        dashboardUrl,
-      }),
+      (lang) =>
+        lang === 'fr'
+          ? `Santé documentaire de ${scopeIn(lang)} : ${args.score}/100`
+          : `Documentation health of ${scopeIn(lang)}: ${args.score}/100`,
+      (lang) =>
+        DocHealthDroppedEmail({
+          lang,
+          scopeLabel: scopeIn(lang),
+          score: args.score,
+          threshold: args.threshold,
+          dashboardUrl,
+        }),
       NotificationType.DOC_HEALTH_DROPPED,
     );
     return true;
@@ -271,21 +285,23 @@ export class HealthAlertsService {
   private async resolveScopeLabel(
     workspaceId: string,
     spaceId: string | null,
-  ): Promise<string> {
+  ): Promise<string | null> {
+    // Null when unnamed: the e-mail says "your workspace" / "a space" in
+    // the recipient's language.
     if (!spaceId) {
       const ws = await this.db
         .selectFrom('workspaces')
         .select('name')
         .where('id', '=', workspaceId)
         .executeTakeFirst();
-      return ws?.name ?? 'votre espace';
+      return ws?.name ?? null;
     }
     const space = await this.db
       .selectFrom('spaces')
       .select(['name', 'slug'])
       .where('id', '=', spaceId)
       .executeTakeFirst();
-    return space?.name ?? space?.slug ?? 'un espace';
+    return space?.name ?? space?.slug ?? null;
   }
 
   private async resolveDashboardUrl(workspaceId: string): Promise<string> {

@@ -6,7 +6,12 @@ import { NotificationType } from '../notification.constants';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { MeetingReadyEmail } from '@docmost/transactional/emails/meeting-ready-email';
 import { MeetingFailedEmail } from '@docmost/transactional/emails/meeting-failed-email';
-import { formatDateFr } from '@docmost/transactional/partials/partials';
+import {
+  formatMailDate,
+  formatMailDay,
+} from '@docmost/transactional/partials/partials';
+import type { MailLanguage } from '@docmost/transactional/i18n';
+import { translateServerMessage } from '../../../common/i18n/server-messages';
 
 /** Pipeline statuses after which the person who recorded can act. */
 const READY_STATUSES = new Set(['awaiting_review']);
@@ -135,8 +140,10 @@ export class MeetingNotificationService {
 
     const meetingUrl = this.meetingUrl(meeting.id);
     if (!meetingUrl) return;
-    const title = meeting.title || 'Réunion sans titre';
-    const startedAt = meeting.startedAt ? formatDateFr(meeting.startedAt) : undefined;
+    const titleIn = (lang: MailLanguage) =>
+      meeting.title || (lang === 'fr' ? 'Réunion sans titre' : 'Untitled meeting');
+    const startedAtIn = (lang: MailLanguage) =>
+      meeting.startedAt ? formatMailDate(meeting.startedAt, lang) : undefined;
     const minutes = meeting.durationMs ? Math.max(1, Math.round(Number(meeting.durationMs) / 60000)) : 0;
     const durationLabel = minutes
       ? minutes >= 60
@@ -148,15 +155,22 @@ export class MeetingNotificationService {
       await this.notificationService.queueEmail(
         meeting.userId,
         notificationId,
-        `Le traitement de « ${title} » a échoué`,
-        MeetingFailedEmail({
-          userName: meeting.userName ?? undefined,
-          meetingTitle: title,
-          meetingUrl,
-          startedAt,
-          failureReason: meeting.failureReason,
-          reference: `MTG-${meeting.id.slice(0, 8).toUpperCase()}`,
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `Le traitement de « ${titleIn(lang)} » a échoué`
+            : `Processing of “${titleIn(lang)}” failed`,
+        (lang) =>
+          MeetingFailedEmail({
+            lang,
+            userName: meeting.userName ?? undefined,
+            meetingTitle: titleIn(lang),
+            meetingUrl,
+            startedAt: startedAtIn(lang),
+            failureReason: meeting.failureReason
+              ? translateServerMessage(meeting.failureReason, lang)
+              : meeting.failureReason,
+            reference: `MTG-${meeting.id.slice(0, 8).toUpperCase()}`,
+          }),
         NotificationType.MEETING_FAILED,
       );
       return;
@@ -170,7 +184,7 @@ export class MeetingNotificationService {
       .orderBy('createdAt', 'asc')
       .execute()
       .catch(() => []);
-    const items = proposals.map((p) => {
+    const parsed = proposals.map((p) => {
       let payload: Record<string, unknown> = {};
       try {
         payload =
@@ -180,31 +194,57 @@ export class MeetingNotificationService {
       }
       const owner = typeof payload.owner === 'string' ? payload.owner : '';
       const due = typeof payload.dueDate === 'string' ? payload.dueDate : '';
-      const dueLabel = due ? formatDateFr(`${due}T12:00:00Z`).split(' à ')[0] : '';
-      return {
-        title: p.title,
-        meta: [owner, dueLabel ? `échéance ${dueLabel}` : 'sans échéance'].filter(Boolean).join(' · '),
-      };
+      return { title: p.title, owner, due };
     });
-    const n = items.length;
+    const itemsIn = (lang: MailLanguage) =>
+      parsed.map(({ title, owner, due }) => {
+        const dueLabel = due ? formatMailDay(`${due}T12:00:00Z`, lang) : '';
+        const fr = lang === 'fr';
+        return {
+          title,
+          meta: [
+            owner,
+            dueLabel
+              ? `${fr ? 'échéance' : 'due'} ${dueLabel}`
+              : fr
+                ? 'sans échéance'
+                : 'no due date',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        };
+      });
+    const n = parsed.length;
     const partial = status === 'partially_failed';
     await this.notificationService.queueEmail(
       meeting.userId,
       notificationId,
-      n
-        ? `${n} action${n > 1 ? 's' : ''} à valider après « ${title} »`
-        : partial
-          ? `Transcription prête : ${title}`
-          : `Compte rendu prêt : ${title}`,
-      MeetingReadyEmail({
-        userName: meeting.userName ?? undefined,
-        meetingTitle: title,
-        meetingUrl,
-        startedAt,
-        durationLabel,
-        proposals: items,
-        partial,
-      }),
+      (lang) => {
+        const title = titleIn(lang);
+        if (lang === 'fr') {
+          return n
+            ? `${n} action${n > 1 ? 's' : ''} à valider après « ${title} »`
+            : partial
+              ? `Transcription prête : ${title}`
+              : `Compte rendu prêt : ${title}`;
+        }
+        return n
+          ? `${n} action${n > 1 ? 's' : ''} to review after “${title}”`
+          : partial
+            ? `Transcript ready: ${title}`
+            : `Minutes ready: ${title}`;
+      },
+      (lang) =>
+        MeetingReadyEmail({
+          lang,
+          userName: meeting.userName ?? undefined,
+          meetingTitle: titleIn(lang),
+          meetingUrl,
+          startedAt: startedAtIn(lang),
+          durationLabel,
+          proposals: itemsIn(lang),
+          partial,
+        }),
       partial ? NotificationType.MEETING_FAILED : NotificationType.MEETING_READY,
     );
   }

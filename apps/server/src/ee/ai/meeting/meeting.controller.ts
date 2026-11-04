@@ -14,7 +14,9 @@ import {
   Req,
   Res,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { LocalizedMessagesInterceptor } from '../../../common/i18n/localized-messages';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceAiToggleGuard } from '../guards/workspace-ai-toggle.guard';
@@ -75,6 +77,8 @@ export function parseLanguageConfig(raw: unknown): Record<string, unknown> | und
 // controller is either /:id, the list, or a creation (start, upload);
 // meeting-routes.spec.ts fails if a new route is none of these.
 @UseGuards(JwtAuthGuard, WorkspaceAiToggleGuard, MeetingAccessGuard)
+// Status and failure sentences in the reader's language (server-messages.ts).
+@UseInterceptors(LocalizedMessagesInterceptor)
 @RequireAiFeature('stt')
 @Controller('ai/meeting')
 export class MeetingController {

@@ -10,6 +10,11 @@ import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { WsGateway } from '../../ws/ws.gateway';
 import { MailService } from '../../integrations/mail/mail.service';
 import {
+  localize,
+  Localized,
+  mailLanguage,
+} from '@docmost/transactional/i18n';
+import {
   isNotificationEnabled,
   NotificationTab,
   NotificationType,
@@ -117,17 +122,22 @@ export class NotificationService {
     return this.notificationRepo.markAllAsRead(userId);
   }
 
+  /**
+   * Subject and template may be functions of the recipient's language
+   * (French for an `fr*` account locale, English otherwise), built once the
+   * recipient is known.
+   */
   async queueEmail(
     userId: string,
     notificationId: string | null,
-    subject: string,
-    template: any,
+    subject: Localized<string>,
+    template: Localized<object>,
     type?: NotificationType,
   ) {
     try {
       const user = await this.db
         .selectFrom('users')
-        .select(['email', 'settings'])
+        .select(['email', 'settings', 'locale'])
         .where('id', '=', userId)
         .where('deletedAt', 'is', null)
         .where('deactivatedAt', 'is', null)
@@ -137,10 +147,11 @@ export class NotificationService {
 
       if (type && !isNotificationEnabled(user.settings, type, 'email')) return;
 
+      const lang = mailLanguage(user.locale);
       await this.mailService.sendToQueue({
         to: user.email,
-        subject,
-        template,
+        subject: localize(subject, lang),
+        template: localize(template, lang),
         notificationId: notificationId ?? undefined,
       });
     } catch (err: unknown) {

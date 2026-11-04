@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { HealthAlertsService } from './alerts.service';
+import { render } from '@react-email/render';
 
 const NOW = new Date('2026-04-26T12:00:00Z');
 
@@ -158,8 +159,17 @@ describe('HealthAlertsService', () => {
       expect(fired[0].type).toBe('doc_health.dropped');
       // The drop email is queued alongside the in-app notification.
       expect(notification.queueEmail).toHaveBeenCalledTimes(1);
-      const [, , subject] = (notification.queueEmail as jest.Mock).mock.calls[0];
-      expect(subject).toContain('50');
+      const [, , subject, template] = (notification.queueEmail as jest.Mock)
+        .mock.calls[0];
+      // Subject and body follow the recipient's language.
+      expect(subject('fr')).toContain('50');
+      expect(subject('fr')).toMatch(/^Santé documentaire de /);
+      expect(subject('en')).toMatch(/^Documentation health of /);
+      expect(subject('en')).toContain('50/100');
+      const fr = await render(template('fr'), { plainText: true });
+      const en = await render(template('en'), { plainText: true });
+      expect(fr).toContain("sous votre seuil d'alerte");
+      expect(en).toContain('below your alert threshold');
     });
 
     it('does not fire when score is at or above threshold', async () => {

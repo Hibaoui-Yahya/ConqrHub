@@ -1,6 +1,17 @@
-import { accessLabelFr, proseMirrorExcerpt, roleLabelFr } from './utils';
+import {
+  accessLabel,
+  accessLabelFr,
+  proseMirrorExcerpt,
+  roleLabel,
+  roleLabelFr,
+} from './utils';
 import { maskIp } from '../emails/new-sign-in-email';
-import { formatDateFr, greeting } from '../partials/partials';
+import {
+  formatDateFr,
+  formatMailDate,
+  formatMailDay,
+  greeting,
+} from '../partials/partials';
 
 describe('e-mail helpers', () => {
   it('extracts comment text with mentions and paragraph breaks', () => {
@@ -54,5 +65,21 @@ describe('e-mail helpers', () => {
   it('greets by first name, or neutrally', () => {
     expect(greeting('Sarah Martin')).toBe('Bonjour Sarah,');
     expect(greeting('')).toBe('Bonjour,');
+  });
+
+  it('speaks English to English accounts', () => {
+    expect(roleLabel('admin', 'en')).toBe('Admin');
+    expect(roleLabel('owner', 'fr')).toBe('Propriétaire');
+    expect(accessLabel('edit', 'en')).toBe('Can edit');
+    expect(accessLabel('view', 'fr')).toBe('Peut consulter');
+    expect(greeting('Sam Miller', 'en')).toBe('Hello Sam,');
+    expect(greeting('', 'en')).toBe('Hello,');
+    expect(formatMailDate('2026-10-14T08:42:00Z', 'en')).toBe(
+      'October 14, 2026 at 10:42 AM',
+    );
+    expect(formatMailDate('2026-10-14T08:42:00Z', 'fr')).toBe(
+      '14 octobre 2026 à 10:42',
+    );
+    expect(formatMailDay('2026-10-14T08:42:00Z', 'en')).toBe('October 14, 2026');
   });
 });

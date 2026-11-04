@@ -117,13 +117,21 @@ export class PageNotificationService {
       if (!notification) continue;
 
       const pageUrl = `${basePageUrl}`;
-      const subject = `${actor.name} vous mentionne dans « ${pageTitle} »`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        PageMentionEmail({ actorName: actor.name, pageTitle, pageUrl, spaceName }),
+        (lang) =>
+          lang === 'fr'
+            ? `${actor.name} vous mentionne dans « ${pageTitle} »`
+            : `${actor.name} mentioned you in “${pageTitle}”`,
+        (lang) =>
+          PageMentionEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl,
+            spaceName,
+          }),
         NotificationType.PAGE_USER_MENTION,
       );
     }
@@ -160,19 +168,22 @@ export class PageNotificationService {
       });
       if (!notification) continue;
 
-      const subject = `${actor.name} vous donne accès à « ${pageTitle} »`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        PermissionGrantedEmail({
-          actorName: actor.name,
-          pageTitle,
-          pageUrl: basePageUrl,
-          accessLabel,
-          spaceName,
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `${actor.name} vous donne accès à « ${pageTitle} »`
+            : `${actor.name} gave you access to “${pageTitle}”`,
+        (lang) =>
+          PermissionGrantedEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl: basePageUrl,
+            accessLabel,
+            spaceName,
+          }),
         NotificationType.PAGE_PERMISSION_GRANTED,
       );
     }
@@ -243,14 +254,19 @@ export class PageNotificationService {
         await this.notificationService.queueEmail(
           userId,
           notification.id,
-          `« ${pageTitle} » a été modifiée par ${actor.name}`,
-          PageUpdateEmail({
-            userName: eligibleUsers.get(userId) ?? '',
-            actorName: actor.name,
-            pageTitle,
-            pageUrl: basePageUrl,
-            spaceName,
-          }),
+          (lang) =>
+            lang === 'fr'
+              ? `« ${pageTitle} » a été modifiée par ${actor.name}`
+              : `“${pageTitle}” was edited by ${actor.name}`,
+          (lang) =>
+            PageUpdateEmail({
+              lang,
+              userName: eligibleUsers.get(userId) ?? '',
+              actorName: actor.name,
+              pageTitle,
+              pageUrl: basePageUrl,
+              spaceName,
+            }),
           NotificationType.PAGE_UPDATED,
         );
       } else if (notification.id) {
@@ -404,14 +420,21 @@ export class PageNotificationService {
     await this.notificationService.queueEmail(
       userId,
       notificationIds[0],
-      pageUpdates.length === 1
-        ? 'Une page que vous suivez a changé'
-        : `${pageUpdates.length} pages que vous suivez ont changé`,
-      PageUpdateDigestEmail({
-        userName: user.name,
-        pageUpdates,
-        totalUpdates: pageUpdates.length,
-      }),
+      (lang) =>
+        lang === 'fr'
+          ? pageUpdates.length === 1
+            ? 'Une page que vous suivez a changé'
+            : `${pageUpdates.length} pages que vous suivez ont changé`
+          : pageUpdates.length === 1
+            ? 'A page you follow has changed'
+            : `${pageUpdates.length} pages you follow have changed`,
+      (lang) =>
+        PageUpdateDigestEmail({
+          lang,
+          userName: user.name,
+          pageUpdates,
+          totalUpdates: pageUpdates.length,
+        }),
       NotificationType.PAGE_UPDATED,
     );
   }

@@ -15,7 +15,13 @@ import { VerificationExpiredEmail } from '@docmost/transactional/emails/verifica
 import { ApprovalRequestedEmail } from '@docmost/transactional/emails/approval-requested-email';
 import { ApprovalRejectedEmail } from '@docmost/transactional/emails/approval-rejected-email';
 import { ApprovalApprovedEmail } from '@docmost/transactional/emails/approval-approved-email';
-import { formatDateFr } from '@docmost/transactional/partials/partials';
+import { formatMailDay } from '@docmost/transactional/partials/partials';
+import type { MailLanguage } from '@docmost/transactional/i18n';
+
+/** Name of a person who is no longer found. */
+function memberName(name: string | null, lang: MailLanguage): string {
+  return name ?? (lang === 'fr' ? 'Un membre' : 'A member');
+}
 import { getPageTitle } from '../../../common/helpers';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
@@ -131,18 +137,21 @@ export class VerificationNotificationService {
         data: { expiresAt: expiresAtIso },
       });
 
-      const subject = `La vérification de « ${pageTitle} » arrive à échéance`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        VerificationExpiringEmail({
-          pageTitle,
-          spaceName,
-          pageUrl: basePageUrl,
-          expiresAt: formatDateFr(verification.expiresAt).split(' à ')[0],
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `La vérification de « ${pageTitle} » arrive à échéance`
+            : `The verification of “${pageTitle}” is about to expire`,
+        (lang) =>
+          VerificationExpiringEmail({
+            lang,
+            pageTitle,
+            spaceName,
+            pageUrl: basePageUrl,
+            expiresAt: formatMailDay(verification.expiresAt, lang),
+          }),
         NotificationType.PAGE_VERIFICATION_EXPIRING,
       );
     }
@@ -206,17 +215,20 @@ export class VerificationNotificationService {
         pageVerificationId: verification.id,
       });
 
-      const subject = `La vérification de « ${pageTitle} » a expiré`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        VerificationExpiredEmail({
-          pageTitle,
-          spaceName,
-          pageUrl: basePageUrl,
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `La vérification de « ${pageTitle} » a expiré`
+            : `The verification of “${pageTitle}” has expired`,
+        (lang) =>
+          VerificationExpiredEmail({
+            lang,
+            pageTitle,
+            spaceName,
+            pageUrl: basePageUrl,
+          }),
         NotificationType.PAGE_VERIFICATION_EXPIRED,
       );
     }
@@ -342,17 +354,24 @@ export class VerificationNotificationService {
     });
     if (!notification) return;
 
+    const requesterName = await this.getUserName(requester);
+    const approverName = await this.getUserName(actorId);
     await this.notificationService.queueEmail(
       requester,
       notification.id,
-      `« ${pageTitle} » est approuvée`,
-      ApprovalApprovedEmail({
-        userName: await this.getUserName(requester),
-        actorName: await this.getUserName(actorId),
-        pageTitle,
-        spaceName,
-        pageUrl: basePageUrl,
-      }),
+      (lang) =>
+        lang === 'fr'
+          ? `« ${pageTitle} » est approuvée`
+          : `“${pageTitle}” is approved`,
+      (lang) =>
+        ApprovalApprovedEmail({
+          lang,
+          userName: memberName(requesterName, lang),
+          actorName: memberName(approverName, lang),
+          pageTitle,
+          spaceName,
+          pageUrl: basePageUrl,
+        }),
       NotificationType.PAGE_VERIFIED,
     );
   }
@@ -387,18 +406,21 @@ export class VerificationNotificationService {
         spaceId,
       });
 
-      const subject = `Approbation demandée : « ${pageTitle} »`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        ApprovalRequestedEmail({
-          actorName,
-          pageTitle,
-          spaceName,
-          pageUrl: basePageUrl,
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `Approbation demandée : « ${pageTitle} »`
+            : `Approval requested: “${pageTitle}”`,
+        (lang) =>
+          ApprovalRequestedEmail({
+            lang,
+            actorName: memberName(actorName, lang),
+            pageTitle,
+            spaceName,
+            pageUrl: basePageUrl,
+          }),
         NotificationType.PAGE_APPROVAL_REQUESTED,
       );
     }
@@ -433,30 +455,34 @@ export class VerificationNotificationService {
       spaceId,
     });
 
-    const subject = `Modifications demandées sur « ${pageTitle} »`;
-
     await this.notificationService.queueEmail(
       requestedById,
       notification.id,
-      subject,
-      ApprovalRejectedEmail({
-        actorName,
-        pageTitle,
-        spaceName,
-        pageUrl: basePageUrl,
-        comment,
-      }),
+      (lang) =>
+        lang === 'fr'
+          ? `Modifications demandées sur « ${pageTitle} »`
+          : `Changes requested on “${pageTitle}”`,
+      (lang) =>
+        ApprovalRejectedEmail({
+          lang,
+          actorName: memberName(actorName, lang),
+          pageTitle,
+          spaceName,
+          pageUrl: basePageUrl,
+          comment,
+        }),
       NotificationType.PAGE_APPROVAL_REJECTED,
     );
   }
 
-  private async getUserName(userId: string): Promise<string> {
+  /** Null when the person is not found: see memberName(). */
+  private async getUserName(userId: string): Promise<string | null> {
     const user = await this.db
       .selectFrom('users')
       .select('name')
       .where('id', '=', userId)
       .executeTakeFirst();
-    return user?.name ?? 'Un membre';
+    return user?.name ?? null;
   }
 
   private async getPageContext(

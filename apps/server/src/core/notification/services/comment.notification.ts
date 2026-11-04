@@ -92,8 +92,18 @@ export class CommentNotificationService {
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        `${actor.name} vous mentionne dans un commentaire`,
-        CommentMentionEmail({ actorName: actor.name, pageTitle, pageUrl, excerpt }),
+        (lang) =>
+          lang === 'fr'
+            ? `${actor.name} vous mentionne dans un commentaire`
+            : `${actor.name} mentioned you in a comment`,
+        (lang) =>
+          CommentMentionEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl,
+            excerpt,
+          }),
         NotificationType.COMMENT_USER_MENTION,
       );
 
@@ -118,16 +128,23 @@ export class CommentNotificationService {
       await this.notificationService.queueEmail(
         recipientId,
         notification.id,
-        parentCommentId
-          ? `${actor.name} a répondu sur « ${pageTitle} »`
-          : `Nouveau commentaire sur « ${pageTitle} »`,
-        CommentCreateEmail({
-          actorName: actor.name,
-          pageTitle,
-          pageUrl,
-          excerpt,
-          isReply: Boolean(parentCommentId),
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? parentCommentId
+              ? `${actor.name} a répondu sur « ${pageTitle} »`
+              : `Nouveau commentaire sur « ${pageTitle} »`
+            : parentCommentId
+              ? `${actor.name} replied on “${pageTitle}”`
+              : `New comment on “${pageTitle}”`,
+        (lang) =>
+          CommentCreateEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl,
+            excerpt,
+            isReply: Boolean(parentCommentId),
+          }),
         NotificationType.COMMENT_CREATED,
       );
     }
@@ -186,13 +203,21 @@ export class CommentNotificationService {
     });
     if (!notification) return;
 
-    const subject = `Votre commentaire sur « ${pageTitle} » a été résolu`;
-
     await this.notificationService.queueEmail(
       commentCreatorId,
       notification.id,
-      subject,
-      CommentResolvedEmail({ actorName: actor.name, pageTitle, pageUrl, excerpt }),
+      (lang) =>
+        lang === 'fr'
+          ? `Votre commentaire sur « ${pageTitle} » a été résolu`
+          : `Your comment on “${pageTitle}” was resolved`,
+      (lang) =>
+        CommentResolvedEmail({
+          lang,
+          actorName: actor.name,
+          pageTitle,
+          pageUrl,
+          excerpt,
+        }),
       NotificationType.COMMENT_RESOLVED,
     );
   }

@@ -38,6 +38,9 @@ import {
   surfaceColor,
   textColor,
 } from '../css/styles';
+import type { MailLanguage } from '../i18n';
+
+export type { MailLanguage } from '../i18n';
 
 export type MailProduct = 'ai' | 'hub' | 'meet';
 
@@ -47,10 +50,17 @@ const PRODUCT_NAME: Record<MailProduct, string> = {
   meet: 'ConqrMeet',
 };
 
-const DEFAULT_REASON: Record<MailProduct, string> = {
-  ai: 'Cet e-mail de service concerne votre compte ConqrAI. Il ne peut pas être désactivé.',
-  hub: 'Vous recevez cet e-mail selon vos préférences de notification ConqrHub.',
-  meet: 'Vous recevez cet e-mail selon vos préférences de notification ConqrMeet.',
+const DEFAULT_REASON: Record<MailLanguage, Record<MailProduct, string>> = {
+  fr: {
+    ai: 'Cet e-mail de service concerne votre compte ConqrAI. Il ne peut pas être désactivé.',
+    hub: 'Vous recevez cet e-mail selon vos préférences de notification ConqrHub.',
+    meet: 'Vous recevez cet e-mail selon vos préférences de notification ConqrMeet.',
+  },
+  en: {
+    ai: 'This service e-mail is about your ConqrAI account. It cannot be turned off.',
+    hub: 'You are receiving this e-mail because of your ConqrHub notification preferences.',
+    meet: 'You are receiving this e-mail because of your ConqrMeet notification preferences.',
+  },
 };
 
 /** Public origin of Hub, which serves the e-mail images from /email/. */
@@ -68,6 +78,8 @@ function asset(path: string): string {
 }
 
 interface MailBodyProps {
+  /** Language of the recipient. */
+  lang: MailLanguage;
   /** Which mark heads the e-mail: account e-mails are sent as ConqrAI. */
   product?: MailProduct;
   /** Inbox preview line. */
@@ -82,6 +94,7 @@ interface MailBodyProps {
 }
 
 export function MailBody({
+  lang,
   product = 'hub',
   preview,
   icon,
@@ -93,8 +106,9 @@ export function MailBody({
   const lockup = asset(`lockup-conqr${product}.png`);
   const iconSrc = icon ? asset(`icons/${icon}.png`) : '';
   const origin = appOrigin();
+  const fr = lang === 'fr';
   return (
-    <Html lang="fr">
+    <Html lang={lang}>
       <Head>
         <meta name="color-scheme" content="light" />
         <meta name="supported-color-schemes" content="light" />
@@ -141,7 +155,9 @@ export function MailBody({
             {children}
           </Section>
           <Section style={footer}>
-            <Text style={footerText}>{reason ?? DEFAULT_REASON[product]}</Text>
+            <Text style={footerText}>
+              {reason ?? DEFAULT_REASON[lang][product]}
+            </Text>
             {origin && (
               <Text style={footerText}>
                 {product !== 'ai' && (
@@ -150,7 +166,7 @@ export function MailBody({
                       href={`${origin}/settings/account/notifications`}
                       style={{ color: actionColor, textDecoration: 'none' }}
                     >
-                      Gérer mes notifications
+                      {fr ? 'Gérer mes notifications' : 'Manage notifications'}
                     </Link>
                     {'  ·  '}
                   </>
@@ -159,13 +175,15 @@ export function MailBody({
                   href={productUrl(product)}
                   style={{ color: actionColor, textDecoration: 'none' }}
                 >
-                  Ouvrir {PRODUCT_NAME[product]}
+                  {fr ? 'Ouvrir' : 'Open'} {PRODUCT_NAME[product]}
                 </Link>
               </Text>
             )}
             <Text style={footerLegal}>
               © {new Date().getFullYear()} ConqrAI
-              {recipient ? `  ·  Envoyé à ${recipient}` : ''}
+              {recipient
+                ? `  ·  ${fr ? 'Envoyé à' : 'Sent to'} ${recipient}`
+                : ''}
             </Text>
           </Section>
         </Container>
@@ -451,11 +469,13 @@ export function ItemList({
 
 /** Score bar with its alert threshold (documentation health). */
 export function Meter({
+  lang,
   label,
   value,
   threshold,
   legend,
 }: {
+  lang: MailLanguage;
   label: string;
   value: number;
   threshold: number;
@@ -522,7 +542,7 @@ export function Meter({
         </tbody>
       </table>
       <Text style={{ ...smallText, fontSize: '12px', color: mutedColor }}>
-        Seuil d'alerte : {threshold}
+        {lang === 'fr' ? "Seuil d'alerte :" : 'Alert threshold:'} {threshold}
         {legend ? ` · ${legend}` : ''}
       </Text>
     </Section>
@@ -598,7 +618,13 @@ export function Actions({
 }
 
 /** Copyable link under buttons that carry a token. */
-export function FallbackLink({ href }: { href: string }) {
+export function FallbackLink({
+  href,
+  lang,
+}: {
+  href: string;
+  lang: MailLanguage;
+}) {
   return (
     <Section style={{ margin: '0 0 18px 0' }}>
       <Text
@@ -609,7 +635,9 @@ export function FallbackLink({ href }: { href: string }) {
           lineHeight: '1.5',
         }}
       >
-        Le bouton ne fonctionne pas ? Copiez ce lien dans votre navigateur :
+        {lang === 'fr'
+          ? 'Le bouton ne fonctionne pas ? Copiez ce lien dans votre navigateur :'
+          : 'Button not working? Copy this link into your browser:'}
       </Text>
       <Text
         style={{
@@ -644,26 +672,53 @@ export function getGreetingName(name?: string): string {
   return name?.trim().split(' ')[0] || '';
 }
 
-/** "Bonjour Sarah," or "Bonjour," when the name is unknown. */
-export function greeting(name?: string): string {
+/** "Bonjour Sarah," / "Hello Sarah," or "Bonjour," / "Hello," when the
+ *  name is unknown. */
+export function greeting(name?: string, lang: MailLanguage = 'fr'): string {
   const first = getGreetingName(name);
-  return first ? `Bonjour ${first},` : 'Bonjour,';
+  const word = lang === 'fr' ? 'Bonjour' : 'Hello';
+  return first ? `${word} ${first},` : `${word},`;
 }
 
-/** French date and time in Paris time, e.g. "14 octobre 2026 à 10:42". */
-export function formatDateFr(date: Date | string | number): string {
+const DATE_LOCALE: Record<MailLanguage, string> = { fr: 'fr-FR', en: 'en-US' };
+
+/** Day in Paris time: "14 octobre 2026" / "October 14, 2026". */
+export function formatMailDay(
+  date: Date | string | number,
+  lang: MailLanguage,
+): string {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '';
-  const day = new Intl.DateTimeFormat('fr-FR', {
+  return new Intl.DateTimeFormat(DATE_LOCALE[lang], {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     timeZone: 'Europe/Paris',
   }).format(d);
-  const time = new Intl.DateTimeFormat('fr-FR', {
+}
+
+/** Date and time in Paris time: "14 octobre 2026 à 10:42" /
+ *  "October 14, 2026 at 10:42 AM". */
+export function formatMailDate(
+  date: Date | string | number,
+  lang: MailLanguage,
+): string {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = new Intl.DateTimeFormat(DATE_LOCALE[lang], {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Europe/Paris',
   }).format(d);
-  return `${day} à ${time}`;
+  return `${formatMailDay(d, lang)} ${lang === 'fr' ? 'à' : 'at'} ${time}`;
+}
+
+/** "(Paris)" / "(Paris time)" after a time. */
+export function parisZoneLabel(lang: MailLanguage): string {
+  return lang === 'fr' ? '(Paris)' : '(Paris time)';
+}
+
+/** French date and time in Paris time, e.g. "14 octobre 2026 à 10:42". */
+export function formatDateFr(date: Date | string | number): string {
+  return formatMailDate(date, 'fr');
 }

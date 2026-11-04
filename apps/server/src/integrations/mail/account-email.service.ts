@@ -8,19 +8,23 @@ import { EmailChangedEmail } from '@docmost/transactional/emails/email-changed-e
 import { NewSignInEmail } from '@docmost/transactional/emails/new-sign-in-email';
 import { RoleChangedEmail } from '@docmost/transactional/emails/role-changed-email';
 import { AccountDeactivatedEmail } from '@docmost/transactional/emails/account-deactivated-email';
-import { roleLabelFr } from '@docmost/transactional/utils/utils';
+import { roleLabel } from '@docmost/transactional/utils/utils';
+import { MailLanguage, mailLanguage } from '@docmost/transactional/i18n';
 
 interface Recipient {
   id: string;
   name?: string | null;
   email: string;
   workspaceId: string;
+  /** Account language (users.locale); looked up when not given. */
+  locale?: string | null;
 }
 
 /**
- * Security and account e-mails sent as ConqrAI. They are service e-mails:
- * they bypass notification preferences, and they never throw, so a mail
- * outage cannot fail the action that triggered them.
+ * Security and account e-mails sent as ConqrAI, in the language of the
+ * account they are about. They are service e-mails: they bypass
+ * notification preferences, and they never throw, so a mail outage cannot
+ * fail the action that triggered them.
  */
 @Injectable()
 export class AccountEmailService {
@@ -41,6 +45,21 @@ export class AccountEmailService {
       .executeTakeFirst();
   }
 
+  /** The recipient's language; never throws (deployment default on error). */
+  private async language(user: Recipient): Promise<MailLanguage> {
+    if (user.locale !== undefined) return mailLanguage(user.locale);
+    try {
+      const row = await this.db
+        .selectFrom('users')
+        .select(['locale'])
+        .where('id', '=', user.id)
+        .executeTakeFirst();
+      return mailLanguage(row?.locale);
+    } catch {
+      return mailLanguage();
+    }
+  }
+
   private async send(to: string, subject: string, template: any, what: string) {
     try {
       await this.mailService.sendToQueue({ to, subject, template });
@@ -55,10 +74,14 @@ export class AccountEmailService {
   async emailChanged(user: Recipient, oldEmail: string, newEmail: string) {
     if (!oldEmail || oldEmail === newEmail) return;
     const ws = await this.workspace(user.workspaceId).catch(() => undefined);
+    const lang = await this.language(user);
     await this.send(
       oldEmail,
-      "L'adresse e-mail de votre compte a été modifiée",
+      lang === 'fr'
+        ? "L'adresse e-mail de votre compte a été modifiée"
+        : 'The e-mail address of your account has been changed',
       EmailChangedEmail({
+        lang,
         userName: user.name ?? undefined,
         oldEmail,
         newEmail,
@@ -98,10 +121,14 @@ export class AccountEmailService {
       return;
     }
     const ws = await this.workspace(user.workspaceId).catch(() => undefined);
+    const lang = await this.language(user);
     await this.send(
       user.email,
-      'Nouvelle connexion à votre compte ConqrAI',
+      lang === 'fr'
+        ? 'Nouvelle connexion à votre compte ConqrAI'
+        : 'New sign-in to your ConqrAI account',
       NewSignInEmail({
+        lang,
         userName: user.name ?? undefined,
         deviceName: session.deviceName ?? undefined,
         ipAddress: session.ipAddress ?? undefined,
@@ -120,16 +147,20 @@ export class AccountEmailService {
     newRole: string,
   ) {
     const ws = await this.workspace(user.workspaceId).catch(() => undefined);
-    const newLabel = roleLabelFr(newRole);
+    const lang = await this.language(user);
+    const fr = lang === 'fr';
     await this.send(
       user.email,
-      `Votre rôle${ws?.name ? ` dans ${ws.name}` : ''} a changé`,
+      fr
+        ? `Votre rôle${ws?.name ? ` dans ${ws.name}` : ''} a changé`
+        : `Your role${ws?.name ? ` in ${ws.name}` : ''} has changed`,
       RoleChangedEmail({
+        lang,
         userName: user.name ?? undefined,
         actorName,
         workspaceName: ws?.name ?? undefined,
-        oldRoleLabel: roleLabelFr(oldRole),
-        newRoleLabel: newLabel,
+        oldRoleLabel: roleLabel(oldRole, lang),
+        newRoleLabel: roleLabel(newRole, lang),
         appUrl: this.domainService.getUrl(ws?.hostname),
         recipient: user.email,
       }),
@@ -140,12 +171,20 @@ export class AccountEmailService {
   /** Deactivation or deletion; call before the deletion rewrites the e-mail. */
   async accessRemoved(user: Recipient, deleted = false) {
     const ws = await this.workspace(user.workspaceId).catch(() => undefined);
+    const lang = await this.language(user);
+    const fr = lang === 'fr';
+    const subject = deleted
+      ? fr
+        ? `Votre compte${ws?.name ? ` dans ${ws.name}` : ''} a été supprimé`
+        : `Your account${ws?.name ? ` in ${ws.name}` : ''} has been deleted`
+      : fr
+        ? `Votre accès${ws?.name ? ` à ${ws.name}` : ''} a été désactivé`
+        : `Your access${ws?.name ? ` to ${ws.name}` : ''} has been deactivated`;
     await this.send(
       user.email,
-      deleted
-        ? `Votre compte${ws?.name ? ` dans ${ws.name}` : ''} a été supprimé`
-        : `Votre accès${ws?.name ? ` à ${ws.name}` : ''} a été désactivé`,
+      subject,
       AccountDeactivatedEmail({
+        lang,
         userName: user.name ?? undefined,
         workspaceName: ws?.name ?? undefined,
         deactivatedAt: new Date(),

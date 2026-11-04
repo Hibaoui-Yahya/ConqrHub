@@ -58,7 +58,7 @@ interface SearchSpotlightProps {
   spaceId?: string;
 }
 export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const hasAiFeature = useHasFeature(Feature.AI);
   const hasAttachmentIndexing = useHasFeature(Feature.ATTACHMENT_INDEXING);
   const [query, setQuery] = useState("");
@@ -308,7 +308,7 @@ export function SearchSpotlight({ spaceId }: SearchSpotlightProps) {
                 <Spotlight.ActionsGroup label={t("Meetings")}>
                   {meetingHits.map((m) => {
                     const pageId = m.settings?.publishedBundle?.meetingPageId;
-                    const date = new Date(m.startedAt).toLocaleDateString(undefined, {
+                    const date = new Date(m.startedAt).toLocaleDateString(i18n.language || undefined, {
                       day: "numeric",
                       month: "short",
                       year: "numeric",

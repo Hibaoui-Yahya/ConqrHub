@@ -1,4 +1,5 @@
 import { AccountEmailService } from './account-email.service';
+import { render } from '@react-email/render';
 
 /** Query-builder double: every call chains; results are keyed by table. */
 function makeDb(rows: Record<string, { many?: any[]; one?: any }>) {
@@ -40,6 +41,13 @@ const user = {
   name: 'Sarah Martin',
   email: 'sarah@exemple.fr',
   workspaceId: 'w1',
+  locale: 'fr-FR',
+};
+const englishUser = {
+  ...user,
+  name: 'Sam Miller',
+  email: 'sam@example.com',
+  locale: 'en-US',
 };
 const session = {
   id: 's2',
@@ -83,6 +91,64 @@ describe('AccountEmailService.emailChanged', () => {
     const { service, sent } = makeService([]);
     await service.emailChanged(user, 'same@exemple.fr', 'same@exemple.fr');
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('AccountEmailService writes in the account language', () => {
+  it('French account: French subject and body', async () => {
+    const { service, sent } = makeService([]);
+    await service.roleChanged(user, 'Alex Admin', 'member', 'admin');
+    expect(sent[0].subject).toBe('Votre rôle dans LTC a changé');
+    const text = await render(sent[0].template, { plainText: true });
+    expect(text).toContain('Bonjour Sarah,');
+    expect(text).toContain('Membre → Administrateur');
+  });
+
+  it('English account: English subject, body and dates', async () => {
+    const { service, sent } = makeService([
+      { deviceName: 'Chrome on Windows' },
+    ]);
+    await service.roleChanged(englishUser, 'Alex Admin', 'member', 'admin');
+    await service.signInIfNewDevice(englishUser, session);
+    await service.accessRemoved(englishUser, true);
+    await service.emailChanged(
+      englishUser,
+      'old@example.com',
+      'new@example.com',
+    );
+    expect(sent.map((m) => m.subject)).toEqual([
+      'Your role in LTC has changed',
+      'New sign-in to your ConqrAI account',
+      'Your account in LTC has been deleted',
+      'The e-mail address of your account has been changed',
+    ]);
+    const role = await render(sent[0].template, { plainText: true });
+    expect(role).toContain('Hello Sam,');
+    expect(role).toContain('Member → Admin');
+    const signIn = await render(sent[1].template, { plainText: true });
+    expect(signIn).toContain('Firefox on Linux');
+    expect(signIn).toContain('(Paris time)');
+    expect(signIn).toMatch(/ (AM|PM) /);
+    for (const m of sent) {
+      const text = await render(m.template, { plainText: true });
+      expect(text).not.toMatch(/Bonjour|Vous /);
+    }
+  });
+
+  it('looks the language up when the caller does not pass it', async () => {
+    const sent: any[] = [];
+    const service = new AccountEmailService(
+      { sendToQueue: async (m: any) => sent.push(m) } as any,
+      { getUrl: () => 'https://x' } as any,
+      { getMeetAppUrl: () => '' } as any,
+      makeDb({
+        workspaces: { one: { name: 'LTC' } },
+        users: { one: { locale: 'fr-CA' } },
+      }),
+    );
+    const { locale: _locale, ...noLocale } = englishUser;
+    await service.accessRemoved(noLocale);
+    expect(sent[0].subject).toBe('Votre accès à LTC a été désactivé');
   });
 });
 

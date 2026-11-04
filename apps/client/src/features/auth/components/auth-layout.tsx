@@ -173,7 +173,10 @@ function BrandIdentity({ compact }: { compact?: boolean }) {
 
 function LanguageSwitch() {
   const { i18n } = useTranslation();
-  const current = i18n.language?.startsWith("en") ? "en-US" : "fr-FR";
+  // French for any fr* language, English otherwise (as the account language).
+  const current = i18n.language?.toLowerCase().startsWith("fr")
+    ? "fr-FR"
+    : "en-US";
   const [value, setValue] = useState(current);
   useEffect(() => setValue(current), [current]);
   return (

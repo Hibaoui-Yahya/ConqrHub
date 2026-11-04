@@ -4,11 +4,13 @@ import {
   B,
   Details,
   MailBody,
+  MailLanguage,
   P,
   greeting,
 } from '../partials/partials';
 
 interface Props {
+  lang: MailLanguage;
   invitedUserName: string;
   invitedUserEmail: string;
   inviterName?: string;
@@ -19,6 +21,7 @@ interface Props {
 }
 
 export const InvitationAcceptedEmail = ({
+  lang,
   invitedUserName,
   invitedUserEmail,
   inviterName,
@@ -28,34 +31,68 @@ export const InvitationAcceptedEmail = ({
   recipient,
 }: Props) => {
   const who = invitedUserName || invitedUserEmail;
+  if (lang === 'fr') {
+    return (
+      <MailBody
+        lang={lang}
+        product="ai"
+        icon="user-check-success"
+        preview="Votre invitation a été acceptée, ses accès sont prêts."
+        heading={`${who} a rejoint l'espace`}
+        reason="Vous recevez cet e-mail parce que vous avez envoyé cette invitation."
+        recipient={recipient}
+      >
+        <P>{greeting(inviterName, lang)}</P>
+        <P>
+          Bonne nouvelle : <B>{who}</B> a accepté votre invitation
+          {workspaceName ? (
+            <>
+              {' '}
+              à rejoindre <B>{workspaceName}</B>
+            </>
+          ) : null}
+          . Son compte est actif et ses accès sont prêts.
+        </P>
+        <Details
+          rows={[
+            ['Nom', invitedUserName],
+            ['E-mail', invitedUserEmail],
+            ['Rôle', roleLabel],
+          ]}
+        />
+        {membersUrl && <Actions href={membersUrl} label="Voir les membres" />}
+      </MailBody>
+    );
+  }
   return (
     <MailBody
+      lang={lang}
       product="ai"
       icon="user-check-success"
-      preview="Votre invitation a été acceptée, ses accès sont prêts."
-      heading={`${who} a rejoint l'espace`}
-      reason="Vous recevez cet e-mail parce que vous avez envoyé cette invitation."
+      preview="Your invitation was accepted, their access is ready."
+      heading={`${who} joined the workspace`}
+      reason="You are receiving this e-mail because you sent this invitation."
       recipient={recipient}
     >
-      <P>{greeting(inviterName)}</P>
+      <P>{greeting(inviterName, lang)}</P>
       <P>
-        Bonne nouvelle : <B>{who}</B> a accepté votre invitation
+        Good news: <B>{who}</B> accepted your invitation
         {workspaceName ? (
           <>
             {' '}
-            à rejoindre <B>{workspaceName}</B>
+            to join <B>{workspaceName}</B>
           </>
         ) : null}
-        . Son compte est actif et ses accès sont prêts.
+        . Their account is active and their access is ready.
       </P>
       <Details
         rows={[
-          ['Nom', invitedUserName],
+          ['Name', invitedUserName],
           ['E-mail', invitedUserEmail],
-          ['Rôle', roleLabel],
+          ['Role', roleLabel],
         ]}
       />
-      {membersUrl && <Actions href={membersUrl} label="Voir les membres" />}
+      {membersUrl && <Actions href={membersUrl} label="View members" />}
     </MailBody>
   );
 };

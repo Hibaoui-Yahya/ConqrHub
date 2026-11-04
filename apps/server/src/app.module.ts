@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { LocalizedExceptionFilter } from './common/i18n/localized-messages';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EnvironmentService } from './integrations/environment/environment.service';
@@ -97,6 +98,11 @@ const auditModules = hasEe ? [] : [NoopAuditModule];
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditActorInterceptor,
+    },
+    // French refusals in the reader's account language (server-messages.ts).
+    {
+      provide: APP_FILTER,
+      useClass: LocalizedExceptionFilter,
     },
   ],
 })
