@@ -29,6 +29,7 @@ import {
   isMeetingCreator,
   isMeetingId,
   MEETING_PUBLISH_SUSPENDED_MESSAGE,
+  isMeetingHubPublishingEnabled,
   MEETING_READ_ONLY_MESSAGE,
   type MeetingActor,
 } from './meeting-access.util';
@@ -2089,11 +2090,12 @@ export class MeetingService {
 
   /**
    * Publishing copies a meeting into Hub pages that follow their space's
-   * permissions, not the meeting's: on LTC that is the whole company. Until
-   * private sharing exists (later phase), no meeting is published — first
-   * publication and re-synchronisation alike.
+   * permissions, not the meeting's. It is a per-deployment setting
+   * (MEETING_HUB_PUBLISHING=enabled); while it is off — La Tête Chercheuse,
+   * Strict Private phase 0 — first publication and resync are refused alike.
    */
   private assertPublishingAllowed(): void {
+    if (isMeetingHubPublishingEnabled()) return;
     throw new ForbiddenException(MEETING_PUBLISH_SUSPENDED_MESSAGE);
   }
 

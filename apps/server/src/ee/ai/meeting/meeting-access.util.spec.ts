@@ -1,9 +1,23 @@
 import {
   canEditMeeting,
   canReadMeeting,
+  isMeetingHubPublishingEnabled,
   isWorkspaceManager,
   meetingSpaceIds,
 } from './meeting-access.util';
+
+describe('isMeetingHubPublishingEnabled', () => {
+  it('is on only for MEETING_HUB_PUBLISHING=enabled (any case, trimmed)', () => {
+    expect(isMeetingHubPublishingEnabled({ MEETING_HUB_PUBLISHING: 'enabled' })).toBe(true);
+    expect(isMeetingHubPublishingEnabled({ MEETING_HUB_PUBLISHING: ' Enabled ' })).toBe(true);
+  });
+
+  it('is off when unset or set to anything else, so a missing variable never opens it', () => {
+    for (const value of [undefined, '', 'true', '1', 'yes', 'disabled']) {
+      expect(isMeetingHubPublishingEnabled({ MEETING_HUB_PUBLISHING: value })).toBe(false);
+    }
+  });
+});
 
 // LTC Strict Private, phase 0: the creator alone reads and edits; no role
 // and no space gives access.

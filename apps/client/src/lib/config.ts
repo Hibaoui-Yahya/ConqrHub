@@ -43,6 +43,12 @@ export function isCloud(): boolean {
   return castToBoolean(getConfigValue("CLOUD"));
 }
 
+/** Publishing meetings into Hub pages (MEETING_HUB_PUBLISHING=enabled).
+ *  Off unless the deployment turns it on, like the server. */
+export function isMeetingHubPublishingEnabled(): boolean {
+  return getConfigValue("MEETING_HUB_PUBLISHING") === "enabled";
+}
+
 /** Public URLs of the other suite applications deployed next to this Hub. */
 export function getSuiteAppUrls(): {
   meet?: string;

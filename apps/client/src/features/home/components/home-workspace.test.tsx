@@ -25,7 +25,7 @@ vi.mock("jotai", async (orig) => ({
 }));
 vi.mock("@/features/user/atoms/current-user-atom.ts", () => ({ currentUserAtom: "user", workspaceAtom: "workspace" }));
 vi.mock("@/lib/api-client", () => ({ default: { get: vi.fn(async () => ({ items: state.meetings })) } }));
-vi.mock("@/lib/config.ts", () => ({ getSuiteAppUrls: () => ({ meet: "https://ltc.conqrmeet.com" }), getSpaceUrl: (s: string) => `/s/${s}` }));
+vi.mock("@/lib/config.ts", () => ({ getSuiteAppUrls: () => ({ meet: "https://ltc.conqrmeet.com" }), getSpaceUrl: (s: string) => `/s/${s}`, isMeetingHubPublishingEnabled: () => false }));
 vi.mock("@/features/notification/queries/notification-query", () => ({
   useNotificationsQuery: () => inf(state.notifications),
   useMarkReadMutation: () => ({ mutate: vi.fn() }),

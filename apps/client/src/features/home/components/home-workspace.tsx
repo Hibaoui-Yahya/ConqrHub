@@ -19,7 +19,7 @@ import { useAtomValue } from "jotai";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import api from "@/lib/api-client";
-import { getSpaceUrl, getSuiteAppUrls } from "@/lib/config.ts";
+import { getSpaceUrl, getSuiteAppUrls, isMeetingHubPublishingEnabled } from "@/lib/config.ts";
 import { timeAgo } from "@/lib/time.ts";
 import { buildPageUrl } from "@/features/page/page.utils.ts";
 import { currentUserAtom, workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
@@ -105,6 +105,7 @@ export default function HomeWorkspace() {
       buildTodo(
         (notifications.data?.pages ?? []).flatMap((p: any) => p.items) as any[],
         myMeetings ?? [],
+        { meetingPublishing: isMeetingHubPublishingEnabled() },
       ),
     [notifications.data, myMeetings],
   );

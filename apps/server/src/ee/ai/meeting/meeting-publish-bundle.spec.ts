@@ -14,11 +14,17 @@ jest.mock('../providers/ai-provider.service', () => ({
 /**
  * "Publier dans Hub" and its re-synchronisation: permission on the space,
  * pages refreshed only when untouched in Hub, deleted pages made again.
- * LTC Strict Private, phase 0: publishing is suspended for everyone; the
- * publication logic below is kept, and tested with the suspension lifted,
- * for the phase that brings it back.
+ * Publishing is a per-deployment setting (MEETING_HUB_PUBLISHING=enabled):
+ * on in general ConqrAI deployments, suspended by default (La Tête
+ * Chercheuse, Strict Private phase 0). The cases set the real variable.
  */
 describe('MeetingService.publishBundle', () => {
+  const previous = process.env.MEETING_HUB_PUBLISHING;
+  afterEach(() => {
+    if (previous === undefined) delete process.env.MEETING_HUB_PUBLISHING;
+    else process.env.MEETING_HUB_PUBLISHING = previous;
+  });
+
   // The creator of the meeting (Strict Private: nobody else publishes it).
   const user = { id: 'u-owner', role: 'member' } as any;
   const T0 = '2026-10-13T10:00:00.000Z';
@@ -95,9 +101,8 @@ describe('MeetingService.publishBundle', () => {
       settings: opts.settings ?? null,
       };
     });
-    if (!opts.suspended) {
-      jest.spyOn(service as any, 'assertPublishingAllowed').mockImplementation(() => undefined);
-    }
+    if (opts.suspended) delete process.env.MEETING_HUB_PUBLISHING;
+    else process.env.MEETING_HUB_PUBLISHING = 'enabled';
     jest.spyOn(service as any, 'localeContext').mockResolvedValue({
       language: 'fr',
       sharedTimeZone: 'America/Toronto',
@@ -127,7 +132,17 @@ describe('MeetingService.publishBundle', () => {
     expect(updates[0].status).toBe('published');
   });
 
-  it('is suspended in phase 0: the creator gets 403, before touching Hub', async () => {
+  it('stays suspended for any value other than "enabled"', async () => {
+    for (const value of ['', 'true', '1', 'on', 'disabled']) {
+      const s = setup({});
+      process.env.MEETING_HUB_PUBLISHING = value;
+      const err = await s.service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, user).then(() => null, (e) => e);
+      expect([value, err?.message]).toEqual([value, MEETING_PUBLISH_SUSPENDED_MESSAGE]);
+      expect(s.pages.create).not.toHaveBeenCalled();
+    }
+  });
+
+  it('is suspended when the deployment does not enable it: the creator gets 403, before touching Hub', async () => {
     const suspended = setup({ suspended: true });
     const err = await suspended.service.publishBundle('w1', 'm1', { spaceId: 'space-1' }, user).then(() => null, (e) => e);
     expect([err?.constructor?.name, err?.message]).toEqual([ForbiddenException.name, MEETING_PUBLISH_SUSPENDED_MESSAGE]);

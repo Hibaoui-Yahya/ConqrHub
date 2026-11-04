@@ -47,6 +47,18 @@ describe("buildTodo", () => {
     expect(items.map((i) => [i.meetingId, i.kind])).toEqual([["m1", "meeting-review"]]);
   });
 
+  it("offers 'ready to publish' for my finished, unpublished meetings where publishing is enabled", () => {
+    const items = buildTodo(
+      [],
+      [
+        { id: "m2", title: "Mandat", status: "completed", startedAt: "2026-10-12T09:00:00Z" },
+        { id: "m3", title: "Publiée", status: "completed", startedAt: "2026-10-12T09:00:00Z", settings: { publishedBundle: { meetingPageId: "p" } } },
+      ],
+      { meetingPublishing: true },
+    );
+    expect(items.map((i) => [i.meetingId, i.kind])).toEqual([["m2", "meeting-publish"]]);
+  });
+
   it("separates speakers to confirm and failed meetings, failed first", () => {
     const items = buildTodo([], [
       { id: "s", title: "S", status: "speakers_pending_review", startedAt: "2026-10-13T09:00:00Z" },

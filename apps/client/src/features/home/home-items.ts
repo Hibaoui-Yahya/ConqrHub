@@ -11,9 +11,12 @@
 
 export const HOME_MAX_ROWS = 5;
 
-/** LTC Strict Private, phase 0: Hub refuses to publish a meeting (403), so
- *  the Home never offers "Ready to publish". Back with private sharing. */
-export const MEETING_PUBLISHING_SUSPENDED = true;
+export interface TodoOptions {
+  /** Publishing meetings into Hub is a per-deployment setting
+   *  (MEETING_HUB_PUBLISHING). While it is off, Hub refuses to publish (403)
+   *  and the Home never offers "Ready to publish". */
+  meetingPublishing?: boolean;
+}
 
 /** Notification types that call for an action on the Home. */
 export const ACTIONABLE_TYPES = new Set([
@@ -104,6 +107,7 @@ const PRIORITY: Record<TodoKind, number> = {
 export function buildTodo(
   notifications: NotificationLike[],
   myMeetings: MeetingLike[],
+  options: TodoOptions = {},
 ): TodoItem[] {
   const items: TodoItem[] = [];
   const meetingsSeen = new Set<string>();
@@ -137,7 +141,7 @@ export function buildTodo(
     if (SPEAKER_STATUSES.has(m.status)) kind = "meeting-speakers";
     else if (REVIEW_STATUSES.has(m.status)) kind = "meeting-review";
     else if (FAILED_STATUSES.has(m.status)) kind = "meeting-failed";
-    else if (DONE_STATUSES.has(m.status) && !published && !MEETING_PUBLISHING_SUSPENDED) {
+    else if (DONE_STATUSES.has(m.status) && !published && options.meetingPublishing === true) {
       kind = "meeting-publish";
     }
     if (!kind) continue;

@@ -33,8 +33,20 @@ export type MeetingAccessViewer = MeetingActor;
 export const MEETING_READ_ONLY_MESSAGE =
   'Lecture seule : seule la personne qui a créé cette réunion peut la modifier.';
 
-/** Publishing a meeting into Hub copies it into pages that follow the
- *  space's permissions, so it is suspended until private sharing exists. */
+/**
+ * Publishing a meeting into Hub copies it into pages that follow the space's
+ * permissions, not the meeting's. Each deployment chooses: only
+ * MEETING_HUB_PUBLISHING=enabled turns it on (general ConqrAI deployments);
+ * unset or any other value keeps it suspended (La Tête Chercheuse, Strict
+ * Private). Off by default, so a missing variable never opens it.
+ */
+export function isMeetingHubPublishingEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (env.MEETING_HUB_PUBLISHING ?? '').trim().toLowerCase() === 'enabled';
+}
+
+/** Refusal while publishing is suspended on this deployment. */
 export const MEETING_PUBLISH_SUSPENDED_MESSAGE =
   'La publication dans ConqrHub est suspendue pendant la mise en place du partage privé des réunions.';
 
