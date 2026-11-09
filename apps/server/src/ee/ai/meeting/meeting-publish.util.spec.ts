@@ -3,6 +3,7 @@ import {
   buildTranscriptMarkdown,
   formatStamp,
   syncDecision,
+  transcriptPageTitle,
 } from './meeting-publish.util';
 
 describe('formatStamp', () => {
@@ -63,6 +64,49 @@ describe('buildMeetingPageMarkdown', () => {
     const md = buildMeetingPageMarkdown({ startedAt: null, durationMs: null });
     expect(md).not.toContain('## Résumé');
     expect(md).toContain('Le rapport et la transcription');
+  });
+});
+
+describe('published pages in English (report language en)', () => {
+  it('writes the transcript page wording and marker labels in English', () => {
+    const md = buildTranscriptMarkdown(
+      [{ speaker: 'S1', startMs: 0, text: 'Hello.' }],
+      { S1: { displayName: 'Dana' } },
+      [
+        { atMs: 1000, kind: 'highlight' },
+        { atMs: 2000, kind: 'concern' },
+        { atMs: 3000, kind: 'followup', note: 'budget' },
+      ],
+      'en',
+    );
+    expect(md).toContain(
+      '## Marked moments\n\n- **00:01** · Highlight\n- **00:02** · Concern\n- **00:03** · Follow up — budget\n',
+    );
+    expect(md).toContain('## Transcript\n');
+    expect(md).not.toMatch(/Transcription|Moments marqués|Point fort|Vigilance|À creuser/);
+    expect(buildTranscriptMarkdown([], {}, [], 'en')).toContain('_Nothing was transcribed._');
+  });
+
+  it('writes the meeting page wording and date in English', () => {
+    const md = buildMeetingPageMarkdown({
+      lang: 'en',
+      timeZone: 'UTC',
+      startedAt: '2026-10-13T14:00:00Z',
+      durationMs: 47 * 60000,
+      summary: 'Solid profile.',
+      nextSteps: '- Client meeting',
+    });
+    expect(md).toMatch(/^_Meeting of .+ · 47 min · published from ConqrMeet._/);
+    expect(md).toContain('October');
+    expect(md).toContain('## Summary\n\nSolid profile.');
+    expect(md).toContain('## Next steps\n\n- Client meeting');
+    expect(md).toContain('The report and the transcript are in the pages below.');
+    expect(md).not.toMatch(/Réunion|Résumé|Prochaines|octobre/);
+  });
+
+  it('names the transcript page in the same language, French by default', () => {
+    expect(transcriptPageTitle('Weekly sync', 'en')).toBe('Transcript — Weekly sync');
+    expect(transcriptPageTitle('Point hebdo')).toBe('Transcription — Point hebdo');
   });
 });
 

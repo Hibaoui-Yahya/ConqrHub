@@ -138,9 +138,11 @@ import {
 import {
   buildMeetingPageMarkdown,
   buildTranscriptMarkdown,
+  transcriptPageTitle,
   syncDecision,
   type SyncDecision,
 } from './meeting-publish.util';
+import { uiLanguageOf } from '../../../common/i18n/ui-language';
 import SpaceAbilityFactory from '../../../core/casl/abilities/space-ability.factory';
 import {
   SpaceCaslAction,
@@ -2169,7 +2171,10 @@ export class MeetingService {
     const transcriptForPages = await this.readTranscript(meetingId).catch(() => null);
     // A shared page shows the company's time zone (then the publisher's).
     const locale = await this.localeContext(meeting, user.id);
+    // The pages' own wording follows the language the summary was written in.
+    const pageLanguage = uiLanguageOf(locale.language) ?? 'fr';
     const meetingMarkdown = buildMeetingPageMarkdown({
+      lang: pageLanguage,
       timeZone: locale.sharedTimeZone,
       startedAt: meeting.startedAt,
       durationMs: meeting.durationMs,
@@ -2243,11 +2248,12 @@ export class MeetingService {
       if (transcript && transcript.segments.length > 0) {
         transcriptPage = await syncPage(
           previous?.transcriptPageId,
-          `Transcription — ${meeting.title}`,
+          transcriptPageTitle(meeting.title, pageLanguage),
           buildTranscriptMarkdown(
             transcript.segments as any[],
             transcript.speakers as Record<string, { displayName?: string | null }>,
             normalizeMarkers(settings.markers),
+            pageLanguage,
           ),
           meetingPage.pageId,
         );

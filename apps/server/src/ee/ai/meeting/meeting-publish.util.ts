@@ -5,6 +5,7 @@
  */
 import type { MeetingMarker } from './meeting-markers.util';
 import { formatMeetingDateTime, resolveTimeZone } from './meeting-locale.util';
+import { pick, type UiLanguage } from '../../../common/i18n/ui-language';
 
 export interface PublishSegment {
   speaker: string;
@@ -16,13 +17,53 @@ export interface PublishSpeaker {
   displayName?: string | null;
 }
 
-const MARKER_LABELS: Record<string, string> = {
-  moment: 'Moment',
-  highlight: 'Point fort',
-  concern: 'Vigilance',
-  followup: 'À creuser',
-  compensation: 'Rémunération',
+/**
+ * Fixed wording of the published pages, in the meeting's report language
+ * (the language the AI wrote the summary in), so a page never mixes French
+ * headings with an English summary. French is the default: it is what every
+ * page published so far says.
+ */
+const MARKER_LABELS: Record<UiLanguage, Record<string, string>> = {
+  fr: {
+    moment: 'Moment',
+    highlight: 'Point fort',
+    concern: 'Vigilance',
+    followup: 'À creuser',
+    compensation: 'Rémunération',
+  },
+  en: {
+    moment: 'Moment',
+    highlight: 'Highlight',
+    concern: 'Concern',
+    followup: 'Follow up',
+    compensation: 'Compensation',
+  },
 };
+
+const PAGE_TEXT = {
+  markedMoments: { fr: 'Moments marqués', en: 'Marked moments' },
+  transcript: { fr: 'Transcription', en: 'Transcript' },
+  nothingTranscribed: { fr: 'Aucun contenu transcrit.', en: 'Nothing was transcribed.' },
+  meetingOf: {
+    fr: (meta: string) => `Réunion du ${meta} · publiée depuis ConqrMeet.`,
+    en: (meta: string) => `Meeting of ${meta} · published from ConqrMeet.`,
+  },
+  summary: { fr: 'Résumé', en: 'Summary' },
+  nextSteps: { fr: 'Prochaines étapes', en: 'Next steps' },
+  below: {
+    fr: 'Le rapport et la transcription sont dans les pages ci-dessous.',
+    en: 'The report and the transcript are in the pages below.',
+  },
+  transcriptTitle: {
+    fr: (title: string) => `Transcription — ${title}`,
+    en: (title: string) => `Transcript — ${title}`,
+  },
+} as const;
+
+/** Title of the transcript page published under the meeting page. */
+export function transcriptPageTitle(meetingTitle: string, lang: UiLanguage = 'fr'): string {
+  return pick(PAGE_TEXT.transcriptTitle, lang)(meetingTitle);
+}
 
 export function formatStamp(ms: number): string {
   const total = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 1000));
@@ -38,17 +79,18 @@ export function buildTranscriptMarkdown(
   segments: PublishSegment[],
   speakers: Record<string, PublishSpeaker>,
   markers: MeetingMarker[] = [],
+  lang: UiLanguage = 'fr',
 ): string {
   const lines: string[] = [];
   if (markers.length > 0) {
-    lines.push('## Moments marqués', '');
+    lines.push(`## ${pick(PAGE_TEXT.markedMoments, lang)}`, '');
     for (const m of markers) {
-      const label = MARKER_LABELS[m.kind] ?? 'Moment';
+      const label = MARKER_LABELS[lang][m.kind] ?? 'Moment';
       lines.push(`- **${formatStamp(m.atMs)}** · ${label}${m.note ? ` — ${m.note}` : ''}`);
     }
     lines.push('');
   }
-  lines.push('## Transcription', '');
+  lines.push(`## ${pick(PAGE_TEXT.transcript, lang)}`, '');
   let last: string | null = null;
   let buffer: string[] = [];
   let start = 0;
@@ -69,7 +111,7 @@ export function buildTranscriptMarkdown(
     buffer.push(text);
   }
   flush();
-  if (last === null) lines.push('_Aucun contenu transcrit._', '');
+  if (last === null) lines.push(`_${pick(PAGE_TEXT.nothingTranscribed, lang)}_`, '');
   return lines.join('\n').trimEnd() + '\n';
 }
 
@@ -84,20 +126,25 @@ export function buildMeetingPageMarkdown(input: {
   /** IANA zone of the dates (the company's, LTC-05). The page names the
    *  zone, so the time is never ambiguous for a reader elsewhere. */
   timeZone?: string;
+  /** Language of the page's own wording and date (default French). */
+  lang?: UiLanguage;
 }): string {
+  const lang = input.lang ?? 'fr';
   const lines: string[] = [];
   const when = formatMeetingDateTime(
     input.startedAt,
     resolveTimeZone([input.timeZone]),
-    'fr',
+    lang,
   );
   const minutes = input.durationMs ? Math.round(input.durationMs / 60000) : null;
   const meta = [when, minutes ? `${minutes} min` : null].filter(Boolean).join(' · ');
-  if (meta) lines.push(`_Réunion du ${meta} · publiée depuis ConqrMeet._`, '');
-  if (input.summary?.trim()) lines.push('## Résumé', '', input.summary.trim(), '');
-  if (input.nextSteps?.trim()) lines.push('## Prochaines étapes', '', input.nextSteps.trim(), '');
+  if (meta) lines.push(`_${pick(PAGE_TEXT.meetingOf, lang)(meta)}_`, '');
+  if (input.summary?.trim())
+    lines.push(`## ${pick(PAGE_TEXT.summary, lang)}`, '', input.summary.trim(), '');
+  if (input.nextSteps?.trim())
+    lines.push(`## ${pick(PAGE_TEXT.nextSteps, lang)}`, '', input.nextSteps.trim(), '');
   if (input.evaluationMarkdown?.trim()) lines.push(input.evaluationMarkdown.trim(), '');
-  lines.push('Le rapport et la transcription sont dans les pages ci-dessous.');
+  lines.push(pick(PAGE_TEXT.below, lang));
   return lines.join('\n') + '\n';
 }
 
