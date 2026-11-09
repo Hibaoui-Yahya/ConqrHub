@@ -4,10 +4,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { NotificationSettingKey } from '../notification/notification.constants';
+import {
+  NOTIFICATION_CHANNEL_SETTINGS,
+  NotificationSettingKey,
+} from '../notification/notification.constants';
 import {
   comparePasswordHash,
   diffAuditTrackedFields,
@@ -19,12 +23,14 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { AccountEmailService } from '../../integrations/mail/account-email.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private userRepo: UserRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    @Optional() private readonly accountEmails?: AccountEmailService,
   ) {}
 
   async findById(userId: string, workspaceId: string) {
@@ -62,6 +68,63 @@ export class UserService {
       );
     }
 
+    if (typeof updateUserDto.notificationSounds !== 'undefined') {
+      const incoming = updateUserDto.notificationSounds ?? {};
+      const value: Record<string, unknown> = {};
+      for (const key of [
+        'enabled',
+        'volume',
+        'backgroundOnly',
+        'muteWhileRecording',
+        'doNotDisturb',
+      ] as const) {
+        if (typeof incoming[key] !== 'undefined') value[key] = incoming[key];
+      }
+      if (incoming.categories) {
+        const current =
+          (user.settings as any)?.preferences?.notificationSounds?.categories ??
+          {};
+        value.categories = { ...current };
+        for (const [k, v] of Object.entries(incoming.categories)) {
+          if (typeof v === 'string') (value.categories as any)[k] = v;
+        }
+      }
+      return this.userRepo.setPreferenceObject(
+        userId,
+        'notificationSounds',
+        value,
+      );
+    }
+
+    if (typeof updateUserDto.firstRun !== 'undefined') {
+      const incoming = updateUserDto.firstRun ?? {};
+      const now = new Date().toISOString();
+      const value: Record<string, unknown> = {};
+      if (incoming.onboarded === true) value.onboardedAt = now;
+      if (incoming.hubTourSeen === true) value.hubTourSeenAt = now;
+      if (incoming.meetTourSeen === true) value.meetTourSeenAt = now;
+      if (typeof incoming.jobTitle === 'string') {
+        value.jobTitle = incoming.jobTitle.replace(/\s+/g, ' ').trim();
+      }
+      if (Object.keys(value).length === 0) return user;
+      return this.userRepo.setPreferenceObject(userId, 'firstRun', value);
+    }
+
+    if (typeof updateUserDto.meetingDefaults !== 'undefined') {
+      const incoming = updateUserDto.meetingDefaults ?? {};
+      const value: Record<string, unknown> = {};
+      for (const key of [
+        'defaultMeetingType',
+        'defaultLanguage',
+        'autoProcess',
+      ] as const) {
+        if (typeof incoming[key] !== 'undefined') {
+          value[key] = incoming[key];
+        }
+      }
+      return this.userRepo.setMeetingDefaults(userId, value);
+    }
+
     if (typeof updateUserDto.theme !== 'undefined') {
       const value: Record<string, unknown> = { theme: updateUserDto.theme };
       if (updateUserDto.theme === 'custom' && updateUserDto.themeCustom) {
@@ -72,6 +135,16 @@ export class UserService {
         };
       }
       return this.userRepo.setThemePreference(userId, value);
+    }
+
+    if (typeof updateUserDto.notificationPreference !== 'undefined') {
+      const { key, channel, enabled } = updateUserDto.notificationPreference;
+      return this.userRepo.updateNotificationSetting(
+        userId,
+        key,
+        enabled,
+        NOTIFICATION_CHANNEL_SETTINGS[channel],
+      );
     }
 
     const notificationSettings: Record<string, NotificationSettingKey> = {
@@ -133,6 +206,10 @@ export class UserService {
       user.locale = updateUserDto.locale;
     }
 
+    if (typeof updateUserDto.department !== 'undefined') {
+      user.department = updateUserDto.department;
+    }
+
     delete updateUserDto.confirmPassword;
 
     await this.userRepo.updateUser(updateUserDto, userId, workspace.id);
@@ -151,6 +228,20 @@ export class UserService {
         resourceId: userId,
         changes,
       });
+    }
+
+    if (userBefore.email && user.email !== userBefore.email) {
+      await this.accountEmails?.emailChanged(
+        {
+          id: userId,
+          name: user.name,
+          email: user.email,
+          workspaceId: workspace.id,
+          locale: user.locale ?? userBefore.locale ?? null,
+        },
+        userBefore.email,
+        user.email,
+      );
     }
 
     return user;

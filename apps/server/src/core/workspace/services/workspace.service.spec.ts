@@ -7,7 +7,11 @@ describe('WorkspaceService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [WorkspaceService],
-    }).compile();
+    })
+      // Every constructor dependency is replaced by an empty double: this checks
+      // that the class and its declared dependencies resolve, not their behaviour.
+      .useMocker(() => ({}))
+      .compile();
 
     service = module.get<WorkspaceService>(WorkspaceService);
   });

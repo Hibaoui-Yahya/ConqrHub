@@ -15,4 +15,9 @@ export class StartMeetingDto {
 
   @IsOptional()
   languageConfig?: Record<string, unknown>;
+
+  /** Meeting template (built-in id or custom template id). */
+  @IsOptional()
+  @IsString()
+  templateId?: string;
 }

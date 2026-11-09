@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
     PLANE_WORKSPACE_SLUG,
     MEET_APP_URL,
     SERVICE_APP_URL,
+    CLIENT_BRAND,
   } = loadEnv(mode, envPath, "");
 
   // Dev proxy target. `localhost` resolves to ::1 first on Windows while the
@@ -50,6 +51,7 @@ export default defineConfig(({ mode }) => {
         PLANE_WORKSPACE_SLUG,
         MEET_APP_URL,
         SERVICE_APP_URL,
+        CLIENT_BRAND,
       },
       APP_VERSION: JSON.stringify(process.env.npm_package_version),
     },

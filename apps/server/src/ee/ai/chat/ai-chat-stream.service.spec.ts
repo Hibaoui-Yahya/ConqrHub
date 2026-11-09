@@ -3,7 +3,7 @@ jest.mock('../../../core/page/services/page.service', () => ({
 }));
 
 import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
-import { AiChatStreamService } from './ai-chat-stream.service';
+import { AiChatStreamService, buildSystemPrompt } from './ai-chat-stream.service';
 import { AiProviderService } from '../providers/ai-provider.service';
 import { AiChatRepo } from '@docmost/db/repos/ai-chat/ai-chat.repo';
 import { AiChatMessageRepo } from '@docmost/db/repos/ai-chat/ai-chat-message.repo';
@@ -131,6 +131,13 @@ function makeRegistry(
   return { toAiSdkTools: jest.fn().mockReturnValue(tools) } as any;
 }
 
+interface SvcOptions {
+  /** Row returned by the `spaces` lookup when a scope is requested. */
+  spaceRow?: { id: string; name: string | null } | undefined;
+  /** Whether the user can Read pages in the scoped space (default: false). */
+  canReadSpace?: boolean;
+}
+
 function makeSvc(
   ai: ReturnType<typeof makeAiProvider>,
   chatRepo: jest.Mocked<AiChatRepo>,
@@ -138,21 +145,24 @@ function makeSvc(
   titleService = makeTitleService(),
   registry = makeRegistry(),
   enrichRows: any[] = [],
+  opts: SvcOptions = {},
 ): AiChatStreamService {
   const pageService = { findById: jest.fn().mockResolvedValue(undefined) };
   const spaceAbility = {
-    createForUser: jest
-      .fn()
-      .mockResolvedValue({ cannot: jest.fn().mockReturnValue(true) }),
+    createForUser: jest.fn().mockResolvedValue({
+      cannot: jest.fn().mockReturnValue(!(opts.canReadSpace ?? false)),
+    }),
   };
-  // DB stub for source enrichment. Chainable so any combination of
-  // innerJoin/leftJoin/select/where resolves to the provided rows.
+  // DB stub for source enrichment + scope lookup. Chainable so any
+  // combination of innerJoin/leftJoin/select/where resolves to the provided
+  // rows (execute) or the scoped space row (executeTakeFirst).
   const dbChain: any = {
     innerJoin: () => dbChain,
     leftJoin: () => dbChain,
     select: () => dbChain,
     where: () => dbChain,
     execute: jest.fn().mockResolvedValue(enrichRows),
+    executeTakeFirst: jest.fn().mockResolvedValue(opts.spaceRow),
   };
   const db = { selectFrom: () => dbChain };
   return new AiChatStreamService(
@@ -585,6 +595,233 @@ describe('AiChatStreamService.send()', () => {
     });
   });
 
+  describe('sources, labels and confidence', () => {
+    const rag = (chunks: any[]) => [
+      { type: 'tool-call', toolCallId: 'tc-1', toolName: 'rag_retrieve', input: { question: 'q' } },
+      { type: 'tool-result', toolCallId: 'tc-1', toolName: 'rag_retrieve', output: { isEmpty: false, chunks } },
+      { type: 'text-delta', id: 't1', text: 'Answer [P1].' },
+      { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 1 } },
+    ];
+    const future = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+    const past = new Date(Date.now() - 24 * 3600 * 1000);
+    const row = (id: string, status: string | null, expiresAt: Date | null = null) => ({
+      id, slugId: `slug-${id}`, title: `Title ${id}`, spaceSlug: 'hr', spaceName: 'RH',
+      authorName: 'A', updatedAt: new Date(), verifiedAt: null, verifierName: null,
+      verificationStatus: status, verificationExpiresAt: expiresAt,
+    });
+
+    it('keeps every label of a source so [P3] on the same page as [P1] still resolves', async () => {
+      const ai = makeAiProvider(rag([
+        { sourceId: 'page-1', score: 0.9, label: 'P1', kind: 'page', title: 'Guide', excerpt: 'first chunk' },
+        { sourceId: 'page-2', score: 0.8, label: 'P2', kind: 'page', title: 'Other', excerpt: 'x' },
+        { sourceId: 'page-1', score: 0.7, label: 'P3', kind: 'page', title: 'Guide', excerpt: 'third chunk' },
+      ]));
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.sources).toHaveLength(2);
+      const p1 = done.sources.find((s: any) => s.sourceId === 'page-1');
+      expect(p1.label).toBe('P1');
+      expect(p1.labels).toEqual(['P1', 'P3']);
+      expect(p1.score).toBe(0.9);
+      expect(p1.excerpt).toBe('first chunk');
+    });
+
+    it('collapses excerpts to a single line of at most 240 chars', async () => {
+      const long = 'word '.repeat(80) + '\n\n   tail';
+      const ai = makeAiProvider(rag([
+        { sourceId: 'page-1', score: 0.9, label: 'P1', kind: 'page', title: 'T', excerpt: long },
+      ]));
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.sources[0].excerpt.length).toBeLessThanOrEqual(240);
+      expect(done.sources[0].excerpt).not.toContain('\n');
+      expect(done.sources[0].excerpt).not.toMatch(/\s{2,}/);
+    });
+
+    it('adds get_page reads as page sources (score 0.7, no label)', async () => {
+      const ai = makeAiProvider([
+        { type: 'tool-call', toolCallId: 'tc-1', toolName: 'get_page', input: { pageId: 'page-9' } },
+        { type: 'tool-result', toolCallId: 'tc-1', toolName: 'get_page',
+          output: { id: 'page-9', title: 'Read me', slugId: 'rm9', spaceId: 's', content: '# hi', updatedAt: 'x' } },
+        { type: 'text-delta', id: 't1', text: 'Done.' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 1 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.sources).toHaveLength(1);
+      expect(done.sources[0]).toMatchObject({ sourceId: 'page-9', kind: 'page', score: 0.7, label: '', labels: [], slugId: 'rm9' });
+      expect(done.confidence).toBe(0.55);
+      expect(done.groundedSourceCount).toBe(1);
+    });
+
+    it('flags verified pages from pv.status + expiry on every page source', async () => {
+      const ai = makeAiProvider(rag([
+        { sourceId: 'p-ok', score: 0.9, label: 'P1', kind: 'page', title: 'ok' },
+        { sourceId: 'p-expired', score: 0.8, label: 'P2', kind: 'page', title: 'exp' },
+        { sourceId: 'p-draft', score: 0.7, label: 'P3', kind: 'page', title: 'draft' },
+        { sourceId: 'p-none', score: 0.6, label: 'P4', kind: 'page', title: 'none' },
+      ]));
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo(), makeTitleService(), makeRegistry(), [
+        row('p-ok', 'verified', future),
+        row('p-expired', 'verified', past),
+        row('p-draft', 'draft'),
+        row('p-none', null),
+      ]);
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      const byId = Object.fromEntries(done.sources.map((s: any) => [s.sourceId, s]));
+      expect(byId['p-ok']).toMatchObject({ verified: true, verificationStatus: 'verified' });
+      expect(byId['p-expired']).toMatchObject({ verified: false, verificationStatus: 'verified' });
+      expect(byId['p-draft']).toMatchObject({ verified: false, verificationStatus: 'draft' });
+      expect(byId['p-none']).toMatchObject({ verified: false, verificationStatus: 'none' });
+    });
+
+    it('computes confidence as 0.6*top + 0.4*mean(top-3) of rag scores', async () => {
+      const ai = makeAiProvider(rag([
+        { sourceId: 'a', score: 0.9, label: 'P1', kind: 'page', title: 'a' },
+        { sourceId: 'b', score: 0.6, label: 'P2', kind: 'page', title: 'b' },
+      ]));
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      // top=0.9, mean(top3)=0.75 -> 0.54 + 0.30
+      expect(done.confidence).toBeCloseTo(0.84, 4);
+    });
+
+    it('boosts confidence by 0.1 when at least two distinct sources are verified, clamped to 1', async () => {
+      const ai = makeAiProvider(rag([
+        { sourceId: 'a', score: 0.9, label: 'P1', kind: 'page', title: 'a' },
+        { sourceId: 'b', score: 0.6, label: 'P2', kind: 'page', title: 'b' },
+      ]));
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo(), makeTitleService(), makeRegistry(), [
+        row('a', 'verified', future),
+        row('b', 'expiring', future),
+      ]);
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.confidence).toBeCloseTo(0.94, 4);
+      expect(done.confidence).toBeLessThanOrEqual(1);
+    });
+
+    it('uses a flat 0.55 when the only grounding is search_pages', async () => {
+      const ai = makeAiProvider([
+        { type: 'tool-call', toolCallId: 'tc-1', toolName: 'search_pages', input: { query: 'q' } },
+        { type: 'tool-result', toolCallId: 'tc-1', toolName: 'search_pages',
+          output: [{ id: 'p1', title: 'Hit', slugId: 's1', excerpt: 'snippet' }] },
+        { type: 'text-delta', id: 't1', text: 'Found.' },
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 1 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, USER, reply);
+
+      const done = parseSseEvents(events).find((e) => e.type === 'done');
+      expect(done.confidence).toBe(0.55);
+      expect(done.sources[0]).toMatchObject({ sourceId: 'p1', excerpt: 'snippet', labels: [] });
+    });
+  });
+
+  describe('locale', () => {
+    it('falls back in French for a fr-* user on an empty turn', async () => {
+      const ai = makeAiProvider([
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 0 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, { ...USER, locale: 'fr-FR' }, reply);
+
+      const text = parseSseEvents(events).filter((e) => e.type === 'content').map((e) => e.text).join('');
+      expect(text).toMatch(/réessayer/i);
+    });
+
+    it('falls back in English for any other locale', async () => {
+      const ai = makeAiProvider([
+        { type: 'finish', finishReason: 'stop', rawFinishReason: 'stop', totalUsage: { totalTokens: 0 } },
+      ]);
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, { ...USER, locale: 'en-US' }, reply);
+
+      const text = parseSseEvents(events).filter((e) => e.type === 'content').map((e) => e.text).join('');
+      expect(text).toMatch(/try again/i);
+    });
+
+    it('injects the user locale into the system prompt', async () => {
+      const ai = makeAiProvider();
+      const { reply } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), makeMessageRepo());
+
+      await svc.send(DTO, { ...USER, locale: 'fr-FR' }, reply);
+
+      const { system } = (ai.chat as jest.Mock).mock.calls[0][0];
+      expect(system).toContain('fr-FR');
+      expect(system).toContain('KNOWLEDGE-BASE GATE');
+      expect(system).toContain('list_unverified_pages');
+    });
+  });
+
+  describe('space scope', () => {
+    it('emits a forbidden error and persists nothing when the user cannot read the space', async () => {
+      const ai = makeAiProvider();
+      const chatRepo = makeChatRepo();
+      const msgRepo = makeMessageRepo();
+      const { reply, events } = makeFakeReply();
+      const svc = makeSvc(ai, chatRepo, msgRepo, makeTitleService(), makeRegistry(), [], {
+        canReadSpace: false,
+      });
+
+      await svc.send({ content: 'Hi', spaceId: 'space-1' }, USER, reply);
+
+      const parsed = parseSseEvents(events);
+      const err = parsed.find((e) => e.type === 'error');
+      expect(err?.code).toBe('forbidden');
+      expect(chatRepo.insert).not.toHaveBeenCalled();
+      expect(msgRepo.insert).not.toHaveBeenCalled();
+      expect(ai.chat).not.toHaveBeenCalled();
+    });
+
+    it('injects a SCOPE block with the space name when the user can read it', async () => {
+      const ai = makeAiProvider();
+      const msgRepo = makeMessageRepo();
+      const { reply } = makeFakeReply();
+      const svc = makeSvc(ai, makeChatRepo(), msgRepo, makeTitleService(), makeRegistry(), [], {
+        canReadSpace: true,
+        spaceRow: { id: 'space-1', name: 'Ressources humaines' },
+      });
+
+      await svc.send({ content: 'Hi', spaceId: 'space-1' }, USER, reply);
+
+      const { system } = (ai.chat as jest.Mock).mock.calls[0][0];
+      expect(system).toContain('Scope: space Ressources humaines (space-1)');
+      const userMsg = (msgRepo.insert as jest.Mock).mock.calls.find((c) => c[0].role === 'user');
+      expect(userMsg[0].metadata).toMatchObject({ spaceId: 'space-1' });
+    });
+  });
+
   describe('tool errors', () => {
     it('emits a tool_result so a failed tool does not leave the UI pending', async () => {
       const ai = makeAiProvider([
@@ -646,6 +883,15 @@ describe('AiChatStreamService.send()', () => {
       const calls = (msgRepo.insert as jest.Mock).mock.calls;
       const assistantMsg = calls.find((c: any[]) => c[0].role === 'assistant');
       expect(assistantMsg[0].metadata).toEqual({ tokenUsage: { totalTokens: 42 } });
+    });
+  });
+
+  describe('buildSystemPrompt()', () => {
+    it('has no SCOPE block without a scope and one with it', () => {
+      expect(buildSystemPrompt('en')).not.toContain('SCOPE');
+      const scoped = buildSystemPrompt('fr-FR', { spaceId: 'sp', spaceName: 'RH' });
+      expect(scoped).toContain('Scope: space RH (sp)');
+      expect(scoped).toContain('non vérifié');
     });
   });
 

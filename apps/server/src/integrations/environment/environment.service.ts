@@ -124,7 +124,32 @@ export class EnvironmentService {
   }
 
   getAwsS3ForcePathStyle(): boolean {
-    return this.configService.get<boolean>('AWS_S3_FORCE_PATH_STYLE');
+    // Env values are strings: "false" must not enable path-style addressing.
+    const raw = this.configService.get<string | boolean>(
+      'AWS_S3_FORCE_PATH_STYLE',
+    );
+    if (raw == null || raw === '') return undefined;
+    if (typeof raw === 'boolean') return raw;
+    return ['true', '1', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+  }
+
+  /**
+   * Temporary local -> S3 cutover aid (see LocalReadFallbackDriver). Off unless
+   * explicitly enabled, and only honoured when STORAGE_DRIVER=s3.
+   */
+  getStorageLocalReadFallback(): boolean {
+    const raw = this.configService.get<string>('STORAGE_LOCAL_READ_FALLBACK');
+    return ['true', '1', 'yes', 'on'].includes(
+      String(raw ?? '').trim().toLowerCase(),
+    );
+  }
+
+  /** Retained local storage root for the fallback; defaults to the local driver's path. */
+  getStorageLocalReadFallbackPath(): string | undefined {
+    const raw = this.configService.get<string>(
+      'STORAGE_LOCAL_READ_FALLBACK_PATH',
+    );
+    return raw && raw.trim() ? raw.trim() : undefined;
   }
 
   getAwsS3Url(): string {
@@ -315,6 +340,26 @@ export class EnvironmentService {
     );
   }
 
+  /**
+   * OCR for scanned PDFs and images attached to pages. Defaults to enabled
+   * when a Mistral key is configured, like speech-to-text.
+   */
+  getAiOcrEnabled(): boolean {
+    const raw = this.configService.get<string>('AI_OCR_ENABLED');
+    if (raw == null || raw === '') {
+      return Boolean(this.configService.get<string>('MISTRAL_API_KEY'));
+    }
+    return !['false', '0', 'no', 'off'].includes(
+      String(raw).trim().toLowerCase(),
+    );
+  }
+
+  getAiOcrModel(): string {
+    return (
+      this.configService.get<string>('AI_OCR_MODEL') || 'mistral-ocr-latest'
+    );
+  }
+
   getAiSttModel(): string {
     return (
       this.configService.get<string>('AI_STT_MODEL') || 'voxtral-mini-latest'
@@ -471,6 +516,20 @@ export class EnvironmentService {
     if (explicit) return explicit.replace(/\/+$/, '');
     const api = this.getPlaneApiUrl();
     return api ? api.replace(/\/api(\/.*)?$/, '') : '';
+  }
+
+  /** Public URL of ConqrMeet for this deployment ('' when not deployed). */
+  getMeetAppUrl(): string {
+    return this.configService
+      .get<string>('MEET_APP_URL', '')
+      .replace(/\/+$/, '');
+  }
+
+  /** Public URL of ConqrService for this deployment ('' when not deployed). */
+  getServiceAppUrl(): string {
+    return this.configService
+      .get<string>('SERVICE_APP_URL', '')
+      .replace(/\/+$/, '');
   }
 
   /** Shared secret used to verify Plane webhook HMAC-SHA256 signatures. */
@@ -657,6 +716,11 @@ export class EnvironmentService {
   }
 
   /** Callback URL registered with the IdP; defaults to APP_URL + standard path. */
+  /** Raw `SUITE_IDP_CLIENTS` registry string; parsed and validated once by SuiteIdpService. */
+  getSuiteIdpClientsRaw(): string {
+    return this.configService.get<string>('SUITE_IDP_CLIENTS', '') ?? '';
+  }
+
   getOidcRedirectUri(): string {
     return (
       this.configService.get<string>('OIDC_REDIRECT_URI') ||

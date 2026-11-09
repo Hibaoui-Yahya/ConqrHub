@@ -3,6 +3,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { DB, Users } from '@docmost/db/types/db';
 import { hashPassword } from '../../../common/helpers';
+import { defaultUserLocale } from './default-locale';
 import { dbOrTx } from '@docmost/db/utils';
 import {
   InsertableUser,
@@ -36,6 +37,7 @@ export class UserRepo {
     'updatedAt',
     'deletedAt',
     'hasGeneratedPassword',
+    'department',
   ];
 
   async findById(
@@ -109,17 +111,37 @@ export class UserRepo {
     insertableUser: InsertableUser,
     trx?: KyselyTransaction,
   ): Promise<User> {
+    const db = dbOrTx(this.db, trx);
+
+    // The company can choose the interface language of new accounts
+    // (Paramètres › Entreprise › Général); the DEFAULT_USER_LOCALE
+    // deployment variable is only the starting point.
+    let workspaceLocale: string | undefined;
+    if (insertableUser.workspaceId) {
+      const ws = await db
+        .selectFrom('workspaces')
+        .select([
+          sql<string | null>`settings->'general'->>'defaultLocale'`.as(
+            'defaultLocale',
+          ),
+        ])
+        .where('id', '=', insertableUser.workspaceId)
+        .executeTakeFirst();
+      workspaceLocale = ws?.defaultLocale ?? undefined;
+    }
+
     const user: InsertableUser = {
       name:
         insertableUser.name || insertableUser.email.split('@')[0].toLowerCase(),
       email: insertableUser.email.toLowerCase(),
       password: await hashPassword(insertableUser.password),
-      locale: 'en-US',
+      locale: defaultUserLocale(
+        workspaceLocale ?? process.env.DEFAULT_USER_LOCALE,
+      ),
       role: insertableUser?.role,
       lastLoginAt: new Date(),
     };
 
-    const db = dbOrTx(this.db, trx);
     return db
       .insertInto('users')
       .values({ ...insertableUser, ...user })
@@ -225,16 +247,60 @@ export class UserRepo {
       .executeTakeFirst();
   }
 
+  /**
+   * settings.preferences.meetings — merged key by key so a partial update
+   * (only `autoProcess`, say) keeps the other defaults.
+   */
+  setMeetingDefaults(userId: string, value: Record<string, unknown>) {
+    return this.db
+      .updateTable('users')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object('meetings', COALESCE(settings->'preferences'->'meetings', '{}'::jsonb)
+                || ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', userId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
+  /**
+   * settings.preferences.<key> for the closed set of object preferences,
+   * merged key by key.
+   */
+  setPreferenceObject(
+    userId: string,
+    key: 'notificationSounds' | 'firstRun',
+    value: Record<string, unknown>,
+  ) {
+    return this.db
+      .updateTable('users')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('preferences', COALESCE(settings->'preferences', '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(key)}, COALESCE(settings->'preferences'->${sql.lit(key)}, '{}'::jsonb)
+                || ${sql.lit(JSON.stringify(value))}::jsonb))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', userId)
+      .returning(this.baseFields)
+      .executeTakeFirst();
+  }
+
   async updateNotificationSetting(
     userId: string,
     settingKey: NotificationSettingKey,
     settingValue: boolean,
+    bucket: 'notifications' | 'inAppNotifications' = 'notifications',
   ) {
+    // Both names come from closed sets (validated DTO), never from free text.
     return await this.db
       .updateTable('users')
       .set({
         settings: sql`COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('notifications', COALESCE(settings->'notifications', '{}'::jsonb)
+                || jsonb_build_object(${sql.lit(bucket)}, COALESCE(settings->${sql.lit(bucket)}, '{}'::jsonb)
                 || jsonb_build_object(${sql.lit(settingKey)}, ${sql.lit(settingValue)}))`,
         updatedAt: new Date(),
       })

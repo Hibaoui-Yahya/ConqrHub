@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
   Logger,
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuthUser } from '../../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
+import { UserRole } from '../../../common/helpers/types/permission';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
 import { ChunkingService } from './chunking.service';
@@ -44,6 +46,15 @@ export class EmbeddingsAdminController {
     @AuthUser() user: User,
     @AuthWorkspace() workspace: Workspace,
   ): Promise<BackfillEmbeddingsResult> {
+    if (
+      dto.workspaceId !== workspace.id ||
+      user.workspaceId !== workspace.id ||
+      (user.role !== UserRole.OWNER && user.role !== UserRole.ADMIN)
+    ) {
+      throw new ForbiddenException(
+        'Seuls les propriétaires et les administrateurs peuvent réindexer les connaissances de leur entreprise.',
+      );
+    }
     const warnings: string[] = [];
 
     const isInsightMode = dto.sourceKind === 'expert_insight';

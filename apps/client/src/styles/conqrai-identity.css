@@ -1,0 +1,109 @@
+/**
+ * ConqrAI identity layer — loaded after conqr-tokens.css.
+ *
+ * The logo's palette is black, white and cyan #00C2FF. Cyan cannot carry
+ * white text (2.1:1), so it is used as a FILL with black text (10.2:1), while
+ * accent TEXT, links, icons and borders use the deep cyan #006B94 (6:1 on
+ * white). In dark mode the cyan itself is legible as text (9:1 on the dark
+ * surface). Only the brand ramp and the accent roles change; neutrals and
+ * status colours keep the shared token values.
+ */
+
+:root {
+  --brand-100: #f0fbff;
+  --brand-200: #e5f8ff;
+  --brand-300: #ccf1ff;
+  --brand-400: #99e3ff;
+  --brand-500: #66d6ff;
+  --brand-600: #33c9ff;
+  --brand-700: #00a8de;
+  --brand-900: #005a7d;
+  --brand-1000: #00465f;
+  --brand-1100: #003347;
+  --brand-1200: #002230;
+  /* Accent text, links, icons, borders, selected tabs. */
+  --brand-default: #006b94;
+
+  /* Primary action fill (buttons) and the text on it. */
+  --bg-accent-primary: #00c2ff;
+  --bg-accent-primary-hover: #00a8de;
+  --bg-accent-primary-active: #0096c7;
+  --txt-on-accent: #000000;
+  /* Marks only (logo, decorative dots); never text on white. */
+  --brand-mark: #00c2ff;
+}
+
+[data-mantine-color-scheme="dark"] {
+  --brand-100: #001b26;
+  --brand-200: #002331;
+  --brand-300: #0b2a36;
+  --brand-400: #0f3a4a;
+  --brand-500: #11506a;
+  --brand-700: #33d1ff;
+  --brand-900: #99e3ff;
+  --brand-1000: #ccf1ff;
+  --brand-1100: #e5f8ff;
+  --brand-1200: #f0fbff;
+  --brand-default: #00c2ff;
+
+  --bg-accent-primary: #00c2ff;
+  --bg-accent-primary-hover: #33d1ff;
+  --bg-accent-primary-active: #66d6ff;
+  --txt-on-accent: #000000;
+}
+
+/* Product wordmark in the header: one image per colour scheme. */
+.conqr-wordmark {
+  display: block;
+  height: 18px;
+  width: auto;
+}
+
+/* Top bar (Pencil "Barre du haut · A · Claire"): the app tile is black,
+   so on the black dark-mode canvas it gets a hairline ring to stay a tile. */
+.conqr-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 4px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.conqr-brand-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+[data-mantine-color-scheme="dark"] .conqr-brand-mark {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.conqr-header-sep {
+  width: 1px;
+  height: 20px;
+  margin-inline: 4px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+.conqr-kbd {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2, var(--bg-layer-1));
+  color: var(--txt-tertiary);
+  font-weight: 500;
+  font-family: inherit;
+}
+@media (max-width: 767px) {
+  .conqr-header-sep {
+    display: none;
+  }
+}
+[data-mantine-color-scheme="dark"] .conqr-wordmark--light,
+:root:not([data-mantine-color-scheme="dark"]) .conqr-wordmark--dark {
+  display: none;
+}

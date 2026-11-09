@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { UserService } from './user.service';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
 import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { isUserDisabled } from '../../common/helpers';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -28,18 +30,25 @@ export class UserController {
     @AuthUser() authUser: User,
     @AuthWorkspace() workspace: Workspace,
   ) {
-    const memberCount = await this.workspaceRepo.getActiveUserCount(
-      workspace.id,
-    );
+    // Authentication may reuse a short-lived snapshot. Account settings must
+    // reflect the current profile when moving between suite applications.
+    const [user, currentWorkspace, memberCount] = await Promise.all([
+      this.userService.findById(authUser.id, workspace.id),
+      this.workspaceRepo.findById(workspace.id),
+      this.workspaceRepo.getActiveUserCount(workspace.id),
+    ]);
+    if (!user || isUserDisabled(user) || !currentWorkspace) {
+      throw new UnauthorizedException();
+    }
 
-    const { licenseKey, ...rest } = workspace;
+    const { licenseKey, ...rest } = currentWorkspace;
 
     const workspaceInfo = {
       ...rest,
       memberCount,
     };
 
-    return { user: authUser, workspace: workspaceInfo };
+    return { user, workspace: workspaceInfo };
   }
 
   @HttpCode(HttpStatus.OK)

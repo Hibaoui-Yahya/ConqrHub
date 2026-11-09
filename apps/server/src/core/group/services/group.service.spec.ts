@@ -7,7 +7,11 @@ describe('GroupService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [GroupService],
-    }).compile();
+    })
+      // Every constructor dependency is replaced by an empty double: this checks
+      // that the class and its declared dependencies resolve, not their behaviour.
+      .useMocker(() => ({}))
+      .compile();
 
     service = module.get<GroupService>(GroupService);
   });

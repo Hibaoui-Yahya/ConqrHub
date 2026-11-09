@@ -9,7 +9,11 @@ describe('GroupController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [GroupController],
       providers: [GroupService],
-    }).compile();
+    })
+      // Every constructor dependency is replaced by an empty double: this checks
+      // that the class and its declared dependencies resolve, not their behaviour.
+      .useMocker(() => ({}))
+      .compile();
 
     controller = module.get<GroupController>(GroupController);
   });

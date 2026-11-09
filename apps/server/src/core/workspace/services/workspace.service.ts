@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { LicenseCheckService } from '../../../integrations/environment/license-check.service';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
@@ -34,6 +35,12 @@ import { v4 } from 'uuid';
 import { InjectQueue } from '@nestjs/bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
 import { Queue } from 'bullmq';
+import { AccountEmailService } from '../../../integrations/mail/account-email.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  SESSIONS_REVOKED_EVENT,
+  SessionsRevokedEvent,
+} from '../../session/session-events';
 import {
   generateRandomSuffixNumbers,
   diffAuditTrackedFields,
@@ -72,7 +79,15 @@ export class WorkspaceService {
     @InjectQueue(QueueName.AI_QUEUE) private aiQueue: Queue,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private userSessionRepo: UserSessionRepo,
+    @Optional() private readonly accountEmails?: AccountEmailService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
+
+  /** Drops the user's live connections now that their sessions are revoked. */
+  private notifySessionsRevoked(userId: string, workspaceId: string) {
+    const event: SessionsRevokedEvent = { userId, workspaceId, all: true };
+    this.eventEmitter?.emit(SESSIONS_REVOKED_EVENT, event);
+  }
 
   async findById(workspaceId: string) {
     return this.workspaceRepo.findById(workspaceId);
@@ -508,6 +523,48 @@ export class WorkspaceService {
         );
       }
 
+      // Paramètres › Entreprise › Général: values that only existed as
+      // deployment variables (DEFAULT_USER_LOCALE, MAIL_FROM_NAME).
+      for (const key of [
+        'defaultLocale',
+        'defaultTimezone',
+        'mailFromName',
+      ] as const) {
+        if (typeof updateWorkspaceDto[key] === 'undefined') continue;
+        const prev = settingsBefore?.general?.[key] ?? null;
+        const next = updateWorkspaceDto[key]?.trim() || null;
+        if (prev !== next) {
+          before[key] = prev;
+          after[key] = next;
+        }
+        await this.workspaceRepo.setGeneralSetting(workspaceId, key, next, trx);
+      }
+
+      // Paramètres › Applications › ConqrMeet: company-wide recording rules.
+      if (typeof updateWorkspaceDto.meetSettings !== 'undefined') {
+        const incoming = updateWorkspaceDto.meetSettings ?? {};
+        for (const key of [
+          'consentRequired',
+          'audioRetentionDays',
+          'defaultLanguage',
+          'publishSpaceId',
+          'autoPublish',
+        ] as const) {
+          if (typeof incoming[key] === 'undefined') continue;
+          const prev = settingsBefore?.meet?.[key] ?? null;
+          const next = incoming[key] ?? null;
+          if (prev !== next) {
+            before[`meet.${key}`] = prev;
+            after[`meet.${key}`] = next;
+          }
+          await this.workspaceRepo.setMeetSetting(workspaceId, key, next, trx);
+        }
+      }
+
+      delete updateWorkspaceDto.defaultLocale;
+      delete updateWorkspaceDto.defaultTimezone;
+      delete updateWorkspaceDto.mailFromName;
+      delete updateWorkspaceDto.meetSettings;
       delete updateWorkspaceDto.restrictApiToAdmins;
       delete updateWorkspaceDto.aiSearch;
       delete updateWorkspaceDto.generativeAi;
@@ -631,6 +688,13 @@ export class WorkspaceService {
         after: { role: newRole },
       },
     });
+
+    await this.accountEmails?.roleChanged(
+      user,
+      authUser.name,
+      user.role,
+      newRole,
+    );
   }
 
   async generateHostname(
@@ -726,6 +790,9 @@ export class WorkspaceService {
       );
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+    this.notifySessionsRevoked(userId, workspaceId);
+
+    await this.accountEmails?.accessRemoved(user);
 
     this.auditService.log({
       event: AuditEvent.USER_DEACTIVATED,
@@ -846,6 +913,10 @@ export class WorkspaceService {
 
       await this.userSessionRepo.revokeByUserId(userId, workspaceId, trx);
     });
+    this.notifySessionsRevoked(userId, workspaceId);
+
+    // `user` still holds the address the deletion just overwrote.
+    await this.accountEmails?.accessRemoved(user, true);
 
     this.auditService.log({
       event: AuditEvent.USER_DELETED,

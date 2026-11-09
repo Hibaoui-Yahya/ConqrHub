@@ -9,6 +9,9 @@ export type TranscriptSegment = {
   endMs: number;
   text: string;
   confidence: number | null;
+  rawText?: string;
+  attribution?: 'acoustic' | 'unresolved' | 'text';
+  timing?: 'measured' | 'estimated';
 };
 
 export type TranscriptSpeaker = {
@@ -61,9 +64,16 @@ export function buildSourceSegments(
   if (result.segments.length === 0) {
     const text = result.text.trim();
     if (!text) return { segments: [], speakers: [] };
-    const label = speakerLabel(0, src.channel, multiChannel, 1);
+    const label = `Unidentified voice (${src.channel || 'recording'})`;
     return {
-      segments: splitIntoSegments(text, { ...src, speaker: label }),
+      segments: splitIntoSegments(text, { ...src, speaker: label }).map(
+        (s) => ({
+          ...s,
+          rawText: s.text,
+          attribution: 'unresolved',
+          timing: 'estimated',
+        }),
+      ),
       speakers: [label],
     };
   }
@@ -82,7 +92,10 @@ export function buildSourceSegments(
 
   const segments: TranscriptSegment[] = [];
   for (const seg of result.segments) {
-    const speaker = labels.get(seg.speakerId ?? 'unknown')!;
+    const speaker =
+      seg.speakerId === null
+        ? `Unidentified voice (${src.channel || 'recording'})`
+        : labels.get(seg.speakerId)!;
     const startMs = src.startMs + seg.startMs;
     const endMs = src.startMs + Math.max(seg.endMs, seg.startMs);
     const last = segments[segments.length - 1];
@@ -93,7 +106,8 @@ export function buildSourceSegments(
       last.text.length + seg.text.length <= MAX_PARAGRAPH_CHARS
     ) {
       last.text = `${last.text} ${seg.text}`;
-      last.endMs = endMs;
+      last.rawText = `${last.rawText} ${seg.text}`;
+      last.endMs = Math.max(last.endMs, endMs);
       continue;
     }
     segments.push({
@@ -104,10 +118,72 @@ export function buildSourceSegments(
       endMs,
       text: seg.text,
       confidence: null,
+      rawText: seg.text,
+      attribution: seg.speakerId === null ? 'unresolved' : 'acoustic',
+      timing: seg.timing ?? 'measured',
     });
   }
 
-  return { segments, speakers: [...labels.values()] };
+  return { segments, speakers: [...new Set(segments.map((s) => s.speaker))] };
+}
+
+/** Number acoustically separated voices by first appearance across all inputs.
+ * Input speaker ids are scoped to each transcription request, never to a person
+ * or account. Keep unassigned speech explicit instead of claiming a new voice.
+ */
+export function numberMeetingSpeakers(segments: TranscriptSegment[]): void {
+  segments.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+  const labels = new Map<string, string>();
+  let next = 1;
+  for (const segment of segments) {
+    if (segment.attribution === 'unresolved') continue;
+    const key = segment.speaker;
+    if (!labels.has(key)) labels.set(key, `Speaker ${next++}`);
+    segment.speaker = labels.get(key)!;
+  }
+}
+
+/** Permit readable punctuation/case fixes, never omitted or invented words.
+ * Proper-name spelling is guided at acoustic transcription with context bias.
+ */
+export function preservesSpokenWords(raw: string, corrected: string): boolean {
+  const tokens = (text: string) =>
+    text
+      .normalize('NFKC')
+      .toLocaleLowerCase()
+      .match(/[\p{L}\p{M}\p{N}]+/gu) || [];
+  const before = tokens(raw),
+    after = tokens(corrected);
+  return (
+    before.length > 0 &&
+    before.length === after.length &&
+    before.every((word, index) => word === after[index])
+  );
+}
+
+/** Provisional display names from explicit self-introductions by this voice.
+ * Conflicting introductions are left unresolved; this never links an account.
+ */
+export function explicitSpeakerNames(
+  segments: TranscriptSegment[],
+): Record<string, string> {
+  const candidates = new Map<string, Set<string>>();
+  for (const segment of segments) {
+    const introduction =
+      /(?:[Jj]e m['’]appelle|[Mm]on nom est|[Mm]y name is)\s+([\p{Lu}][\p{L}\p{M}'’\-]*(?:\s+[\p{Lu}][\p{L}\p{M}'’\-]*){0,3})/gu;
+    for (const match of segment.text.matchAll(introduction)) {
+      const name = match[1].trim();
+      if (segment.attribution !== 'acoustic' || name.length > 60) continue;
+      const names = candidates.get(segment.speaker) ?? new Set<string>();
+      names.add(name);
+      candidates.set(segment.speaker, names);
+    }
+  }
+  return Object.fromEntries(
+    [...candidates]
+      .filter(([, names]) => names.size === 1)
+      .map(([label, names]) => [label, [...names][0]]),
+  );
 }
 
 const SENTENCE_RE = /[^.!?…]+(?:[.!?…]+["')\]]*|$)/g;
@@ -136,7 +212,11 @@ export function splitSegmentsIntoSentences(
     const total = sentences.reduce((n, s) => n + s.length, 0) || 1;
     const span = Math.max(0, seg.endMs - seg.startMs);
     let offset = 0;
-    for (const sentence of sentences) {
+    const rawSentences = seg.rawText
+      ?.match(SENTENCE_RE)
+      ?.map((s) => s.trim())
+      .filter(Boolean);
+    for (const [sentenceIndex, sentence] of sentences.entries()) {
       const startMs = seg.startMs + Math.round((offset / total) * span);
       offset += sentence.length;
       const endMs = seg.startMs + Math.round((offset / total) * span);
@@ -147,6 +227,11 @@ export function splitSegmentsIntoSentences(
         startMs,
         endMs,
         text: sentence,
+        rawText:
+          rawSentences?.length === sentences.length
+            ? rawSentences[sentenceIndex]
+            : undefined,
+        timing: 'estimated',
         confidence: seg.confidence,
       });
     }
@@ -211,7 +296,7 @@ export function transcriptToText(
   speakers: Record<string, { displayName?: string | null } | undefined> = {},
 ): string {
   const labels = new Set(segments.map((s) => String(s.speaker ?? '')));
-  const named = labels.size > 1;
+  const named = [...labels].some(Boolean);
   const turns: string[] = [];
   let lastSpeaker: string | null = null;
   for (const seg of segments) {

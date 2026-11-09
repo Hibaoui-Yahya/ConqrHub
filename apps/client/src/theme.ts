@@ -1,4 +1,6 @@
 import {
+  Badge,
+  Button,
   Card,
   createTheme,
   CSSVariablesResolver,
@@ -130,6 +132,25 @@ export const theme = createTheme({
     dark,
   },
   components: {
+    // ConqrAI identity: the primary action is a cyan fill with black text
+    // (cyan cannot carry white text). Only the default/brand filled variant
+    // changes; other colours keep Mantine's.
+    Button: Button.extend({
+      vars: (_theme, props) => {
+        const filled = !props.variant || props.variant === "filled";
+        const brand = !props.color || props.color === "brand";
+        if (!filled || !brand) return { root: {} };
+        return {
+          root: {
+            "--button-bg": "var(--bg-accent-primary)",
+            "--button-hover": "var(--bg-accent-primary-hover)",
+            "--button-color": "var(--txt-on-accent)",
+          },
+        };
+      },
+    }),
+    // Sentence-case badges (statuses read as words, not shouted labels).
+    Badge: Badge.extend({ styles: { root: { textTransform: "none" } } }),
     Tabs: Tabs.extend({
       vars: (theme, props) => ({
         root: {

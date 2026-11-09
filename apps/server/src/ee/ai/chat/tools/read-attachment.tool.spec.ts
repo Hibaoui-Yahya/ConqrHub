@@ -62,6 +62,20 @@ describe('ReadAttachmentTool', () => {
     expect(res.meta?.fileName).toBe('diagram.png');
   });
 
+  it('presents a partially extracted document as partial, never as the whole', async () => {
+    attachmentRepo.findByIdWithContent.mockResolvedValue({
+      id: 'a-scan', fileName: 'scan.pdf', mimeType: 'application/pdf',
+      fileSize: '2048', filePath: '/x/scan.pdf', spaceId: 'sp-1', pageId: null,
+      textContent: 'Pages 1 à 30', extractionStatus: 'partial',
+      extractionDetail: 'ocr_page_limit:30/45',
+    });
+    const res = await newTool().execute({ attachmentId: 'a-scan' }, ctx);
+    expect((res.__mcpContent[0] as any).text).toMatch(
+      /^PARTIAL extracted text of "scan\.pdf" \(only part of the document could be read: ocr_page_limit:30\/45\):/,
+    );
+    expect(res.meta).toMatchObject({ partial: true, coverage: 'ocr_page_limit:30/45' });
+  });
+
   it('rasterises an Excalidraw SVG to a PNG image block', async () => {
     attachmentRepo.findByIdWithContent.mockResolvedValue({
       id: 'a-svg', fileName: 'diagram.excalidraw.svg', mimeType: 'image/svg+xml',

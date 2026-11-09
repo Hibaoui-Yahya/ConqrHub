@@ -20,7 +20,10 @@ import {
 } from '../../integrations/queue/constants/queue.interface';
 import { CommentNotificationService } from './services/comment.notification';
 import { PageNotificationService } from './services/page.notification';
-import { VerificationNotificationService } from './services/verification.notification';
+import {
+  IVerificationInvalidatedNotificationJob,
+  VerificationNotificationService,
+} from './services/verification.notification';
 import { DomainService } from '../../integrations/environment/domain.service';
 
 @Processor(QueueName.NOTIFICATION_QUEUE)
@@ -50,6 +53,7 @@ export class NotificationProcessor
       | IPermissionGrantedNotificationJob
       | IVerificationExpiringNotificationJob
       | IVerificationExpiredNotificationJob
+      | IVerificationInvalidatedNotificationJob
       | IVerificationReconcileJob
       | IPageVerifiedNotificationJob
       | IApprovalRequestedNotificationJob
@@ -129,9 +133,17 @@ export class NotificationProcessor
           break;
         }
 
+        case QueueJob.PAGE_VERIFICATION_INVALIDATED: {
+          await this.verificationNotificationService.processVerificationInvalidated(
+            job.data as IVerificationInvalidatedNotificationJob,
+          );
+          break;
+        }
+
         case QueueJob.PAGE_VERIFIED_NOTIFICATION: {
           await this.verificationNotificationService.processPageVerified(
             job.data as IPageVerifiedNotificationJob,
+            appUrl,
           );
           break;
         }

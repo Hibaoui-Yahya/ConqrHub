@@ -13,6 +13,7 @@ import { CommentService } from './comment.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { PageIdDto, CommentIdDto } from './dto/comments.input';
+import { ResolveCommentDto } from './dto/resolve-comment.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { AuthWorkspace } from '../../common/decorators/auth-workspace.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -145,6 +146,72 @@ export class CommentController {
     await this.pageAccessService.validateCanComment(page, user, workspace.id);
 
     return this.commentService.update(comment, dto, user);
+  }
+
+  /**
+   * Resolve or re-open a thread. Whoever may comment on the page may resolve
+   * a thread they started; resolving someone else's thread takes edit
+   * rights on the page (or space admin), like deleting it does.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post('resolve')
+  async resolve(
+    @Body() dto: ResolveCommentDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const comment = await this.commentRepo.findById(dto.commentId, workspace.id, {
+      includeCreator: true,
+      includeResolvedBy: true,
+    });
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const page = await this.pageRepo.findById(comment.pageId);
+    if (!page || page.deletedAt || page.workspaceId !== workspace.id) {
+      throw new NotFoundException('Page not found');
+    }
+
+    await this.pageAccessService.validateCanComment(page, user, workspace.id);
+
+    if (comment.creatorId !== user.id) {
+      const canEdit = await this.pageAccessService
+        .validateCanEdit(page, user)
+        .then(() => true)
+        .catch(() => false);
+      if (!canEdit) {
+        const ability = await this.spaceAbility.createForUser(
+          user,
+          comment.spaceId,
+        );
+        if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
+          throw new ForbiddenException(
+            'You can only resolve your own comments',
+          );
+        }
+      }
+    }
+
+    const { comment: result, changed } = await this.commentService.resolve(
+      comment,
+      dto.resolved,
+      user,
+    );
+
+    if (changed) {
+      this.auditService.log({
+        event: dto.resolved
+          ? AuditEvent.COMMENT_RESOLVED
+          : AuditEvent.COMMENT_REOPENED,
+        resourceType: AuditResource.COMMENT,
+        resourceId: comment.id,
+        spaceId: comment.spaceId,
+        metadata: { pageId: comment.pageId },
+      });
+    }
+
+    return result;
   }
 
   @HttpCode(HttpStatus.OK)

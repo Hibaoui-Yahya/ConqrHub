@@ -132,14 +132,23 @@ export class ReadAttachmentTool implements ChatTool, OnModuleInit {
 
     // 2. Documents ConqrHub already extracted text for (search index).
     if (att.textContent && att.textContent.trim()) {
+      // Partial extractions (OCR page limit, scanned pages left...) must not
+      // be read as the whole document.
+      const heading =
+        att.extractionStatus === 'partial'
+          ? `PARTIAL extracted text of "${att.fileName}" (only part of the document could be read: ${att.extractionDetail ?? 'partial'}):`
+          : `Extracted text of "${att.fileName}":`;
       return {
         __mcpContent: [
           {
             type: 'text',
-            text: `Extracted text of "${att.fileName}":\n\n${att.textContent.slice(0, MAX_TEXT_CHARS)}`,
+            text: `${heading}\n\n${att.textContent.slice(0, MAX_TEXT_CHARS)}`,
           },
         ],
-        meta,
+        meta:
+          att.extractionStatus === 'partial'
+            ? { ...meta, partial: true, coverage: att.extractionDetail ?? null }
+            : meta,
       };
     }
 

@@ -3,7 +3,6 @@ import {
   Badge,
   Box,
   Group,
-  Text,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
@@ -52,8 +51,8 @@ export function AppHeader() {
 
   return (
     <>
-      <Group h="100%" px="md" justify="space-between" wrap={"nowrap"}>
-        <Group wrap="nowrap">
+      <Group h="100%" className={classes.suiteHeader} wrap={"nowrap"}>
+        <Group wrap="nowrap" gap={8}>
           {/* Mobile keeps its hamburger here; the desktop toggle lives in the
               sidebar's top row (Plane parity). */}
           <Tooltip label={t("Sidebar toggle")}>
@@ -67,37 +66,34 @@ export function AppHeader() {
           </Tooltip>
 
           <AppSwitcher />
+          <span className="conqr-header-sep" aria-hidden="true" />
 
-          <Link to="/home" className={classes.brand} aria-label="ConqrHub">
-            <Box hiddenFrom="sm" className={classes.brandIcon}>
+          <Link to="/home" className="conqr-brand" aria-label="ConqrHub">
+            <Box>
               <img
-                src="/icons/favicon-32x32.png"
+                className="conqr-wordmark conqr-wordmark--light"
+                src="/branding/conqrhub-wordmark-light.png"
                 alt="ConqrHub"
-                width={22}
-                height={22}
+              />
+              <img
+                className="conqr-wordmark conqr-wordmark--dark"
+                src="/branding/conqrhub-wordmark-dark.png"
+                alt=""
+                aria-hidden="true"
               />
             </Box>
-            <Text
-              size="lg"
-              fw={700}
-              style={{ userSelect: "none", letterSpacing: "-0.02em" }}
-              visibleFrom="sm"
-            >
-              Conqr<span style={{ color: "var(--brand-default)" }}>Hub</span>
-            </Text>
           </Link>
         </Group>
 
-        <div>
-          <Group visibleFrom="sm">
-            <SearchControl onClick={searchSpotlight.open} />
-          </Group>
-          <Group hiddenFrom="sm">
-            <SearchMobileControl onSearch={searchSpotlight.open} />
-          </Group>
+        <div className={classes.searchSlot}>
+          <SearchControl onClick={searchSpotlight.open} />
         </div>
 
-        <Group px={"xl"} wrap="nowrap">
+        <Group className={classes.headerEnd} gap={8} wrap="nowrap">
+          {/* Phone: search is an icon with the others, not alone mid-bar. */}
+          <Box hiddenFrom="sm">
+            <SearchMobileControl onSearch={searchSpotlight.open} />
+          </Box>
           <UnstyledButton
             component={Link}
             to="/ai"
@@ -113,7 +109,10 @@ export function AppHeader() {
               }
             }}
           >
-            <IconSparkles size={16} style={{ marginRight: 4, verticalAlign: "middle" }} />
+            <IconSparkles
+              size={16}
+              style={{ marginRight: 4, verticalAlign: "middle" }}
+            />
             {t("AI Chat")}
           </UnstyledButton>
           <Tooltip label={t("AI Chat")} openDelay={250} withArrow>
@@ -141,12 +140,16 @@ export function AppHeader() {
           {/* ConqrService — the suite's help & requests entry point. Same
               button, same panel, same place in all four apps. */}
           {resolveConqrServiceUrl() && (
-            <Tooltip label={CONQR_SERVICE_TRIGGER_TITLE} openDelay={250} withArrow>
+            <Tooltip
+              label={t(CONQR_SERVICE_TRIGGER_TITLE)}
+              openDelay={250}
+              withArrow
+            >
               <ActionIcon
                 variant="subtle"
                 color="dark"
                 size="sm"
-                aria-label={CONQR_SERVICE_TRIGGER_LABEL}
+                aria-label={t(CONQR_SERVICE_TRIGGER_LABEL)}
                 onClick={() => toggleConqrService()}
               >
                 <ConqrServiceIcon size={19} />
@@ -167,6 +170,7 @@ export function AppHeader() {
                 : `${trialDaysLeft} days left`}
             </Badge>
           )}
+          <span className="conqr-header-sep" aria-hidden="true" />
           <TopMenu />
         </Group>
       </Group>

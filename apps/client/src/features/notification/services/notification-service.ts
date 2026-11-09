@@ -6,6 +6,7 @@ export async function getNotifications(params: {
   limit?: number;
   cursor?: string;
   type?: string;
+  unreadOnly?: boolean;
 }): Promise<IPagination<INotification>> {
   const req = await api.post<IPagination<INotification>>(
     "/notifications",

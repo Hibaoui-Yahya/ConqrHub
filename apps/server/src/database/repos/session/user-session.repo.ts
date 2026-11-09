@@ -119,8 +119,9 @@ export class UserSessionRepo {
     currentSessionId: string,
     userId: string,
     workspaceId: string,
+    trx?: KyselyTransaction,
   ): Promise<void> {
-    await this.db
+    await dbOrTx(this.db, trx)
       .deleteFrom('userSessions')
       .where('userId', '=', userId)
       .where('workspaceId', '=', workspaceId)

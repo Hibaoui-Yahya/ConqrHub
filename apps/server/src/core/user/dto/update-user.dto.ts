@@ -2,16 +2,21 @@ import { OmitType, PartialType } from '@nestjs/mapped-types';
 import {
   IsBoolean,
   IsIn,
+  IsInt,
+  Max,
+  Min,
   IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { CreateUserDto } from '../../auth/dto/create-user.dto';
+import { NOTIFICATION_SETTING_KEYS } from '../../notification/notification.constants';
 
 /** ConqrPlan's theme keys (packages/constants/src/themes.ts). */
 export const THEME_KEYS = [
@@ -38,9 +43,134 @@ export class ThemeCustomDto {
   darkPalette: boolean;
 }
 
+/**
+ * Personal ConqrMeet defaults. They used to live in the Meet browser's
+ * localStorage; stored on the account they follow the person everywhere.
+ * `null` clears a value (back to "let the AI decide" / the company default).
+ */
+export class MeetingDefaultsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  defaultMeetingType?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  defaultLanguage?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  autoProcess?: boolean;
+}
+
+export const NOTIFICATION_SOUNDS = [
+  'clair',
+  'doux',
+  'alerte',
+  'discret',
+  'aucun',
+] as const;
+
+/** Sound per notification category (Paramètres › Mon compte › Notifications). */
+export class NotificationSoundCategoriesDto {
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) ready?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) problem?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) review?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) mention?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) verification?: string;
+  @IsOptional() @IsIn(NOTIFICATION_SOUNDS as unknown as string[]) updates?: string;
+}
+
+export class NotificationSoundsDto {
+  @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(100) volume?: number;
+  @IsOptional() @IsBoolean() backgroundOnly?: boolean;
+  @IsOptional() @IsBoolean() muteWhileRecording?: boolean;
+  @IsOptional() @IsBoolean() doNotDisturb?: boolean;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationSoundCategoriesDto)
+  categories?: NotificationSoundCategoriesDto;
+}
+
+/**
+ * First-visit state (onboarding and product tours). Flags are one-way: true
+ * stamps the current time on the server. Stored as settings.preferences.firstRun.
+ */
+export class FirstRunDto {
+  @IsOptional()
+  @IsBoolean()
+  onboarded?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hubTourSeen?: boolean;
+
+  /** Set by ConqrMeet (through its BFF), so its tour shows once per person. */
+  @IsOptional()
+  @IsBoolean()
+  meetTourSeen?: boolean;
+
+  /** Role shown on the profile and used to pick the onboarding track. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  jobTitle?: string;
+}
+
+/** One switch of the notification preferences: a kind, a channel, on or off. */
+export class NotificationPreferenceDto {
+  @IsIn(NOTIFICATION_SETTING_KEYS as unknown as string[])
+  key: (typeof NOTIFICATION_SETTING_KEYS)[number];
+
+  @IsIn(['email', 'inApp'])
+  channel: 'email' | 'inApp';
+
+  @IsBoolean()
+  enabled: boolean;
+}
+
 export class UpdateUserDto extends PartialType(
   OmitType(CreateUserDto, ['password'] as const),
 ) {
+  /** Stored as settings.preferences.notificationSounds (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationSoundsDto)
+  notificationSounds: NotificationSoundsDto;
+
+  /**
+   * Department shown with the person's expert insights (users.department).
+   * Blank clears it.
+   */
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() || null : value,
+  )
+  @ValidateIf((o) => o.department !== null)
+  @IsString()
+  @MaxLength(120)
+  department?: string | null;
+
+  /** settings.notifications (e-mail) or settings.inAppNotifications (bell). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NotificationPreferenceDto)
+  notificationPreference: NotificationPreferenceDto;
+
+  /** Stored as settings.preferences.firstRun (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FirstRunDto)
+  firstRun: FirstRunDto;
+
+  /** Stored as settings.preferences.meetings (merged key by key). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MeetingDefaultsDto)
+  meetingDefaults: MeetingDefaultsDto;
+
   @IsOptional()
   @IsBoolean()
   fullPageWidth: boolean;

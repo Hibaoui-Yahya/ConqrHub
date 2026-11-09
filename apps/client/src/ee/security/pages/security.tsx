@@ -15,13 +15,19 @@ import TrashRetention from "@/ee/security/components/trash-retention.tsx";
 
 import { useHasFeature } from "@/ee/hooks/use-feature";
 import { Feature } from "@/ee/features";
+import {
+  isFeatureUnavailable,
+  UNAVAILABLE,
+} from "@/ee/unavailable-features";
 
 export default function Security() {
   const { t } = useTranslation();
   const { isAdmin } = useUserRole();
   const hasCustomSso = useHasFeature(Feature.SSO_CUSTOM);
-  const hasRetention = useHasFeature(Feature.RETENTION);
-  const hasSharingControls = useHasFeature(Feature.SHARING_CONTROLS);
+  // Two-factor and single sign-on have no server side in this build: their
+  // sections stay hidden rather than calling endpoints that answer 404.
+  const showMfa = !isFeatureUnavailable(UNAVAILABLE.MFA);
+  const showSso = !isFeatureUnavailable(UNAVAILABLE.SSO_CUSTOM);
 
   if (!isAdmin) {
     return null;
@@ -32,40 +38,55 @@ export default function Security() {
       <Helmet>
         <title>Security - {getAppName()}</title>
       </Helmet>
-      <SettingsTitle title={t("Security")} />
+      <SettingsTitle
+        title={t("Security and sign-in")}
+        description={t(
+          showSso
+            ? "Sign-in rules for every member and single sign-on."
+            : "Rules that apply to every member of the company.",
+        )}
+        scope="company"
+      />
 
-      <EnforceMfa />
-
-      <Divider my="lg" />
+      {showMfa && (
+        <>
+          <EnforceMfa />
+          <Divider my="lg" />
+        </>
+      )}
 
       <DisablePublicSharing />
       <Divider my="lg" />
 
       <TrashRetention />
-      <Divider my="lg" />
 
-      <Title order={4} my="lg">
-        Single sign-on (SSO)
-      </Title>
-
-      <EnforceSso />
-      <Divider my="lg" />
-
-      {(isCloud() || hasCustomSso) && (
+      {showSso && (
         <>
-          <AllowedDomains />
           <Divider my="lg" />
+          <Title order={4} my="lg">
+            Single sign-on (SSO)
+          </Title>
+
+          <EnforceSso />
+          <Divider my="lg" />
+
+          {(isCloud() || hasCustomSso) && (
+            <>
+              <AllowedDomains />
+              <Divider my="lg" />
+            </>
+          )}
+
+          {hasCustomSso && (
+            <>
+              <CreateSsoProvider />
+              <Divider size={0} my="lg" />
+            </>
+          )}
+
+          <SsoProviderList />
         </>
       )}
-
-      {hasCustomSso && (
-        <>
-          <CreateSsoProvider />
-          <Divider size={0} my="lg" />
-        </>
-      )}
-
-      <SsoProviderList />
     </>
   );
 }

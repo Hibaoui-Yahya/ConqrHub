@@ -19,7 +19,7 @@ const RAG_TEMPERATURE = 0.2;
 
 export interface AskResult {
   answer: string;
-  sources: Array<{ label: string; kind: string; sourceId: string; title: string | null }>;
+  sources: Array<{ label: string; kind: string; sourceId: string; title: string | null; attachmentId?: string; fileName?: string }>;
   contextEmpty: boolean;
 }
 
@@ -41,6 +41,8 @@ export class RagAnswerService {
     await this.assertSpaceReadAccess(user, dto.spaceId);
 
     const context = await this.retrieval.retrieve({
+
+      userId: user.id,
       question: dto.question,
       workspaceId: user.workspaceId,
       spaceId: dto.spaceId,
@@ -63,6 +65,7 @@ export class RagAnswerService {
         kind: c.kind,
         sourceId: c.sourceId,
         title: c.title,
+        ...(c.attachmentId ? { attachmentId: c.attachmentId, fileName: c.fileName } : {}),
       })),
       contextEmpty: context.isEmpty,
     };
@@ -75,6 +78,8 @@ export class RagAnswerService {
       }
 
       const context = await this.retrieval.retrieve({
+
+        userId: user.id,
         question: dto.question,
         workspaceId: user.workspaceId,
         spaceId: dto.spaceId,

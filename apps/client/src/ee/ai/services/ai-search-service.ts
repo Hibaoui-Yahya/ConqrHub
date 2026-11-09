@@ -1,23 +1,34 @@
 import api from "@/lib/api-client.ts";
 import { IPageSearchParams } from "@/features/search/types/search.types.ts";
 
+/** One grounding source of the search-palette AI answer (`sources` SSE event). */
+export interface IAiSearchSource {
+  pageId: string;
+  title: string | null;
+  kind?: "page" | "expert_insight" | string;
+  score?: number;
+  excerpt?: string;
+  label?: string;
+  slugId?: string;
+  spaceSlug?: string;
+  spaceName?: string;
+  verified?: boolean;
+  verifiedAt?: string | null;
+  verifiedBy?: string | null;
+  /** Legacy fields still emitted by older servers. */
+  similarity?: number;
+  distance?: number;
+  chunkIndex?: number;
+}
+
 export interface IAiSearchResponse {
   answer: string;
-  sources?: Array<{
-    pageId: string;
-    title: string;
-    slugId: string;
-    spaceSlug: string;
-    similarity: number;
-    distance: number;
-    chunkIndex: number;
-    excerpt: string;
-  }>;
+  sources?: IAiSearchSource[];
 }
 
 export async function aiAnswers(
   params: IPageSearchParams,
-  onChunk?: (chunk: { content?: string; sources?: any[] }) => void,
+  onChunk?: (chunk: { content?: string; sources?: IAiSearchSource[] }) => void,
 ): Promise<IAiSearchResponse> {
   const response = await fetch("/api/ai/answers", {
     method: "POST",

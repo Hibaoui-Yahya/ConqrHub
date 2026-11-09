@@ -1,0 +1,128 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { MeetingAccessGuard } from './meeting-access.guard';
+import { meetingSharedWith } from './meeting-share.util';
+
+// Grants (meeting:user:workspace) the share lookup reports; real SQL is
+// covered by meeting-sharing.integration.spec.ts.
+const mockGrants = new Set<string>();
+jest.mock('./meeting-share.util', () => ({
+  meetingSharedWith: jest.fn(async (_db: unknown, meetingId: string, viewer: any) =>
+    mockGrants.has(`${meetingId}:${viewer.id}:${viewer.workspaceId}`),
+  ),
+}));
+
+describe('MeetingAccessGuard', () => {
+  const M1 = '0192f1a0-0000-7000-8000-000000000001';
+  const DELETED = '0192f1a0-0000-7000-8000-000000000002';
+  const meetings: Record<string, any> = {
+    [M1]: { userId: 'annie', workspaceId: 'w1', deletedAt: null },
+    [DELETED]: { userId: 'annie', workspaceId: 'w1', deletedAt: new Date() },
+  };
+  const queried: string[] = [];
+  const db: any = {
+    selectFrom: () => {
+      let id = '';
+      let liveOnly = false;
+      const q: any = {
+        select: () => q,
+        where: (col: string, _op: string, val: any) => {
+          if (col === 'id') id = val;
+          if (col === 'deletedAt') liveOnly = val === null;
+          return q;
+        },
+        executeTakeFirst: async () => {
+          queried.push(id);
+          const m = meetings[id];
+          return m && (!liveOnly || !m.deletedAt) ? m : undefined;
+        },
+      };
+      return q;
+    },
+  };
+  const guard = new MeetingAccessGuard(db);
+  const ctx = (id: string | undefined, user: any, workspaceId = 'w1', method = 'GET') =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({ method, params: id ? { id } : {}, user: { user, workspace: { id: workspaceId } } }),
+      }),
+    }) as any;
+
+  it('lets the creator read and change their meeting', async () => {
+    for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) {
+      await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }, 'w1', method))).resolves.toBe(true);
+    }
+  });
+
+  it('answers 404 to a colleague, an Admin and an Owner of the company, whatever the method', async () => {
+    for (const who of [
+      { id: 'karim', role: 'member' },
+      { id: 'sophie', role: 'admin' },
+      { id: 'olivier', role: 'owner' },
+    ]) {
+      for (const method of ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE']) {
+        await expect(guard.canActivate(ctx(M1, who, 'w1', method))).rejects.toBeInstanceOf(NotFoundException);
+      }
+    }
+  });
+
+  it('answers 404 to another company (even an owner), a deleted meeting or an unknown id', async () => {
+    await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'owner' }, 'w2'))).rejects.toBeInstanceOf(NotFoundException);
+    await expect(guard.canActivate(ctx(M1, { id: 'annie', role: 'owner' }, 'w2', 'DELETE'))).rejects.toBeInstanceOf(NotFoundException);
+    await expect(guard.canActivate(ctx(DELETED, { id: 'annie', role: 'owner' }))).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      guard.canActivate(ctx('0192f1a0-0000-7000-8000-00000000ffff', { id: 'annie', role: 'owner' })),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('answers 404 to a malformed id without querying, and lets database errors through', async () => {
+    queried.length = 0;
+    await expect(guard.canActivate(ctx('nope', { id: 'annie', role: 'owner' }))).rejects.toBeInstanceOf(NotFoundException);
+    expect(queried).toEqual([]);
+    const broken: any = {
+      selectFrom: () => {
+        const q: any = { select: () => q, where: () => q, executeTakeFirst: async () => { throw new Error('db down'); } };
+        return q;
+      },
+    };
+    await expect(new MeetingAccessGuard(broken).canActivate(ctx(M1, { id: 'annie', role: 'owner' }))).rejects.toThrow('db down');
+  });
+
+  it('lets someone the meeting is shared with read it, and refuses them any change (403)', async () => {
+    mockGrants.add(`${M1}:karim:w1`);
+    try {
+      for (const method of ['GET', 'HEAD']) {
+        await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }, 'w1', method))).resolves.toBe(true);
+      }
+      for (const method of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+        await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'member' }, 'w1', method))).rejects.toBeInstanceOf(ForbiddenException);
+      }
+      // A share for Karim gives nothing to anyone else.
+      await expect(guard.canActivate(ctx(M1, { id: 'sophie', role: 'admin' }))).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      mockGrants.clear();
+    }
+  });
+
+  it('never lets a share cross companies, even if the lookup says so', async () => {
+    mockGrants.add(`${M1}:karim:w2`);
+    try {
+      await expect(guard.canActivate(ctx(M1, { id: 'karim', role: 'owner' }, 'w2'))).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      mockGrants.clear();
+    }
+  });
+
+  it('does not look shares up for the creator', async () => {
+    (meetingSharedWith as jest.Mock).mockClear();
+    await guard.canActivate(ctx(M1, { id: 'annie', role: 'member' }));
+    expect(meetingSharedWith).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 without an authenticated user', async () => {
+    await expect(guard.canActivate(ctx(M1, undefined))).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('does not check routes without an id (list, start, upload)', async () => {
+    await expect(guard.canActivate(ctx(undefined, { id: 'karim', role: 'member' }, 'w1', 'POST'))).resolves.toBe(true);
+  });
+});

@@ -24,11 +24,16 @@ export type AiChatMessage = {
   createdAt: string;
 };
 
+export type AiChatSourceKind = 'page' | 'expert_insight';
+
 export type AiChatSource = {
+  /** First citation label pointing to this source (e.g. "P1"). */
   label: string;
+  /** All citation labels pointing to this source (e.g. ["P1", "P3"]). */
+  labels?: string[];
   title: string | null;
   sourceId: string;
-  kind: string;
+  kind: AiChatSourceKind | string;
   score: number;
   slugId?: string;
   spaceSlug?: string;
@@ -37,7 +42,39 @@ export type AiChatSource = {
   updatedAt?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  /** Short excerpt of the grounding chunk (<= 240 chars). */
+  excerpt?: string;
+  /** Whether the page is currently verified (in the AI knowledge base). */
+  verified?: boolean;
+  verificationStatus?:
+    | 'none'
+    | 'draft'
+    | 'in_approval'
+    | 'approved'
+    | 'verified'
+    | 'expiring'
+    | 'obsolete'
+    | string;
+  verificationExpiresAt?: string | null;
 };
+
+export type AiChatFeedbackRating = 'up' | 'down';
+
+export type AiChatFeedback = {
+  rating: AiChatFeedbackRating;
+  comment?: string;
+};
+
+export type SendMessageOptions = {
+  /** Page the aside panel is opened on; used as implicit context. */
+  contextPageId?: string;
+  /** Restrict retrieval to a single space. */
+  spaceId?: string;
+  /** "deep" lets the assistant read more pages before answering. */
+  mode?: AiChatMode;
+};
+
+export type AiChatMode = 'fast' | 'deep';
 
 export type AiChatStreamEvent =
   | { type: 'chat_created'; chatId: string }
@@ -51,6 +88,8 @@ export type AiChatStreamEvent =
       confidence?: number | null;
       groundedSourceCount?: number;
       sources?: AiChatSource[];
+      /** Short follow-up questions the user can send in one click. */
+      followUps?: string[];
     }
   | { type: 'error'; message: string; code?: string; retryable?: boolean };
 

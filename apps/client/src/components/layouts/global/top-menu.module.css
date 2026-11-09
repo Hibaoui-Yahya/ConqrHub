@@ -1,0 +1,32 @@
+.accountChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  max-width: 240px;
+
+  @mixin hover {
+    background-color: var(--bg-layer-transparent-hover, var(--mantine-color-default-hover));
+  }
+}
+
+.accountText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 170px;
+  text-align: left;
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .accountChip {
+    padding: 2px;
+    border-color: transparent;
+  }
+}

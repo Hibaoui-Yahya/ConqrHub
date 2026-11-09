@@ -5,6 +5,7 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QueueJob, QueueName } from '../../../integrations/queue/constants';
+import { meetingDerivedPageIdsIn } from './meeting-derived-pages';
 
 const DEFAULT_RETENTION_DAYS = 30;
 
@@ -46,6 +47,13 @@ export class TrashCleanupService {
 
         for (const page of oldDeletedPages) {
           try {
+            // Pages made from a meeting stay in the trash until the
+            // retention review (meeting-derived-pages.ts).
+            const retained = await meetingDerivedPageIdsIn(this.db, {
+              workspaceId: workspace.id,
+              underPageId: page.id,
+            });
+            if (retained.length > 0) continue;
             await this.cleanupPage(page.id);
             totalCleaned++;
           } catch (error) {

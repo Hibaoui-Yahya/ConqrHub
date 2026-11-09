@@ -1,6 +1,6 @@
 {
-  "name": "ConqrAI Wiki",
-  "short_name": "ConqrAI Wiki",
+  "name": "ConqrHub",
+  "short_name": "ConqrHub",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0F172A",
@@ -26,5 +26,7 @@
       "type": "image/png",
       "sizes": "512x512"
     }
-  ]
+  ],
+  "description": "La base de connaissances de votre équipe : pages, réunions et rapports.",
+  "id": "/"
 }

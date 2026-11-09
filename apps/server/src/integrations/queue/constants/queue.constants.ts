@@ -9,6 +9,7 @@ export enum QueueName {
   HISTORY_QUEUE = '{history-queue}',
   NOTIFICATION_QUEUE = '{notification-queue}',
   AUDIT_QUEUE = '{audit-queue}',
+  MEETING_QUEUE = '{meeting-queue}',
 }
 
 export enum QueueJob {
@@ -80,6 +81,7 @@ export enum QueueJob {
   PAGE_UPDATE_DIGEST = 'page-update-digest',
   PAGE_VERIFICATION_EXPIRING = 'page-verification-expiring',
   PAGE_VERIFICATION_EXPIRED = 'page-verification-expired',
+  PAGE_VERIFICATION_INVALIDATED = 'page-verification-invalidated',
   VERIFICATION_RECONCILE = 'verification-reconcile',
   PAGE_VERIFIED_NOTIFICATION = 'page-verified-notification',
   PAGE_APPROVAL_REQUESTED_NOTIFICATION = 'page-approval-requested-notification',
@@ -98,4 +100,5 @@ export enum QueueJob {
   BROKEN_LINKS_SCAN_ALL = 'broken-links-scan-all',
   DUPLICATES_SCAN_ALL = 'duplicates-scan-all',
 
+  MEETING_PIPELINE = 'meeting-pipeline',
 }

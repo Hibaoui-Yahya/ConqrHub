@@ -12,6 +12,7 @@ import { useClipboard } from "@/hooks/use-clipboard";
 import { getInviteLink } from "@/features/workspace/services/workspace-service.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
 import { isCloud } from "@/lib/config.ts";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Props {
   invitationId: string;
@@ -22,6 +23,7 @@ export default function InviteActionMenu({ invitationId }: Props) {
   const revokeInvitationMutation = useRevokeInvitationMutation();
   const { isAdmin } = useUserRole();
   const clipboard = useClipboard();
+  const queryClient = useQueryClient();
 
   const handleCopyLink = async (invitationId: string) => {
     try {
@@ -30,6 +32,8 @@ export default function InviteActionMenu({ invitationId }: Props) {
       const inviteLink = `${window.location.origin}${url.pathname}${url.search}`;
       clipboard.copy(inviteLink);
       notifications.show({ message: t("Link copied") });
+      // Copying the link renewed it for 7 days: show the new expiry.
+      queryClient.invalidateQueries({ queryKey: ["invitations"] });
     } catch (err) {
       notifications.show({
         message: err["response"]?.data?.message,
@@ -73,7 +77,11 @@ export default function InviteActionMenu({ invitationId }: Props) {
         arrowPosition="center"
       >
         <Menu.Target>
-          <ActionIcon variant="subtle" c="gray">
+          <ActionIcon
+            variant="subtle"
+            c="gray"
+            aria-label={t("Invitation actions")}
+          >
             <IconDots size={20} stroke={2} />
           </ActionIcon>
         </Menu.Target>

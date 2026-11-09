@@ -4,6 +4,7 @@ import GlobalAppShell from "@/components/layouts/global/global-app-shell.tsx";
 import { PosthogUser } from "@/ee/components/posthog-user.tsx";
 import { isCloud } from "@/lib/config.ts";
 import { SearchSpotlight } from "@/features/search/components/search-spotlight.tsx";
+import { FirstRunGate } from "@/features/first-run/first-run-gate.tsx";
 import React from "react";
 import { useGetSpaceBySlugQuery } from "@/features/space/queries/space-query.ts";
 
@@ -18,6 +19,7 @@ export default function Layout() {
       </GlobalAppShell>
       {isCloud() && <PosthogUser />}
       <SearchSpotlight spaceId={space?.id} />
+      <FirstRunGate />
     </UserProvider>
   );
 }

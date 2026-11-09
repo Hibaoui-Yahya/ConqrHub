@@ -17,7 +17,10 @@ import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { CursorPaginationResult } from '@docmost/db/pagination/cursor-pagination';
 import { QueueJob, QueueName } from '../../integrations/queue/constants';
 import { extractUserMentionIdsFromJson } from '../../common/helpers/prosemirror/utils';
-import { ICommentNotificationJob } from '../../integrations/queue/constants/queue.interface';
+import {
+  ICommentNotificationJob,
+  ICommentResolvedNotificationJob,
+} from '../../integrations/queue/constants/queue.interface';
 import { WsService } from '../../ws/ws.service';
 
 @Injectable()
@@ -217,6 +220,86 @@ export class CommentService {
     });
 
     return comment;
+  }
+
+  /**
+   * Resolve or re-open a thread. Only a top-level comment carries the
+   * resolved state (replies follow their thread). Returns the comment as
+   * the client shows it, with `resolvedBy`.
+   */
+  async resolve(
+    comment: Comment,
+    resolved: boolean,
+    authUser: User,
+  ): Promise<{ comment: Comment; changed: boolean }> {
+    if (comment.parentCommentId) {
+      throw new BadRequestException('Only a thread can be resolved');
+    }
+
+    const isResolved = comment.resolvedAt != null;
+    if (isResolved === resolved) {
+      // Nothing to change: answer with the current state, notify nobody.
+      return { comment, changed: false };
+    }
+
+    const now = new Date();
+    await this.commentRepo.updateComment(
+      {
+        resolvedAt: resolved ? now : null,
+        resolvedById: resolved ? authUser.id : null,
+        updatedAt: now,
+      },
+      comment.id,
+      comment.workspaceId,
+    );
+
+    // The inline highlight follows the thread. The client also flips it in
+    // its editor; doing it here keeps pages that nobody has open in step.
+    if (comment.type === 'inline') {
+      try {
+        await this.collaborationGateway.handleYjsEvent(
+          'resolveCommentMark',
+          `page.${comment.pageId}`,
+          { commentId: comment.id, resolved, user: authUser },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to update the comment mark of ${comment.id}: ${(error as Error)?.message}`,
+        );
+      }
+    }
+
+    const updated = await this.commentRepo.findById(
+      comment.id,
+      comment.workspaceId,
+      { includeCreator: true, includeResolvedBy: true },
+    );
+
+    if (resolved && comment.creatorId && comment.creatorId !== authUser.id) {
+      const job: ICommentResolvedNotificationJob = {
+        commentId: comment.id,
+        commentCreatorId: comment.creatorId,
+        pageId: comment.pageId,
+        spaceId: comment.spaceId,
+        workspaceId: comment.workspaceId,
+        actorId: authUser.id,
+      };
+      await this.notificationQueue
+        .add(QueueJob.COMMENT_RESOLVED_NOTIFICATION, job)
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to queue comment-resolved notification: ${err?.message}`,
+          ),
+        );
+    }
+
+    this.wsService.emitCommentEvent(comment.spaceId, comment.pageId, {
+      operation: 'commentResolved',
+      pageId: comment.pageId,
+      comment: updated,
+    });
+
+    return { comment: updated, changed: true };
   }
 
   private async queueCommentNotification(

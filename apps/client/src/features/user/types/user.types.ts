@@ -1,3 +1,4 @@
+import type { NotificationSoundPrefs } from "@/features/notification/notification-sounds";
 import { IWorkspace } from "@/features/workspace/types/workspace.types";
 import type {
   ConqrCustomTheme,
@@ -32,7 +33,25 @@ export interface IUser {
   notificationCommentResolved: boolean; // used for update
   theme?: ConqrThemeKey; // used for update
   themeCustom?: ConqrCustomTheme; // used for update
+  meetingDefaults?: IMeetingDefaults; // used for update
+  notificationSounds?: Partial<NotificationSoundPrefs>; // used for update
+  notificationPreference?: {
+    key: NotificationSettingKey;
+    channel: NotificationChannel;
+    enabled: boolean;
+  }; // used for update
+  department?: string | null;
   hasGeneratedPassword?: boolean;
+}
+
+/**
+ * Personal ConqrMeet defaults (Paramètres › Mon compte › Mes réunions).
+ * Stored on the account so they follow the person on every device.
+ */
+export interface IMeetingDefaults {
+  defaultMeetingType?: string | null;
+  defaultLanguage?: string | null;
+  autoProcess?: boolean;
 }
 
 export interface ICurrentUser {
@@ -46,15 +65,32 @@ export interface IUserSettings {
     pageEditMode: string;
     /* ConqrPlan-style theme, mirrored from the local `conqr-theme-pref` */
     theme?: ConqrThemePreference;
+    meetings?: IMeetingDefaults;
+    notificationSounds?: Partial<NotificationSoundPrefs>;
   };
-  notifications?: {
-    "page.updated"?: boolean;
-    "page.userMention"?: boolean;
-    "comment.userMention"?: boolean;
-    "comment.created"?: boolean;
-    "comment.resolved"?: boolean;
-  };
+  /** E-mail switches, by kind. Absent means on. */
+  notifications?: Partial<Record<NotificationSettingKey, boolean>>;
+  /** Bell (in-app) switches, by kind. Absent means on. */
+  inAppNotifications?: Partial<Record<NotificationSettingKey, boolean>>;
 }
+
+/** Mirrors NOTIFICATION_SETTING_KEYS on the server. */
+export type NotificationSettingKey =
+  | "page.updated"
+  | "page.userMention"
+  | "comment.userMention"
+  | "comment.created"
+  | "comment.resolved"
+  | "page.permissionGranted"
+  | "page.verification"
+  | "page.approval"
+  | "docHealth.dropped"
+  | "meeting.ready"
+  | "meeting.failed"
+  | "meeting.reviewNeeded"
+  | "meeting.published";
+
+export type NotificationChannel = "email" | "inApp";
 
 export enum PageEditMode {
   Read = "read",

@@ -13,6 +13,8 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 interface PageJobPayload {
   pageIds: string[];
   workspaceId: string;
+  /** Set on follow-up passes scheduled while attachment extraction was pending. */
+  attachmentFollowUp?: number;
 }
 
 interface WorkspaceJobPayload {
@@ -68,8 +70,9 @@ export class AiEmbeddingQueueProcessor
       case QueueJob.PAGE_CREATED:
       case QueueJob.PAGE_RESTORED:
       case QueueJob.GENERATE_PAGE_EMBEDDINGS: {
-        const { pageIds, workspaceId } = job.data as PageJobPayload;
-        await this.indexPages(pageIds, workspaceId);
+        const { pageIds, workspaceId, attachmentFollowUp } =
+          job.data as PageJobPayload;
+        await this.indexPages(pageIds, workspaceId, { attachmentFollowUp });
         break;
       }
 
@@ -202,10 +205,11 @@ export class AiEmbeddingQueueProcessor
   private async indexPages(
     pageIds: string[],
     workspaceId: string,
+    opts: { attachmentFollowUp?: number } = {},
   ): Promise<void> {
     for (const pageId of pageIds) {
       try {
-        const result = await this.indexer.indexPage(pageId, workspaceId);
+        const result = await this.indexer.indexPage(pageId, workspaceId, opts);
         if (result.status === 'indexed') {
           this.logger.debug(
             `Indexed page ${pageId}: ${result.chunksIndexed} chunk(s)`,

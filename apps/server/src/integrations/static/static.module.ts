@@ -4,6 +4,7 @@ import { join } from 'path';
 import * as fs from 'node:fs';
 import fastifyStatic from '@fastify/static';
 import { EnvironmentService } from '../environment/environment.service';
+import { isMeetingHubPublishingEnabled } from '../../ee/ai/meeting/meeting-access.util';
 
 @Module({})
 export class StaticModule implements OnModuleInit {
@@ -49,6 +50,18 @@ export class StaticModule implements OnModuleInit {
           : undefined,
         POSTHOG_HOST: this.environmentService.getPostHogHost(),
         POSTHOG_KEY: this.environmentService.getPostHogKey(),
+        // Suite applications reachable from this deployment (Paramètres ›
+        // Connexions, and the "Retour à ConqrMeet" button of the settings).
+        MEET_APP_URL: this.environmentService.getMeetAppUrl() || undefined,
+        PLANE_APP_URL: this.environmentService.getPlaneAppUrl() || undefined,
+        SERVICE_APP_URL:
+          this.environmentService.getServiceAppUrl() || undefined,
+        // Client identity on the sign-in pages (e.g. "ltc"); unset = ConqrAI.
+        CLIENT_BRAND: process.env.CLIENT_BRAND || undefined,
+        // Publishing meetings into Hub pages; anything but "enabled" = off.
+        MEETING_HUB_PUBLISHING: isMeetingHubPublishingEnabled()
+          ? 'enabled'
+          : undefined,
       };
 
       const windowScriptContent = `<script>window.CONFIG=${JSON.stringify(configString)};</script>`;

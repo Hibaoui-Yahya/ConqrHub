@@ -2,11 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { KyselyDB } from '@docmost/db/types/kysely.types';
 import { NotificationRepo } from '@docmost/db/repos/notification/notification.repo';
-import { InsertableNotification } from '@docmost/db/types/entity.types';
+import {
+  InsertableNotification,
+  Notification,
+} from '@docmost/db/types/entity.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { WsGateway } from '../../ws/ws.gateway';
 import { MailService } from '../../integrations/mail/mail.service';
-import { NotificationTab, NotificationType, NotificationTypeToSettingKey } from './notification.constants';
+import {
+  localize,
+  Localized,
+  mailLanguage,
+} from '@docmost/transactional/i18n';
+import {
+  isNotificationEnabled,
+  NotificationTab,
+  NotificationType,
+} from './notification.constants';
+
+/** The bell is off for this type but the e-mail is still wanted. */
+export type SuppressedNotification = { id: null; suppressed: true };
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 
 @Injectable()
@@ -21,16 +36,33 @@ export class NotificationService {
     @InjectKysely() private readonly db: KyselyDB,
   ) {}
 
-  async create(data: InsertableNotification) {
+  /**
+   * Record an in-app notification, unless the person turned that kind off.
+   *
+   * Returns null when nothing should reach the person at all (inactive user,
+   * or both channels off for this type), so callers skip the e-mail too.
+   * When only the bell is off, nothing is stored and a placeholder with a
+   * null id is returned: callers still queue the e-mail, which checks its
+   * own switch.
+   */
+  async create(
+    data: InsertableNotification,
+  ): Promise<Notification | SuppressedNotification | null> {
     const user = await this.db
       .selectFrom('users')
-      .select(['id'])
+      .select(['id', 'settings'])
       .where('id', '=', data.userId)
       .where('deletedAt', 'is', null)
       .where('deactivatedAt', 'is', null)
       .executeTakeFirst();
 
     if (!user) return null;
+
+    if (!isNotificationEnabled(user.settings, data.type, 'inApp')) {
+      return isNotificationEnabled(user.settings, data.type, 'email')
+        ? { id: null, suppressed: true }
+        : null;
+    }
 
     const notification = await this.notificationRepo.insert(data);
 
@@ -45,11 +77,13 @@ export class NotificationService {
     userId: string,
     pagination: PaginationOptions,
     type: NotificationTab = 'all',
+    unreadOnly = false,
   ) {
     const result = await this.notificationRepo.findByUserId(
       userId,
       pagination,
       type,
+      unreadOnly,
     );
 
     const pageIds = result.items
@@ -88,17 +122,22 @@ export class NotificationService {
     return this.notificationRepo.markAllAsRead(userId);
   }
 
+  /**
+   * Subject and template may be functions of the recipient's language
+   * (French for an `fr*` account locale, English otherwise), built once the
+   * recipient is known.
+   */
   async queueEmail(
     userId: string,
-    notificationId: string,
-    subject: string,
-    template: any,
+    notificationId: string | null,
+    subject: Localized<string>,
+    template: Localized<object>,
     type?: NotificationType,
   ) {
     try {
       const user = await this.db
         .selectFrom('users')
-        .select(['email', 'settings'])
+        .select(['email', 'settings', 'locale'])
         .where('id', '=', userId)
         .where('deletedAt', 'is', null)
         .where('deactivatedAt', 'is', null)
@@ -106,19 +145,14 @@ export class NotificationService {
 
       if (!user?.email) return;
 
-      if (type) {
-        const settingKey = NotificationTypeToSettingKey[type];
-        if (settingKey) {
-          const settings = user.settings as any;
-          if (settings?.notifications?.[settingKey] === false) return;
-        }
-      }
+      if (type && !isNotificationEnabled(user.settings, type, 'email')) return;
 
+      const lang = mailLanguage(user.locale);
       await this.mailService.sendToQueue({
         to: user.email,
-        subject,
-        template,
-        notificationId,
+        subject: localize(subject, lang),
+        template: localize(template, lang),
+        notificationId: notificationId ?? undefined,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';

@@ -102,7 +102,7 @@ export class PageNotificationService {
     const context = await this.getPageContext(actorId, pageId, spaceId, appUrl);
     if (!context) return;
 
-    const { actor, pageTitle, basePageUrl } = context;
+    const { actor, pageTitle, basePageUrl, spaceName } = context;
 
     for (const { userId, mentionId } of mentions) {
       const notification = await this.notificationService.create({
@@ -117,13 +117,21 @@ export class PageNotificationService {
       if (!notification) continue;
 
       const pageUrl = `${basePageUrl}`;
-      const subject = `${actor.name} mentioned you in ${pageTitle}`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        PageMentionEmail({ actorName: actor.name, pageTitle, pageUrl }),
+        (lang) =>
+          lang === 'fr'
+            ? `${actor.name} vous mentionne dans « ${pageTitle} »`
+            : `${actor.name} mentioned you in “${pageTitle}”`,
+        (lang) =>
+          PageMentionEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl,
+            spaceName,
+          }),
         NotificationType.PAGE_USER_MENTION,
       );
     }
@@ -145,7 +153,7 @@ export class PageNotificationService {
     const context = await this.getPageContext(actorId, pageId, spaceId, appUrl);
     if (!context) return;
 
-    const { actor, pageTitle, basePageUrl } = context;
+    const { actor, pageTitle, basePageUrl, spaceName } = context;
     const accessLabel = role === 'writer' ? 'edit' : 'view';
 
     for (const userId of usersWithSpaceAccess) {
@@ -160,18 +168,23 @@ export class PageNotificationService {
       });
       if (!notification) continue;
 
-      const subject = `${actor.name} gave you ${accessLabel} access to ${pageTitle}`;
-
       await this.notificationService.queueEmail(
         userId,
         notification.id,
-        subject,
-        PermissionGrantedEmail({
-          actorName: actor.name,
-          pageTitle,
-          pageUrl: basePageUrl,
-          accessLabel,
-        }),
+        (lang) =>
+          lang === 'fr'
+            ? `${actor.name} vous donne accès à « ${pageTitle} »`
+            : `${actor.name} gave you access to “${pageTitle}”`,
+        (lang) =>
+          PermissionGrantedEmail({
+            lang,
+            actorName: actor.name,
+            pageTitle,
+            pageUrl: basePageUrl,
+            accessLabel,
+            spaceName,
+          }),
+        NotificationType.PAGE_PERMISSION_GRANTED,
       );
     }
   }
@@ -241,17 +254,25 @@ export class PageNotificationService {
         await this.notificationService.queueEmail(
           userId,
           notification.id,
-          `${actor.name} updated ${pageTitle}`,
-          PageUpdateEmail({
-            userName: eligibleUsers.get(userId) ?? '',
-            actorName: actor.name,
-            pageTitle,
-            pageUrl: basePageUrl,
-            spaceName,
-          }),
+          (lang) =>
+            lang === 'fr'
+              ? `« ${pageTitle} » a été modifiée par ${actor.name}`
+              : `“${pageTitle}” was edited by ${actor.name}`,
+          (lang) =>
+            PageUpdateEmail({
+              lang,
+              userName: eligibleUsers.get(userId) ?? '',
+              actorName: actor.name,
+              pageTitle,
+              pageUrl: basePageUrl,
+              spaceName,
+            }),
           NotificationType.PAGE_UPDATED,
         );
-      } else {
+      } else if (notification.id) {
+        // The digest is built from stored notifications: with the bell off
+        // for page updates there is none, so the rate-limited e-mail is
+        // simply skipped.
         const isFirst = await this.rateLimiter.addToDigest(
           userId,
           notification.id,
@@ -338,6 +359,7 @@ export class PageNotificationService {
         'pages.slugId',
         'pages.spaceId',
         'spaces.slug as spaceSlug',
+        'spaces.name as spaceName',
       ])
       .where('pages.id', 'in', pageIds)
       .execute();
@@ -392,17 +414,27 @@ export class PageNotificationService {
       title: getPageTitle(p.title),
       url: `${appUrl}/s/${p.spaceSlug}/p/${p.slugId}`,
       updatedBy: [...(pageActors.get(p.id) ?? [])],
+      spaceName: p.spaceName ?? undefined,
     }));
 
     await this.notificationService.queueEmail(
       userId,
       notificationIds[0],
-      `Your digest: ${pageUpdates.length} page ${pageUpdates.length === 1 ? 'update' : 'updates'}`,
-      PageUpdateDigestEmail({
-        userName: user.name,
-        pageUpdates,
-        totalUpdates: pageUpdates.length,
-      }),
+      (lang) =>
+        lang === 'fr'
+          ? pageUpdates.length === 1
+            ? 'Une page que vous suivez a changé'
+            : `${pageUpdates.length} pages que vous suivez ont changé`
+          : pageUpdates.length === 1
+            ? 'A page you follow has changed'
+            : `${pageUpdates.length} pages you follow have changed`,
+      (lang) =>
+        PageUpdateDigestEmail({
+          lang,
+          userName: user.name,
+          pageUpdates,
+          totalUpdates: pageUpdates.length,
+        }),
       NotificationType.PAGE_UPDATED,
     );
   }

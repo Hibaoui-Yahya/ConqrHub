@@ -1,6 +1,7 @@
 import React from "react";
 import { Avatar } from "@mantine/core";
 import { getAvatarUrl } from "@/lib/config.ts";
+import { avatarThumbnailSize } from "./avatar-thumbnail-size";
 import { AvatarIconType } from "@/features/attachments/types/attachment.types.ts";
 
 interface CustomAvatarProps {
@@ -20,7 +21,15 @@ export const CustomAvatar = React.forwardRef<
   HTMLInputElement,
   CustomAvatarProps
 >(({ avatarUrl, name, type, ...props }: CustomAvatarProps, ref) => {
-  const avatarLink = getAvatarUrl(avatarUrl, type);
+  const link = getAvatarUrl(avatarUrl, type);
+  // Uploaded user photos come back as small cached thumbnails (LTC-06);
+  // external URLs and other image kinds are left as they are.
+  const avatarLink =
+    link &&
+    (type ?? AvatarIconType.AVATAR) === AvatarIconType.AVATAR &&
+    !avatarUrl?.startsWith("http")
+      ? `${link}?size=${avatarThumbnailSize(props.size)}`
+      : link;
 
   return (
     <Avatar

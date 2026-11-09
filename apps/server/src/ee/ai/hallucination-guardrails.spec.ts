@@ -239,7 +239,13 @@ describe('hallucination guardrails | AiAnswersController.answers', () => {
   function setup(ctx: RetrievedContext) {
     const ai = makeAiProvider();
     const retrieval = makeRetrieval(ctx);
-    const controller = new AiAnswersController(retrieval as any, ai as any);
+    const controller = new AiAnswersController(
+      retrieval as any,
+      ai as any,
+      makeSpaceAbility(true) as any,
+      { getUserSpaceIds: jest.fn().mockResolvedValue(['sp-1']) } as any,
+      { enrichPageSources: jest.fn().mockImplementation(async (s) => s) } as any,
+    );
     return { ai, controller };
   }
 
@@ -370,8 +376,8 @@ describe('hallucination guardrails | SttService correction prompt', () => {
     // Mock the Mistral transcription endpoint so the correction step runs.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ text: 'raw transcript text' }),
-      text: jest.fn().mockResolvedValue(''),
+      // The service reads the body as text, then parses it.
+      text: jest.fn().mockResolvedValue(JSON.stringify({ text: 'raw transcript text' })),
     }) as any;
   });
 
@@ -384,6 +390,7 @@ describe('hallucination guardrails | SttService correction prompt', () => {
     const env = {
       getMistralApiKey: jest.fn().mockReturnValue('key-xyz'),
       getAiSttModel: jest.fn().mockReturnValue('voxtral-1'),
+      getFfmpegPath: jest.fn().mockReturnValue('/nonexistent/ffmpeg'),
     };
     const pageRepo = { findById: jest.fn().mockResolvedValue(undefined) };
     const svc = new SttService(env as any, ai as any, pageRepo as any);

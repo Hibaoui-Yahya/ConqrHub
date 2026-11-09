@@ -1,4 +1,4 @@
-import { Center, Divider, Loader, Stack, Text } from "@mantine/core";
+import { Button, Center, Divider, Loader, Stack, Text } from "@mantine/core";
 import { IconBellOff } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef } from "react";
@@ -16,12 +16,15 @@ type NotificationListProps = {
   tab: NotificationTab;
   filter: NotificationFilter;
   onNavigate: () => void;
+  /** Show a "Load more" button under the list (full page). */
+  showLoadMore?: boolean;
 };
 
 export function NotificationList({
   tab,
   filter,
   onNavigate,
+  showLoadMore = false,
 }: NotificationListProps) {
   const { t } = useTranslation();
   const {
@@ -30,7 +33,7 @@ export function NotificationList({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useNotificationsQuery(tab as string);
+  } = useNotificationsQuery(tab as string, filter === "unread");
 
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -114,6 +117,14 @@ export function NotificationList({
       {isFetchingNextPage && (
         <Center py="xs">
           <Loader size="xs" />
+        </Center>
+      )}
+
+      {showLoadMore && hasNextPage && !isFetchingNextPage && (
+        <Center py="sm">
+          <Button variant="subtle" size="xs" onClick={() => fetchNextPage()}>
+            {t("Load more")}
+          </Button>
         </Center>
       )}
     </Stack>
