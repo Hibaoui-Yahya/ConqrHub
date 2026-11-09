@@ -256,7 +256,7 @@ export function AuthApps() {
       ? [
           {
             name: "ConqrMeet",
-            desc: t("Interviews and meetings"),
+            desc: t("Meetings and transcripts"),
             mark: "/branding/conqrmeet-mark.svg",
           },
         ]

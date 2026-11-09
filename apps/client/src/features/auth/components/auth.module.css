@@ -58,16 +58,22 @@
     margin-top: 2px;
 }
 
+/* The brand panel is a flex column that stretches its children: without
+   align-self the wordmark is stretched to the panel's width. */
 .neutralLogo {
     height: 30px;
     width: auto;
     display: block;
+    align-self: flex-start;
+    object-fit: contain;
 }
 
 .neutralLogoCompact {
     height: 24px;
     width: auto;
     display: block;
+    align-self: flex-start;
+    object-fit: contain;
 }
 
 .message {
