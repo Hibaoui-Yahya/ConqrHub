@@ -11,6 +11,16 @@ import { Kysely, sql } from 'kysely';
  * retrievable when cosine similarity alone ranks them poorly.
  */
 export async function up(db: Kysely<any>): Promise<void> {
+  // Adding a STORED generated column rewrites the table, which rebuilds every
+  // index on it, including the pgvector HNSW index. pgvector builds HNSW in
+  // parallel, in a dynamic shared memory segment the size of
+  // maintenance_work_mem (64 MB). The Postgres containers on Railway do not
+  // have that much shared memory, so the rewrite failed there with
+  // "could not resize shared memory segment … No space left on device" (seen
+  // on Staging, 2026-11-09). A serial rebuild needs no shared memory. SET LOCAL
+  // only lasts until the end of the migration transaction.
+  await sql`SET LOCAL max_parallel_maintenance_workers = 0`.execute(db);
+
   await sql`
     ALTER TABLE ai_embeddings
     ADD COLUMN IF NOT EXISTS tsv tsvector
@@ -22,6 +32,8 @@ export async function up(db: Kysely<any>): Promise<void> {
     ON ai_embeddings
     USING gin (tsv)
   `.execute(db);
+
+  await sql`SET LOCAL max_parallel_maintenance_workers TO DEFAULT`.execute(db);
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
