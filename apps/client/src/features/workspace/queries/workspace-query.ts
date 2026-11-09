@@ -175,6 +175,8 @@ export function useCreateInvitationMutation() {
 }
 
 export function useResendInvitationMutation() {
+  const queryClient = useQueryClient();
+
   return useMutation<
     void,
     Error,
@@ -185,6 +187,10 @@ export function useResendInvitationMutation() {
     mutationFn: (data) => resendInvitation(data),
     onSuccess: (data, variables) => {
       notifications.show({ message: "Invitation resent" });
+      // The resend gave the link a fresh week: show the new expiry.
+      queryClient.invalidateQueries({
+        queryKey: ["invitations"],
+      });
     },
     onError: (error) => {
       const errorMessage = error["response"]?.data?.message;

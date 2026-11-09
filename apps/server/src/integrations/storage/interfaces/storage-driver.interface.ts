@@ -1,5 +1,15 @@
 import { Readable } from 'stream';
 
+/**
+ * Response headers a signed URL forces on the object it serves, whatever
+ * Content-Type the object was stored with (user uploads must never be served
+ * as active content).
+ */
+export interface SignedUrlResponseOverrides {
+  contentType?: string;
+  contentDisposition?: string;
+}
+
 export interface StorageDriver {
   upload(filePath: string, file: Buffer | Readable): Promise<void>;
 
@@ -20,7 +30,11 @@ export interface StorageDriver {
 
   getUrl(filePath: string): string;
 
-  getSignedUrl(filePath: string, expireIn: number): Promise<string>;
+  getSignedUrl(
+    filePath: string,
+    expireIn: number,
+    response?: SignedUrlResponseOverrides,
+  ): Promise<string>;
 
   delete(filePath: string): Promise<void>;
 

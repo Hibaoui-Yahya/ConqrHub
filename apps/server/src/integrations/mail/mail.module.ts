@@ -5,6 +5,7 @@ import {
 } from './providers/mail.provider';
 import { MailModuleOptions } from './interfaces';
 import { MailService } from './mail.service';
+import { AccountEmailService } from './account-email.service';
 import { EmailProcessor } from './processors/email.processor';
 
 @Global()
@@ -16,8 +17,13 @@ export class MailModule {
     return {
       module: MailModule,
       imports: options.imports || [],
-      providers: [mailDriverConfigProvider, mailDriverProvider, MailService],
-      exports: [MailService],
+      providers: [
+        mailDriverConfigProvider,
+        mailDriverProvider,
+        MailService,
+        AccountEmailService,
+      ],
+      exports: [MailService, AccountEmailService],
     };
   }
 }

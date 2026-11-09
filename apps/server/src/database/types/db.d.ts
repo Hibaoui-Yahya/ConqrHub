@@ -118,6 +118,27 @@ export interface Attachments {
   workspaceId: string;
 }
 
+export interface AttachmentTextExtractions {
+  attachmentId: string;
+  attempts: Generated<number>;
+  charCount: Generated<number>;
+  claimToken: string | null;
+  createdAt: Generated<Timestamp>;
+  detail: string | null;
+  extractorVersion: number;
+  lastError: string | null;
+  method: string | null;
+  ocrPages: Generated<number>;
+  pageCount: number | null;
+  sourceSha256: string | null;
+  sourceSize: Int8 | null;
+  sourceUpdatedAt: Timestamp | null;
+  status: string;
+  textSha256: string | null;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
 export interface Audit {
   actorId: string | null;
   actorType: Generated<string>;
@@ -504,6 +525,18 @@ export interface MeetingDocuments {
   updatedAt: Generated<Timestamp>;
 }
 
+export interface MeetingInsights {
+  content: string;
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  id: Generated<string>;
+  kind: string;
+  meetingId: string;
+  question: string | null;
+  transcriptVersion: number | null;
+  workspaceId: string;
+}
+
 export interface MeetingProcessingEvents {
   actorId: string | null;
   createdAt: Generated<Timestamp>;
@@ -536,6 +569,8 @@ export interface Meetings {
   meetingTypeConfidence: number | null;
   meetingTypeSource: Generated<string>;
   publishedAt: Timestamp | null;
+  processingRunAt: Timestamp | null;
+  processingRunId: string | null;
   retentionUntil: Timestamp | null;
   settings: Generated<Json | null>;
   spaceId: string | null;
@@ -557,6 +592,28 @@ export interface MeetingSegments {
   source: MeetingSource;
   startMs: number;
   text: string;
+}
+
+export interface MeetingShareAudit {
+  action: string;
+  actorId: string | null;
+  createdAt: Generated<Timestamp>;
+  groupId: string | null;
+  id: Generated<string>;
+  meetingId: string;
+  userId: string | null;
+  workspaceId: string;
+}
+
+export interface MeetingShares {
+  createdAt: Generated<Timestamp>;
+  createdBy: string | null;
+  groupId: string | null;
+  id: Generated<string>;
+  meetingId: string;
+  role: Generated<string>;
+  userId: string | null;
+  workspaceId: string;
 }
 
 export interface MeetingTemplates {
@@ -883,6 +940,7 @@ export interface Watchers {
 export interface WorkspaceInvitations {
   createdAt: Generated<Timestamp>;
   email: string | null;
+  expiresAt: Generated<Timestamp | null>;
   groupIds: string[] | null;
   id: Generated<string>;
   invitedById: string | null;
@@ -947,12 +1005,44 @@ export interface SuiteDelegationAudit {
   workspaceId: string | null;
 }
 
+export interface SuiteSessionEvents {
+  clientId: string | null;
+  detail: Json | null;
+  event: string;
+  familyId: string | null;
+  hubSessionId: string | null;
+  id: Generated<Int8>;
+  occurredAt: Generated<Timestamp>;
+  reason: string | null;
+  userId: string | null;
+  workspaceId: string | null;
+}
+
+export interface SuiteTokenFamilies {
+  clientId: string;
+  createdAt: Generated<Timestamp>;
+  currentJti: string;
+  expiresAt: Timestamp;
+  hubSessionId: string | null;
+  id: Generated<string>;
+  previousJti: string | null;
+  reuseCount: Generated<number>;
+  revokedAt: Timestamp | null;
+  revokedReason: string | null;
+  rotatedAt: Timestamp | null;
+  rotationCount: Generated<number>;
+  state: Generated<string>;
+  userId: string;
+  workspaceId: string;
+}
+
 export interface DB {
   aiChatMessages: AiChatMessages;
   aiChats: AiChats;
   aiEmbeddings: AiEmbeddings;
   apiKeys: ApiKeys;
   attachments: Attachments;
+  attachmentTextExtractions: AttachmentTextExtractions;
   audit: Audit;
   authAccounts: AuthAccounts;
   authProviders: AuthProviders;
@@ -977,9 +1067,12 @@ export interface DB {
   mcpOauthRefreshTokens: McpOauthRefreshTokens;
   meetingActionProposals: MeetingActionProposals;
   meetingDocuments: MeetingDocuments;
+  meetingInsights: MeetingInsights;
   meetingProcessingEvents: MeetingProcessingEvents;
   meetings: Meetings;
   meetingSegments: MeetingSegments;
+  meetingShareAudit: MeetingShareAudit;
+  meetingShares: MeetingShares;
   meetingTemplates: MeetingTemplates;
   meetingTranscripts: MeetingTranscripts;
   notifications: Notifications;
@@ -996,6 +1089,8 @@ export interface DB {
   spaceMembers: SpaceMembers;
   spaces: Spaces;
   suiteDelegationAudit: SuiteDelegationAudit;
+  suiteSessionEvents: SuiteSessionEvents;
+  suiteTokenFamilies: SuiteTokenFamilies;
   suiteOrgIdentity: SuiteOrgIdentity;
   templates: Templates;
   userMfa: UserMfa;

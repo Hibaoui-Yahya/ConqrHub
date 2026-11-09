@@ -19,6 +19,7 @@ import {
 } from '../dto/jwt-payload';
 import { User } from '@docmost/db/types/entity.types';
 import { isUserDisabled } from '../../../common/helpers';
+import { hubSessionEpoch } from '../idp/suite-token-policy';
 
 @Injectable()
 export class TokenService {
@@ -38,6 +39,10 @@ export class TokenService {
       workspaceId: user.workspaceId,
       type: JwtType.ACCESS,
       sessionId,
+      // Epoch of Hub sessions, held outside the database (see
+      // suite-token-policy.ts): bumping it after a restore voids every
+      // session cookie minted before.
+      ep: hubSessionEpoch(),
     };
     return this.jwtService.sign(payload);
   }
@@ -174,9 +179,14 @@ export class TokenService {
     return this.jwtService.sign(payload, { expiresIn: '1h' });
   }
 
-  async verifyJwt(token: string, tokenType: string) {
+  async verifyJwt(
+    token: string,
+    tokenType: string,
+    opts: { ignoreExpiration?: boolean } = {},
+  ) {
     const payload = await this.jwtService.verifyAsync(token, {
       secret: this.environmentService.getAppSecret(),
+      ignoreExpiration: opts.ignoreExpiration ?? false,
     });
 
     if (payload.type !== tokenType) {

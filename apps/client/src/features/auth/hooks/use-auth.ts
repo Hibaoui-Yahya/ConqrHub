@@ -28,9 +28,20 @@ import { RESET } from "jotai/utils";
 import { useTranslation } from "react-i18next";
 import { isCloud } from "@/lib/config.ts";
 import { exchangeTokenRedirectUrl, getHostnameUrl } from "@/ee/utils.ts";
+import { announceLoggedOut } from "@/features/auth/lib/auth-broadcast.ts";
 
 export default function useAuth() {
   const { t } = useTranslation();
+  // Server errors arrive in English; show them in the interface language.
+  const serverError = (err: any): string => {
+    const raw = err?.response?.data?.message;
+    const msg = Array.isArray(raw) ? raw[0] : raw;
+    return t(
+      typeof msg === "string" && msg
+        ? msg
+        : "An error occurred. Please try again.",
+    );
+  };
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const [, setCurrentUser] = useAtom(currentUserAtom);
@@ -63,7 +74,7 @@ export default function useAuth() {
       }
 
       notifications.show({
-        message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -89,7 +100,7 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -128,7 +139,7 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -157,17 +168,31 @@ export default function useAuth() {
     } catch (err) {
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
   };
 
-  const handleLogout = async () => {
+  // Sign-out is only reported once the server has ended the session (which
+  // also ends this browser's ConqrMeet session). If it could not, the user
+  // stays where they are and is told so — never a false "signed out".
+  const signOut = async (opts: { allDevices?: boolean }) => {
+    try {
+      await logout(opts);
+    } catch (err) {
+      notifications.show({
+        message: t("Could not sign you out. Please try again."),
+        color: "red",
+      });
+      return;
+    }
     setCurrentUser(RESET);
-    await logout();
+    announceLoggedOut();
     window.location.replace(APP_ROUTE.AUTH.LOGIN);
   };
+  const handleLogout = () => signOut({});
+  const handleLogoutAllDevices = () => signOut({ allDevices: true });
 
   const handleForgotPassword = async (data: IForgotPassword) => {
     setIsLoading(true);
@@ -181,7 +206,7 @@ export default function useAuth() {
       console.log(err);
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
 
@@ -199,7 +224,7 @@ export default function useAuth() {
       console.log(err);
       setIsLoading(false);
       notifications.show({
-        message: err.response?.data.message,
+        message: serverError(err),
         color: "red",
       });
     }
@@ -213,6 +238,7 @@ export default function useAuth() {
     passwordReset: handlePasswordReset,
     verifyUserToken: handleVerifyUserToken,
     logout: handleLogout,
+    logoutAllDevices: handleLogoutAllDevices,
     isLoading,
   };
 }

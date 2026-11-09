@@ -43,6 +43,29 @@ export function isCloud(): boolean {
   return castToBoolean(getConfigValue("CLOUD"));
 }
 
+/** Publishing meetings into Hub pages (MEETING_HUB_PUBLISHING=enabled).
+ *  Off unless the deployment turns it on, like the server. */
+export function isMeetingHubPublishingEnabled(): boolean {
+  return getConfigValue("MEETING_HUB_PUBLISHING") === "enabled";
+}
+
+/** Public URLs of the other suite applications deployed next to this Hub. */
+export function getSuiteAppUrls(): {
+  meet?: string;
+  plane?: string;
+  service?: string;
+} {
+  const read = (key: string) => {
+    const value = getConfigValue(key);
+    return value && /^https?:\/\//.test(value) ? value : undefined;
+  };
+  return {
+    meet: read("MEET_APP_URL"),
+    plane: read("PLANE_APP_URL"),
+    service: read("SERVICE_APP_URL"),
+  };
+}
+
 export function getAvatarUrl(
   avatarUrl: string,
   type: AvatarIconType = AvatarIconType.AVATAR,
@@ -100,7 +123,10 @@ export function getPostHogKey() {
   return getConfigValue("POSTHOG_KEY");
 }
 
-function getConfigValue(key: string, defaultValue: string = undefined): string {
+export function getConfigValue(
+  key: string,
+  defaultValue: string = undefined,
+): string {
   const rawValue = import.meta.env.DEV
     ? process?.env?.[key]
     : window?.CONFIG?.[key];

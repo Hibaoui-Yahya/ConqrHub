@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   ActionIcon,
+  Anchor,
+  Divider,
   Group,
   Indicator,
   Menu,
@@ -18,6 +20,7 @@ import {
   IconFilter,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { NotificationList } from "./notification-list";
 import { SuiteNotificationList } from "@/features/integration/components/suite-notification-list";
 import {
@@ -60,6 +63,11 @@ export function NotificationPopover() {
             variant="subtle"
             color="dark"
             size="sm"
+            aria-label={
+              unreadCount
+                ? t("Notifications ({{count}} unread)", { count: unreadCount })
+                : t("Notifications")
+            }
             onClick={() => setOpened((o) => !o)}
           >
             <Indicator
@@ -86,7 +94,12 @@ export function NotificationPopover() {
             <Menu position="bottom-end" withArrow withinPortal={false}>
               <Menu.Target>
                 <Tooltip label={t("Filter")} withArrow>
-                  <ActionIcon variant="subtle" color="dark" size="sm">
+                  <ActionIcon
+                    variant="subtle"
+                    color="dark"
+                    size="sm"
+                    aria-label={t("Filter")}
+                  >
                     <IconFilter size={16} />
                   </ActionIcon>
                 </Tooltip>
@@ -115,7 +128,12 @@ export function NotificationPopover() {
             <Menu position="bottom-end" withArrow withinPortal={false}>
               <Menu.Target>
                 <Tooltip label={t("More options")} withArrow>
-                  <ActionIcon variant="subtle" color="dark" size="sm">
+                  <ActionIcon
+                    variant="subtle"
+                    color="dark"
+                    size="sm"
+                    aria-label={t("More options")}
+                  >
                     <IconDots size={16} />
                   </ActionIcon>
                 </Tooltip>
@@ -163,6 +181,23 @@ export function NotificationPopover() {
             />
           )}
         </ScrollArea.Autosize>
+
+        <Divider />
+        <Group justify="center" py="xs">
+          <Anchor
+            component={Link}
+            to={
+              tab === "direct"
+                ? "/notifications"
+                : `/notifications?tab=${tab}`
+            }
+            size="sm"
+            fw={600}
+            onClick={() => setOpened(false)}
+          >
+            {t("See all notifications")}
+          </Anchor>
+        </Group>
       </Popover.Dropdown>
     </Popover>
   );

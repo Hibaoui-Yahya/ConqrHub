@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 100" role="img" aria-labelledby="title"><title>ConqrHub</title><image href="conqrhub-mark.svg" width="100" height="100"/><text x="112" y="66" font-family="Inter,Arial,sans-serif" font-size="50" font-weight="700" letter-spacing="-2" fill="#17191F">Conqr<tspan fill="#3584CD">Hub</tspan></text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 256" role="img" aria-labelledby="title">
+  <title id="title">ConqrHub</title>
+  <rect width="256" height="256" rx="56" fill="#0A0A0A"/>
+  <path fill="#FFFFFF" d="M 46.4 41.6 H 99.2 V 214.4 H 46.4Z M 156.8 41.6 H 209.6 V 214.4 H 156.8Z"/>
+  <path fill="#00C2FF" d="M 99.2 101.6 H 156.8 V 154.4 H 99.2Z"/>
+  <text x="296" y="178" font-family="Montserrat, 'Arial Black', sans-serif" font-size="132" font-weight="900" letter-spacing="-4" fill="#1D1F20">Conqr<tspan fill="#00C2FF">Hub</tspan></text>
+</svg>

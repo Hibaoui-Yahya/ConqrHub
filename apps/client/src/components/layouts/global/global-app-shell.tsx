@@ -102,7 +102,7 @@ export default function GlobalAppShell({
 
   return (
     <AppShell
-      header={{ height: 40 }}
+      header={{ height: 52 }}
       navbar={{
         width: isSpaceRoute ? sidebarWidth : 260,
         breakpoint: "sm",
@@ -120,7 +120,7 @@ export default function GlobalAppShell({
       }
       padding={0}
     >
-      <AppShell.Header px="md" className={classes.header} withBorder={false}>
+      <AppShell.Header className={classes.header} withBorder={false}>
         <AppHeader />
       </AppShell.Header>
       <AppShell.Navbar

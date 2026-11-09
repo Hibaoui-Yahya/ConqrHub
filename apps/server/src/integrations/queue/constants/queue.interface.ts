@@ -95,6 +95,8 @@ export interface IPageVerifiedNotificationJob {
   workspaceId: string;
   actorId: string;
   verifierIds: string[];
+  /** Set when a QMS approval request was approved: who asked for it. */
+  approvedRequesterId?: string;
 }
 
 export interface IApprovalRequestedNotificationJob {

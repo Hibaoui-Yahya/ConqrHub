@@ -16,8 +16,13 @@ export async function login(data: ILogin): Promise<ILoginResponse> {
   return response.data;
 }
 
-export async function logout(): Promise<void> {
-  await api.post<void>("/auth/logout");
+export async function logout(
+  opts: { allDevices?: boolean } = {},
+): Promise<void> {
+  await api.post<void>(
+    "/auth/logout",
+    opts.allDevices ? { allDevices: true } : {},
+  );
 }
 
 export async function changePassword(

@@ -60,6 +60,7 @@ function WatchButton({ spaceId, watchedIds, size = 16 }: { spaceId: string; watc
         color={isWatching ? "blue" : "gray"}
         onClick={handleToggle}
         loading={isPending}
+        aria-label={isWatching ? t("Stop watching space") : t("Watch space")}
       >
         {isWatching ? (
           <IconEyeOff size={size} stroke={2} />
@@ -173,7 +174,11 @@ export default function AllSpacesList({
                       <WatchButton spaceId={space.id} watchedIds={watchedIds} size={16} />
                       <Menu position="bottom-end">
                         <Menu.Target>
-                          <ActionIcon variant="subtle" color="gray">
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            aria-label={t("Space actions")}
+                          >
                             <IconDots size={16} />
                           </ActionIcon>
                         </Menu.Target>

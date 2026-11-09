@@ -25,6 +25,7 @@ import { ListChatsDto } from './dto/list-chats.dto';
 import { ChatIdDto } from './dto/chat-id.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { SearchChatsDto } from './dto/search-chats.dto';
+import { MessageFeedbackDto } from './dto/message-feedback.dto';
 import { StorageService } from '../../../integrations/storage/storage.service';
 import { AttachmentRepo } from '@docmost/db/repos/attachment/attachment.repo';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
@@ -92,6 +93,18 @@ export class AiChatController {
   @Post('search')
   async search(@Body() dto: SearchChatsDto, @AuthUser() user: User) {
     return this.chatService.search(dto, user);
+  }
+
+  /** Thumbs up/down on an assistant message, stored in its metadata.feedback. */
+  @HttpCode(HttpStatus.OK)
+  @Post('feedback')
+  async feedback(@Body() dto: MessageFeedbackDto, @AuthUser() user: User) {
+    return this.chatService.setMessageFeedback(
+      dto.messageId,
+      user,
+      dto.rating,
+      dto.comment,
+    );
   }
 
   @HttpCode(HttpStatus.OK)

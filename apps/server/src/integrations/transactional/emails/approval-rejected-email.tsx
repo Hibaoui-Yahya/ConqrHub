@@ -1,9 +1,15 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import {
+  Actions,
+  B,
+  MailBody,
+  MailLanguage,
+  P,
+  Quote,
+} from '../partials/partials';
 
 interface Props {
+  lang: MailLanguage;
   actorName: string;
   pageTitle: string;
   spaceName: string;
@@ -12,28 +18,59 @@ interface Props {
 }
 
 export const ApprovalRejectedEmail = ({
+  lang,
   actorName,
   pageTitle,
   spaceName,
   pageUrl,
   comment,
 }: Props) => {
+  if (lang === 'fr') {
+    return (
+      <MailBody
+        lang={lang}
+        product="hub"
+        icon="circle-x-danger"
+        preview={
+          comment
+            ? `${actorName} : « ${comment} »`
+            : `${actorName} demande des modifications.`
+        }
+        heading="Des modifications sont demandées"
+        reason="Vous recevez cet e-mail parce que vous avez soumis cette page à approbation."
+      >
+        <P>
+          <B>{actorName}</B> n'a pas approuvé la page <B>« {pageTitle} »</B>
+          {spaceName ? ` (espace ${spaceName})` : ''}
+          {comment ? ' et a laissé ce commentaire :' : '.'}
+        </P>
+        {comment && <Quote author={actorName}>{comment}</Quote>}
+        <P>Modifiez la page, puis soumettez-la de nouveau.</P>
+        <Actions href={pageUrl} label="Modifier la page" />
+      </MailBody>
+    );
+  }
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          <strong>{actorName}</strong> returned{' '}
-          <strong>{pageTitle}</strong> in the{' '}
-          <strong>{spaceName}</strong> space for revision.
-        </Text>
-        {comment && (
-          <Text style={{ ...paragraph, fontStyle: 'italic' }}>
-            &ldquo;{comment}&rdquo;
-          </Text>
-        )}
-      </Section>
-      <EmailButton href={pageUrl}>View page</EmailButton>
+    <MailBody
+      lang={lang}
+      product="hub"
+      icon="circle-x-danger"
+      preview={
+        comment
+          ? `${actorName}: “${comment}”`
+          : `${actorName} is asking for changes.`
+      }
+      heading="Changes are requested"
+      reason="You are receiving this e-mail because you submitted this page for approval."
+    >
+      <P>
+        <B>{actorName}</B> did not approve the page <B>“{pageTitle}”</B>
+        {spaceName ? ` (${spaceName} space)` : ''}
+        {comment ? ' and left this comment:' : '.'}
+      </P>
+      {comment && <Quote author={actorName}>{comment}</Quote>}
+      <P>Edit the page, then submit it again.</P>
+      <Actions href={pageUrl} label="Edit the page" />
     </MailBody>
   );
 };

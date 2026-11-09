@@ -24,11 +24,20 @@ import {
   useSearchWorkItems,
 } from "@/features/integration/queries/integration-query";
 import useUserRole from "@/hooks/use-user-role";
+import { useTranslation } from "react-i18next";
 
 /**
  * Link an existing Plane work item to the current Hub object, or create a new
  * one from it (blueprint §5.1A/C). Opened from the Knowledge panel.
  */
+const PRIORITIES = [
+  { value: "urgent", label: "Urgent" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+  { value: "none", label: "None" },
+];
+
 export function LinkOrCreateWorkItem({
   sourceUrn,
   planeProjectId,
@@ -43,6 +52,7 @@ export function LinkOrCreateWorkItem({
   /** When set (e.g. from an editor selection), prefill + default to "create". */
   initialTitle?: string;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAdmin } = useUserRole();
   const [search, setSearch] = useState("");
@@ -68,11 +78,11 @@ export function LinkOrCreateWorkItem({
       { sourceUrn, targetUrn, relationType: "specified_by" },
       {
         onSuccess: () => {
-          notifications.show({ message: "Linked work item" });
+          notifications.show({ message: t("Linked work item") });
           onClose();
         },
         onError: () =>
-          notifications.show({ color: "red", message: "Failed to link" }),
+          notifications.show({ color: "red", message: t("Failed to link") }),
       },
     );
   };
@@ -87,27 +97,26 @@ export function LinkOrCreateWorkItem({
             color: res.status === "created" ? "green" : "yellow",
             message:
               res.status === "created"
-                ? "Work item created and linked"
-                : res.warning ?? "Created; link failed",
+                ? t("Work item created and linked")
+                : res.warning ?? t("Created; link failed"),
           });
           setTitle("");
           onClose();
         },
         onError: () =>
-          notifications.show({ color: "red", message: "Failed to create" }),
+          notifications.show({ color: "red", message: t("Failed to create") }),
       },
     );
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Link or create work item" centered>
+    <Modal opened={opened} onClose={onClose} title={t("Link or create work item")} centered>
       {noProject && (
         <Alert color="yellow" variant="light" mb="sm" radius="sm">
           <Stack gap="xs" align="flex-start">
             <Text size="sm">
-              This space isn't mapped to a Plane project yet, so work items
-              can't be resolved.
-              {!isAdmin && " Ask an admin to set a project mapping."}
+              {t("This space isn't mapped to a Plane project yet, so work items can't be resolved.")}
+              {!isAdmin && ` ${t("Ask an admin to set a project mapping.")}`}
             </Text>
             {isAdmin && (
               <Button
@@ -120,7 +129,7 @@ export function LinkOrCreateWorkItem({
                   navigate("/settings/integrations");
                 }}
               >
-                Set up mapping
+                {t("Set up mapping")}
               </Button>
             )}
           </Stack>
@@ -129,16 +138,16 @@ export function LinkOrCreateWorkItem({
       <Tabs defaultValue={initialTitle ? "create" : "link"}>
         <Tabs.List>
           <Tabs.Tab value="link" leftSection={<IconSearch size={14} />}>
-            Link existing
+            {t("Link existing")}
           </Tabs.Tab>
           <Tabs.Tab value="create" leftSection={<IconPlus size={14} />}>
-            Create new
+            {t("Create new")}
           </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="link" pt="sm">
           <TextInput
-            placeholder="Search work items…"
+            placeholder={t("Search work items…")}
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
             leftSection={<IconSearch size={16} />}
@@ -148,7 +157,7 @@ export function LinkOrCreateWorkItem({
             <Stack gap={4}>
               {isFetching && (
                 <Text size="sm" c="var(--txt-tertiary)" p="xs">
-                  Searching…
+                  {t("Searching…")}
                 </Text>
               )}
               {searchData?.items.map((wi) => (
@@ -178,7 +187,7 @@ export function LinkOrCreateWorkItem({
                 searchData.items.length === 0 &&
                 !noProject && (
                   <Text size="sm" c="var(--txt-tertiary)" p="xs">
-                    No matching work items.
+                    {t("No matching work items.")}
                   </Text>
                 )}
             </Stack>
@@ -188,16 +197,16 @@ export function LinkOrCreateWorkItem({
         <Tabs.Panel value="create" pt="sm">
           <Stack gap="sm">
             <TextInput
-              label="Title"
-              placeholder="Work item title"
+              label={t("Title")}
+              placeholder={t("Work item title")}
               value={title}
               onChange={(e) => setTitle(e.currentTarget.value)}
               required
             />
             <Select
-              label="Priority"
-              placeholder="None"
-              data={["urgent", "high", "medium", "low", "none"]}
+              label={t("Priority")}
+              placeholder={t("None")}
+              data={PRIORITIES.map((p) => ({ value: p.value, label: t(p.label) }))}
               value={priority}
               onChange={setPriority}
               clearable
@@ -208,7 +217,7 @@ export function LinkOrCreateWorkItem({
                 loading={createMutation.isPending}
                 disabled={noProject || !title.trim()}
               >
-                Create &amp; link
+                {t("Create & link")}
               </Button>
             </Group>
           </Stack>

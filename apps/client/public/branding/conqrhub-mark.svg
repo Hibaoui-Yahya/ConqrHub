@@ -1,10 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title">
-  <title>ConqrHub mark</title>
-  <g fill="none" stroke="#3584CD" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M72 18A38 38 0 1 0 72 82"/>
-    <path d="M50 34V48M50 48L35 64M50 48L65 64" stroke-width="6"/>
-    <circle cx="50" cy="30" r="7"/>
-    <circle cx="32" cy="68" r="7"/>
-    <circle cx="68" cy="68" r="7"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">ConqrHub</title>
+  <rect width="256" height="256" rx="56" fill="#0A0A0A"/>
+  <path fill="#FFFFFF" d="M36 36 H120 V76 A44 44 0 0 0 76 120 H36 Z M36 136 H76 A44 44 0 0 0 120 180 V220 H36 Z M136 36 H220 V120 H180 A44 44 0 0 0 136 76 Z M136 180 A44 44 0 0 0 180 136 H220 V220 H136 Z"/>
+  <path fill="#00C2FF" d="M106 128 A22 22 0 1 0 150 128 A22 22 0 1 0 106 128 Z"/>
 </svg>

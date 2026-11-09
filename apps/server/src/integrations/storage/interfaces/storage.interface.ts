@@ -7,7 +7,12 @@ export enum StorageOption {
 
 export type StorageConfig =
   | { driver: StorageOption.LOCAL; config: LocalStorageConfig }
-  | { driver: StorageOption.S3; config: S3StorageConfig };
+  | {
+      driver: StorageOption.S3;
+      config: S3StorageConfig;
+      /** Temporary local -> S3 cutover read fallback; absent = disabled. */
+      localReadFallback?: LocalStorageConfig;
+    };
 
 export interface LocalStorageConfig {
   storagePath: string;

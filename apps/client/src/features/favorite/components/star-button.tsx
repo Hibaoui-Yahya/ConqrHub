@@ -64,6 +64,9 @@ export default function StarButton(props: StarButtonProps) {
         color={isFavorited ? "yellow" : "gray"}
         onClick={handleToggle}
         loading={isPending}
+        aria-label={
+          isFavorited ? t("Remove from favorites") : t("Add to favorites")
+        }
       >
         {isFavorited ? (
           <IconStarFilled size={size} />

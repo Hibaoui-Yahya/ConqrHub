@@ -1,6 +1,8 @@
 import React from "react";
 import { Text, Tooltip } from "@mantine/core";
 import {
+  IconBell,
+  IconBulb,
   IconHome,
   IconLayoutGrid,
   IconSettings,
@@ -28,25 +30,34 @@ const SETTINGS_SECTIONS: [string, string][] = [
   ["/settings/account/preferences", "Preferences"],
   ["/settings/account/api-keys", "API keys"],
   ["/settings/account/profile", "Profile"],
+  ["/settings/account/meetings", "My meetings"],
+  ["/settings/account/notifications", "Notifications"],
   ["/settings/verifications", "Verified pages"],
   ["/settings/integrations", "Integrations"],
+  ["/settings/knowledge-base", "AI knowledge base"],
   ["/settings/workspace", "General"],
   ["/settings/api-keys", "API management"],
-  ["/settings/security", "Security & SSO"],
-  ["/settings/members", "Members"],
+  ["/settings/security", "Security and sign-in"],
+  ["/settings/members", "Members and groups"],
   ["/settings/sharing", "Public sharing"],
   ["/settings/billing", "Billing"],
   ["/settings/groups", "Groups"],
   ["/settings/spaces", "Spaces"],
   ["/settings/health", "Documentation health"],
-  ["/settings/audit", "Audit log"],
-  ["/settings/ai", "AI settings"],
+  ["/settings/audit", "Activity log"],
+  ["/settings/ai", "Artificial intelligence"],
+  ["/settings/apps/hub", "ConqrHub"],
+  ["/settings/apps/meet", "ConqrMeet"],
+  ["/settings/connections", "Connections"],
+  ["/settings/license", "License"],
 ];
 
 const TOP_LEVEL: [string, Crumb][] = [
   ["/home", { label: "Home", icon: IconHome }],
   ["/spaces", { label: "Spaces", icon: IconLayoutGrid }],
   ["/favorites", { label: "Favorites", icon: IconStar }],
+  ["/notifications", { label: "Notifications", icon: IconBell }],
+  ["/expertise", { label: "Expertise", icon: IconBulb }],
   ["/ai", { label: "AI Chat", icon: IconSparkles }],
 ];
 
@@ -73,7 +84,9 @@ function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
         const Icon = crumb.icon;
         const content = (
           <>
-            {Icon && <Icon size={14} stroke={2} className={classes.crumbIcon} />}
+            {Icon && (
+              <Icon size={14} stroke={2} className={classes.crumbIcon} />
+            )}
             <Text component="span" className={classes.crumbLabel} lineClamp={1}>
               {crumb.label}
             </Text>

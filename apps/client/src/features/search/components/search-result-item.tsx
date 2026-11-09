@@ -89,7 +89,12 @@ export function SearchResultItem({
             zIndex={getDefaultZIndex("max")}
             withArrow
           >
-            <ActionIcon variant="subtle" color="gray" onClick={handleDownload}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={handleDownload}
+              aria-label={t("Download attachment")}
+            >
               <IconDownload size={18} />
             </ActionIcon>
           </Tooltip>

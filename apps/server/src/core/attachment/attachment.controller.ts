@@ -59,6 +59,8 @@ import {
   RemoveIconDto,
 } from './dto/attachment.dto';
 import { PageAccessService } from '../page/page-access/page-access.service';
+import { AvatarThumbnailService } from './services/avatar-thumbnail.service';
+import { parseThumbnailSize } from './avatar-thumbnail.util';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
   AUDIT_SERVICE,
@@ -80,6 +82,7 @@ export class AttachmentController {
     private readonly tokenService: TokenService,
     private readonly pageAccessService: PageAccessService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly avatarThumbnails: AvatarThumbnailService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -436,9 +439,36 @@ export class AttachmentController {
     @Res() res: FastifyReply,
     @AuthWorkspace() workspace: Workspace,
     @Param('fileName') fileName?: string,
+    @Query('size') size?: string,
   ) {
     this.validateImgFileName(fileName);
     const filePath = `${getAttachmentFolderPath(AttachmentType.Avatar, workspace.id)}/${fileName}`;
+    return this.streamAvatar(res, filePath, size);
+  }
+
+  /**
+   * An avatar at `?size=64|128|256` (or sm|md|lg) is a cached square
+   * thumbnail (LTC-06); without a size, or if a thumbnail cannot be made,
+   * the original is served exactly as before. Same auth, same workspace
+   * folder, same private cache policy.
+   */
+  private async streamAvatar(
+    res: FastifyReply,
+    filePath: string,
+    size: string | undefined,
+  ) {
+    const thumbnailSize = parseThumbnailSize(size);
+    if (thumbnailSize) {
+      const thumbnail = await this.avatarThumbnails.get(filePath, thumbnailSize);
+      if (thumbnail) {
+        res.headers({
+          'Content-Type': thumbnail.mime,
+          'Cache-Control': 'private, max-age=86400',
+          'X-Content-Type-Options': 'nosniff',
+        });
+        return res.send(thumbnail.stream);
+      }
+    }
     return this.streamImage(res, filePath, 'private, max-age=86400');
   }
 
@@ -466,6 +496,7 @@ export class AttachmentController {
     @AuthWorkspace() workspace: Workspace,
     @Param('attachmentType') attachmentType: AttachmentType,
     @Param('fileName') fileName?: string,
+    @Query('size') size?: string,
   ) {
     if (
       !validAttachmentTypes.includes(attachmentType) ||
@@ -477,6 +508,9 @@ export class AttachmentController {
     this.validateImgFileName(fileName);
 
     const filePath = `${getAttachmentFolderPath(attachmentType, workspace.id)}/${fileName}`;
+    if (attachmentType === AttachmentType.Avatar && size) {
+      return this.streamAvatar(res, filePath, size);
+    }
     const cacheControl =
       attachmentType === AttachmentType.Avatar
         ? 'private, max-age=86400'

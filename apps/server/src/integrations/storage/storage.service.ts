@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { STORAGE_DRIVER_TOKEN } from './constants/storage.constants';
-import { StorageDriver } from './interfaces';
+import { SignedUrlResponseOverrides, StorageDriver } from './interfaces';
 import { Readable } from 'stream';
 
 @Injectable()
@@ -44,8 +44,12 @@ export class StorageService {
     return this.storageDriver.exists(filePath);
   }
 
-  async getSignedUrl(path: string, expireIn: number): Promise<string> {
-    return this.storageDriver.getSignedUrl(path, expireIn);
+  async getSignedUrl(
+    path: string,
+    expireIn: number,
+    response?: SignedUrlResponseOverrides,
+  ): Promise<string> {
+    return this.storageDriver.getSignedUrl(path, expireIn, response);
   }
 
   getUrl(filePath: string): string {

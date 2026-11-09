@@ -1,26 +1,23 @@
-// File exports a small constant alongside the component — splitting it into
-// a separate constants file would be more churn than the Fast Refresh hit is worth.
-/* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
 import { IconChevronRight, IconChevronDown } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 import type { AiChatToolCall } from "../types/ai-chat.types";
+import {
+  formatToolDetails,
+  getToolLabel,
+  getToolMainArg,
+} from "../utils/tool-labels";
 import classes from "../styles/chat-message.module.css";
-
-export const TOOL_LABELS: Record<string, string> = {
-  list_spaces: "Listed spaces",
-  search_pages: "Searched pages",
-  get_page: "Read page",
-  create_page: "Created page",
-  update_page: "Updated page",
-};
 
 type Props = {
   toolCall: AiChatToolCall;
 };
 
 export default function ChatToolResult({ toolCall }: Props) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const label = TOOL_LABELS[toolCall.name] || toolCall.name;
+  const label = getToolLabel(toolCall.name, t);
+  const mainArg = getToolMainArg(toolCall);
 
   return (
     <div className={classes.toolStep}>
@@ -34,16 +31,16 @@ export default function ChatToolResult({ toolCall }: Props) {
         ) : (
           <IconChevronRight size={12} />
         )}
-        <span>{label}</span>
+        <span>
+          {mainArg
+            ? t("{{label}}: “{{arg}}”", { label, arg: mainArg })
+            : label}
+        </span>
       </div>
       {expanded && (
         <div className={classes.toolStepDetails}>
           <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(
-              { args: toolCall.args, result: toolCall.result },
-              null,
-              2,
-            )}
+            {formatToolDetails(toolCall)}
           </pre>
         </div>
       )}

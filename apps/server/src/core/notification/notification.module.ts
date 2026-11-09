@@ -6,6 +6,7 @@ import { CommentNotificationService } from './services/comment.notification';
 import { PageNotificationService } from './services/page.notification';
 import { VerificationNotificationService } from './services/verification.notification';
 import { PageUpdateEmailRateLimiter } from './services/page-update-email-rate-limiter';
+import { MeetingNotificationService } from './services/meeting.notification';
 
 @Module({
   imports: [],
@@ -17,7 +18,8 @@ import { PageUpdateEmailRateLimiter } from './services/page-update-email-rate-li
     PageNotificationService,
     VerificationNotificationService,
     PageUpdateEmailRateLimiter,
+    MeetingNotificationService,
   ],
-  exports: [NotificationService],
+  exports: [NotificationService, MeetingNotificationService],
 })
 export class NotificationModule {}

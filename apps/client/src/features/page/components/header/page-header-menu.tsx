@@ -1,6 +1,7 @@
 import { ActionIcon, Group, Menu, Text, Tooltip } from "@mantine/core";
 import {
   IconArrowRight,
+  IconBulb,
   IconArrowsHorizontal,
   IconDots,
   IconEye,
@@ -114,6 +115,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           variant="subtle"
           color="dark"
           onClick={() => toggleAside("comments")}
+          aria-label={t("Comments")}
         >
           <IconMessage size={20} stroke={2} />
         </ActionIcon>
@@ -124,6 +126,7 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           variant="subtle"
           color="dark"
           onClick={() => toggleAside("toc")}
+          aria-label={t("Table of contents")}
         >
           <IconList size={20} stroke={2} />
         </ActionIcon>
@@ -137,6 +140,17 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
           aria-label={t("Attachments")}
         >
           <IconPaperclip size={20} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Tooltip label={t("Expertise")} openDelay={250} withArrow>
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          onClick={() => toggleAside("expertise")}
+          aria-label={t("Expertise")}
+        >
+          <IconBulb size={20} stroke={2} />
         </ActionIcon>
       </Tooltip>
 
@@ -241,7 +255,11 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
         arrowPosition="center"
       >
         <Menu.Target>
-          <ActionIcon variant="subtle" color="dark">
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            aria-label={t("Page actions")}
+          >
             <IconDots size={20} />
           </ActionIcon>
         </Menu.Target>
@@ -452,7 +470,12 @@ function ConnectionWarning() {
       openDelay={250}
       withArrow
     >
-      <ActionIcon variant="default" c="red" style={{ border: "none" }}>
+      <ActionIcon
+        variant="default"
+        c="red"
+        style={{ border: "none" }}
+        aria-label={t("Real-time editor connection lost. Retrying...")}
+      >
         <IconWifiOff size={20} stroke={2} />
       </ActionIcon>
     </Tooltip>

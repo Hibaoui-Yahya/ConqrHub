@@ -1,9 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  MEETING_PAGE_RETAINED_MESSAGE,
+  meetingDerivedPageIdsIn,
+} from './meeting-derived-pages';
 import { CreatePageDto, ContentFormat } from '../dto/create-page.dto';
 import { ContentOperation, UpdatePageDto } from '../dto/update-page.dto';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
@@ -1003,6 +1008,16 @@ export class PageService {
   }
 
   async forceDelete(pageId: string, workspaceId: string): Promise<void> {
+    // A page made from a meeting (or holding one below it) is kept until
+    // the retention review: see meeting-derived-pages.ts.
+    const retained = await meetingDerivedPageIdsIn(this.db, {
+      workspaceId,
+      underPageId: pageId,
+    });
+    if (retained.length > 0) {
+      throw new ConflictException(MEETING_PAGE_RETAINED_MESSAGE);
+    }
+
     // Get all descendant IDs (including the page itself) using recursive CTE
     const descendants = await this.db
       .withRecursive('page_descendants', (db) =>

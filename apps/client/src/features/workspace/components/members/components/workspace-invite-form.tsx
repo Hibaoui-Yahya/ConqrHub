@@ -1,4 +1,5 @@
-import { Group, Box, Button, TagsInput, Select } from "@mantine/core";
+import { Group, Box, Button, TagsInput, Select, Alert } from "@mantine/core";
+import { IconInfoCircle } from "@tabler/icons-react";
 import React, { useState } from "react";
 import { MultiGroupSelect } from "@/features/group/components/multi-group-select.tsx";
 import { UserRole } from "@/lib/types.ts";
@@ -85,6 +86,17 @@ export function WorkspaceInviteForm({ onClose }: Props) {
           label={t("Add to groups")}
           onChange={handleGroupSelect}
         />
+
+        <Alert
+          mt="md"
+          variant="light"
+          color="blue"
+          icon={<IconInfoCircle size={18} />}
+        >
+          {t(
+            "Each person receives a personal link, valid for 7 days. They choose their own password: you have nothing to send them.",
+          )}
+        </Alert>
 
         <Group justify="flex-end" mt="md">
           <Button

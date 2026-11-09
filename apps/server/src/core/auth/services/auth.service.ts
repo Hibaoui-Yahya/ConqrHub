@@ -25,6 +25,7 @@ import { MailService } from '../../../integrations/mail/mail.service';
 import ChangePasswordEmail from '@docmost/transactional/emails/change-password-email';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import ForgotPasswordEmail from '@docmost/transactional/emails/forgot-password-email';
+import { MailLanguage, mailLanguage } from '@docmost/transactional/i18n';
 import { UserTokenRepo } from '@docmost/db/repos/user-token/user-token.repo';
 import { PasswordResetDto } from '../dto/password-reset.dto';
 import { User, UserToken, Workspace } from '@docmost/db/types/entity.types';
@@ -40,6 +41,12 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+
+function passwordChangedSubject(lang: MailLanguage): string {
+  return lang === 'fr'
+    ? 'Votre mot de passe a été modifié'
+    : 'Your password has been changed';
+}
 
 @Injectable()
 export class AuthService {
@@ -134,24 +141,35 @@ export class AuthService {
     }
 
     const newPasswordHash = await hashPassword(dto.newPassword);
-    await this.userRepo.updateUser(
-      {
-        password: newPasswordHash,
-        hasGeneratedPassword: false,
-      },
-      userId,
-      workspaceId,
-    );
-
-    if (currentSessionId) {
-      await this.userSessionRepo.deleteAllExceptCurrent(
-        currentSessionId,
+    // The new password and the end of every other session commit together:
+    // a stolen session must not outlive the password change, even briefly.
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUser(
+        {
+          password: newPasswordHash,
+          hasGeneratedPassword: false,
+        },
         userId,
         workspaceId,
+        trx,
       );
-    } else {
-      await this.userSessionRepo.deleteByUserId(userId, workspaceId);
-    }
+
+      if (currentSessionId) {
+        await this.userSessionRepo.deleteAllExceptCurrent(
+          currentSessionId,
+          userId,
+          workspaceId,
+          trx,
+        );
+      } else {
+        await this.userSessionRepo.deleteByUserId(userId, workspaceId, trx);
+      }
+    });
+    this.sessionService.notifyRevoked(
+      currentSessionId
+        ? { userId, workspaceId, allExcept: currentSessionId }
+        : { userId, workspaceId, all: true },
+    );
 
     this.auditService.log({
       event: AuditEvent.USER_PASSWORD_CHANGED,
@@ -159,10 +177,17 @@ export class AuthService {
       resourceId: userId,
     });
 
-    const emailTemplate = ChangePasswordEmail({ username: user.name });
+    const lang = mailLanguage(user.locale);
+    const emailTemplate = ChangePasswordEmail({
+      lang,
+      username: user.name,
+      changedAt: new Date(),
+      secureUrl: `${this.domainService.getUrl()}/forgot-password`,
+      recipient: user.email,
+    });
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Your password has been changed',
+      subject: passwordChangedSubject(lang),
       template: emailTemplate,
     });
   }
@@ -203,14 +228,21 @@ export class AuthService {
 
     const resetLink = `${this.domainService.getUrl(workspace.hostname)}/password-reset?token=${token}`;
 
+    const lang = mailLanguage(user.locale);
     const emailTemplate = ForgotPasswordEmail({
+      lang,
       username: user.name,
       resetLink: resetLink,
+      validMinutes: 30,
+      recipient: user.email,
     });
 
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Reset your password',
+      subject:
+        lang === 'fr'
+          ? 'Réinitialisez votre mot de passe'
+          : 'Reset your password',
       template: emailTemplate,
     });
   }
@@ -264,6 +296,11 @@ export class AuthService {
 
       await this.userSessionRepo.deleteByUserId(user.id, workspace.id, trx);
     });
+    this.sessionService.notifyRevoked({
+      userId: user.id,
+      workspaceId: workspace.id,
+      all: true,
+    });
 
     this.auditService.setActorId(user.id);
     this.auditService.log({
@@ -272,10 +309,17 @@ export class AuthService {
       resourceId: user.id,
     });
 
-    const emailTemplate = ChangePasswordEmail({ username: user.name });
+    const lang = mailLanguage(user.locale);
+    const emailTemplate = ChangePasswordEmail({
+      lang,
+      username: user.name,
+      changedAt: new Date(),
+      secureUrl: `${this.domainService.getUrl(workspace.hostname)}/forgot-password`,
+      recipient: user.email,
+    });
     await this.mailService.sendToQueue({
       to: user.email,
-      subject: 'Your password has been changed',
+      subject: passwordChangedSubject(lang),
       template: emailTemplate,
     });
 

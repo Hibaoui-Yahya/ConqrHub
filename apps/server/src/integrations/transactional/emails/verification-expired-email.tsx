@@ -1,26 +1,55 @@
-import { Section, Text } from '@react-email/components';
 import * as React from 'react';
-import { content, paragraph } from '../css/styles';
-import { EmailButton, MailBody } from '../partials/partials';
+import { Actions, B, MailBody, MailLanguage, P } from '../partials/partials';
 
 interface Props {
+  lang: MailLanguage;
   pageTitle: string;
   spaceName: string;
   pageUrl: string;
 }
 
-export const VerificationExpiredEmail = ({ pageTitle, spaceName, pageUrl }: Props) => {
+export const VerificationExpiredEmail = ({
+  lang,
+  pageTitle,
+  spaceName,
+  pageUrl,
+}: Props) => {
+  if (lang === 'fr') {
+    return (
+      <MailBody
+        lang={lang}
+        product="hub"
+        icon="triangle-alert-danger"
+        preview="La page est exclue des réponses de l'IA jusqu'à sa revérification."
+        heading="La vérification a expiré"
+        reason="Vous recevez cet e-mail parce que vous vérifiez cette page."
+      >
+        <P>
+          La page <B>« {pageTitle} »</B>
+          {spaceName ? ` (espace ${spaceName})` : ''} n'est plus vérifiée. Elle
+          reste consultable, mais « Demander à l'IA » ne s'en sert plus jusqu'à
+          sa revérification.
+        </P>
+        <Actions href={pageUrl} label="Revérifier la page" />
+      </MailBody>
+    );
+  }
   return (
-    <MailBody>
-      <Section style={content}>
-        <Text style={paragraph}>Hi there,</Text>
-        <Text style={paragraph}>
-          The verification for <strong>{pageTitle}</strong> in the{' '}
-          <strong>{spaceName}</strong> space has expired. Please re-verify the
-          page to confirm it is still accurate.
-        </Text>
-      </Section>
-      <EmailButton href={pageUrl}>Re-verify page</EmailButton>
+    <MailBody
+      lang={lang}
+      product="hub"
+      icon="triangle-alert-danger"
+      preview="The page is left out of AI answers until it is verified again."
+      heading="The verification has expired"
+      reason="You are receiving this e-mail because you verify this page."
+    >
+      <P>
+        The page <B>“{pageTitle}”</B>
+        {spaceName ? ` (${spaceName} space)` : ''} is no longer verified. It
+        can still be read, but “Ask AI” no longer uses it until it is verified
+        again.
+      </P>
+      <Actions href={pageUrl} label="Verify the page again" />
     </MailBody>
   );
 };

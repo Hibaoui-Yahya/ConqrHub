@@ -23,3 +23,25 @@ export const inlineFileExtensions = [
   '.m4a',
   '.webm',
 ];
+
+/**
+ * Page documents whose text is extracted for search and the verified
+ * knowledge base (see ee/attachments-ee). Images are recorded at upload and
+ * only OCR'd once their page is verified.
+ */
+export const textExtractableExtensions = [
+  '.pdf',
+  '.docx',
+  '.pptx',
+  '.xlsx',
+  '.txt',
+  '.md',
+  '.markdown',
+  '.csv',
+  '.tsv',
+  '.json',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+];

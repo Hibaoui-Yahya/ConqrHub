@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { UserRole } from '../../../common/helpers/types/permission';
 import { AcceptInviteDto, InviteUserDto } from '../dto/invitation.dto';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { InjectKysely } from 'nestjs-kysely';
@@ -21,6 +23,9 @@ import { MailService } from '../../../integrations/mail/mail.service';
 import InvitationEmail from '@docmost/transactional/emails/invitation-email';
 import { GroupUserRepo } from '@docmost/db/repos/group/group-user.repo';
 import InvitationAcceptedEmail from '@docmost/transactional/emails/invitation-accepted-email';
+import WelcomeEmail from '@docmost/transactional/emails/welcome-email';
+import { roleLabel } from '@docmost/transactional/utils/utils';
+import { mailLanguage } from '@docmost/transactional/i18n';
 import { TokenService } from '../../auth/services/token.service';
 import { SessionService } from '../../session/session.service';
 import { nanoIdGen } from '../../../common/helpers';
@@ -40,6 +45,11 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../../integrations/audit/audit.service';
+import {
+  INVITATION_EXPIRED_MESSAGE,
+  invitationExpiresAt,
+  isInvitationExpired,
+} from '../invitation-expiry';
 
 @Injectable()
 export class WorkspaceInvitationService {
@@ -60,7 +70,7 @@ export class WorkspaceInvitationService {
   async getInvitations(workspaceId: string, pagination: PaginationOptions) {
     let query = this.db
       .selectFrom('workspaceInvitations')
-      .select(['id', 'email', 'role', 'workspaceId', 'createdAt'])
+      .select(['id', 'email', 'role', 'workspaceId', 'createdAt', 'expiresAt'])
       .where('workspaceId', '=', workspaceId);
 
     if (pagination.query) {
@@ -85,7 +95,7 @@ export class WorkspaceInvitationService {
   async getInvitationById(invitationId: string, workspace: Workspace) {
     const invitation = await this.db
       .selectFrom('workspaceInvitations')
-      .select(['id', 'email', 'createdAt'])
+      .select(['id', 'email', 'createdAt', 'expiresAt'])
       .where('id', '=', invitationId)
       .where('workspaceId', '=', workspace.id)
       .executeTakeFirst();
@@ -94,7 +104,11 @@ export class WorkspaceInvitationService {
       throw new NotFoundException('Invitation not found');
     }
 
-    return { ...invitation, enforceSso: workspace.enforceSso };
+    return {
+      ...invitation,
+      expired: isInvitationExpired(invitation.expiresAt),
+      enforceSso: workspace.enforceSso,
+    };
   }
 
   async getInvitationTokenById(invitationId: string, workspaceId: string) {
@@ -118,6 +132,12 @@ export class WorkspaceInvitationService {
     authUser: User,
   ): Promise<void> {
     const { emails, role, groupIds } = inviteUserDto;
+
+    // An invitation may not grant more than its author holds: only an owner
+    // can invite an owner (role changes enforce the same ceiling).
+    if (role === UserRole.OWNER && authUser.role !== UserRole.OWNER) {
+      throw new ForbiddenException('Only an owner can invite an owner');
+    }
 
     let invites: WorkspaceInvitation[] = [];
 
@@ -151,10 +171,12 @@ export class WorkspaceInvitationService {
             .execute();
         }
 
+        const expiresAt = invitationExpiresAt();
         const invitesToInsert = inviteEmails.map((email) => ({
           email: email,
           role: role,
           token: nanoIdGen(16),
+          expiresAt,
           workspaceId: workspace.id,
           invitedById: authUser.id,
           groupIds: validGroups?.map((group: Partial<Group>) => group.id),
@@ -187,6 +209,11 @@ export class WorkspaceInvitationService {
           invitation.token,
           authUser.name,
           workspace.hostname,
+          {
+            role: invitation.role,
+            workspaceName: workspace.name,
+            inviterLocale: authUser.locale,
+          },
         );
       });
 
@@ -231,6 +258,10 @@ export class WorkspaceInvitationService {
 
     if (dto.token !== invitation.token) {
       throw new BadRequestException('Invalid invitation token');
+    }
+
+    if (isInvitationExpired(invitation.expiresAt)) {
+      throw new BadRequestException(INVITATION_EXPIRED_MESSAGE);
     }
 
     validateSsoEnforcement(workspace);
@@ -310,17 +341,54 @@ export class WorkspaceInvitationService {
       workspace.id,
     );
 
+    const appUrl = this.domainService.getUrl(workspace.hostname);
+    const meetEnabled = Boolean(this.environmentService.getMeetAppUrl());
+
     if (invitedByUser) {
+      const lang = mailLanguage(invitedByUser.locale);
       const emailTemplate = InvitationAcceptedEmail({
+        lang,
         invitedUserName: newUser.name,
         invitedUserEmail: newUser.email,
+        inviterName: invitedByUser.name,
+        workspaceName: workspace.name,
+        roleLabel: roleLabel(invitation.role, lang),
+        membersUrl: `${appUrl}/settings/members`,
+        recipient: invitedByUser.email,
       });
 
       await this.mailService.sendToQueue({
         to: invitedByUser.email,
-        subject: `${newUser.name} has accepted your ConqrAI Wiki invite`,
+        subject:
+          lang === 'fr'
+            ? `${newUser.name || newUser.email} a rejoint ${workspace.name || 'votre espace'}`
+            : `${newUser.name || newUser.email} joined ${workspace.name || 'your workspace'}`,
         template: emailTemplate,
       });
+    }
+
+    try {
+      const lang = mailLanguage(newUser.locale);
+      const firstName = newUser.name
+        ? `, ${newUser.name.trim().split(' ')[0]}`
+        : '';
+      await this.mailService.sendToQueue({
+        to: newUser.email,
+        subject:
+          lang === 'fr'
+            ? `Bienvenue sur ConqrAI${firstName}`
+            : `Welcome to ConqrAI${firstName}`,
+        template: WelcomeEmail({
+          lang,
+          userName: newUser.name,
+          workspaceName: workspace.name,
+          appUrl,
+          meetEnabled,
+          recipient: newUser.email,
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(`welcome email not queued: ${err}`);
     }
 
     this.auditService.log({
@@ -371,6 +439,9 @@ export class WorkspaceInvitationService {
       throw new BadRequestException('Invitation not found');
     }
 
+    // Resending gives the same link a fresh week.
+    await this.renewInvitation(invitation.id, workspace.id);
+
     const invitedByUser = await this.userRepo.findById(
       invitation.invitedById,
       workspace.id,
@@ -380,8 +451,13 @@ export class WorkspaceInvitationService {
       invitation.id,
       invitation.email,
       invitation.token,
-      invitedByUser.name,
+      invitedByUser?.name,
       workspace.hostname,
+      {
+        role: invitation.role,
+        workspaceName: workspace.name,
+        inviterLocale: invitedByUser?.locale,
+      },
     );
 
     this.auditService.log({
@@ -432,11 +508,26 @@ export class WorkspaceInvitationService {
     workspace: Workspace,
   ): Promise<string> {
     const token = await this.getInvitationTokenById(invitationId, workspace.id);
+    // An administrator copying the link is about to share it: it gets a
+    // fresh week, like a resend.
+    await this.renewInvitation(invitationId, workspace.id);
     return this.buildInviteLink({
       invitationId,
       inviteToken: token.token,
       hostname: workspace.hostname,
     });
+  }
+
+  private async renewInvitation(
+    invitationId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    await this.db
+      .updateTable('workspaceInvitations')
+      .set({ expiresAt: invitationExpiresAt(), updatedAt: new Date() })
+      .where('id', '=', invitationId)
+      .where('workspaceId', '=', workspaceId)
+      .execute();
   }
 
   async buildInviteLink(opts: {
@@ -454,7 +545,15 @@ export class WorkspaceInvitationService {
     inviteToken: string,
     invitedByName: string,
     hostname?: string,
+    opts: {
+      role?: string;
+      workspaceName?: string;
+      /** The invitee has no account yet: the e-mail follows the inviter's
+       *  language, else DEFAULT_USER_LOCALE, else English. */
+      inviterLocale?: string | null;
+    } = {},
   ): Promise<void> {
+    const lang = mailLanguage(opts.inviterLocale);
     const inviteLink = await this.buildInviteLink({
       invitationId,
       inviteToken,
@@ -462,12 +561,26 @@ export class WorkspaceInvitationService {
     });
 
     const emailTemplate = InvitationEmail({
+      lang,
       inviteLink,
+      invitedByName,
+      workspaceName: opts.workspaceName,
+      roleLabel: opts.role ? roleLabel(opts.role, lang) : undefined,
+      meetEnabled: Boolean(this.environmentService.getMeetAppUrl()),
+      recipient: inviteeEmail,
     });
 
+    const fr = lang === 'fr';
+    const space = opts.workspaceName || (fr ? 'votre équipe' : 'your team');
     await this.mailService.sendToQueue({
       to: inviteeEmail,
-      subject: `${invitedByName} invited you to ConqrAI Wiki`,
+      subject: fr
+        ? invitedByName
+          ? `${invitedByName} vous invite à rejoindre ${space} sur ConqrAI`
+          : `Invitation à rejoindre ${space} sur ConqrAI`
+        : invitedByName
+          ? `${invitedByName} invited you to join ${space} on ConqrAI`
+          : `Invitation to join ${space} on ConqrAI`,
       template: emailTemplate,
     });
   }

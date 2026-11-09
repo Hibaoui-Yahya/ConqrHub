@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ActionIcon, Popover, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconPlus,
@@ -19,15 +19,21 @@ import { extractPageSlugId } from "@/lib";
 import { useChatStream } from "../hooks/use-chat-stream";
 import { useChatInfoQuery } from "../queries/ai-chat-query";
 import ChatMessageList from "./chat-message-list";
-import ChatInput from "./chat-input";
+import ChatInput, { type ChatInputHandle } from "./chat-input";
+import { ChatActionsContext, lastTurnIds } from "./chat-actions-context";
+import ChatStreamError from "./chat-stream-error";
 import AsideChatHistory from "./aside-chat-history";
-import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
+import type {
+  ChatAttachment,
+  PageMention,
+  SendMessageOptions,
+} from "../types/ai-chat.types";
 import classes from "../styles/aside-chat-panel.module.css";
 
 type QuickAction = {
   icon: React.ReactNode;
-  label: string;
-  prompt: string;
+  /** i18n key; the translated text is both the label and the prompt sent. */
+  key: string;
 };
 
 export default function AsideChatPanel() {
@@ -49,6 +55,11 @@ export default function AsideChatPanel() {
     isStreaming,
     error,
     sendMessage,
+    retryLast,
+    regenerate,
+    sendFollowUp,
+    canRetry,
+    setMessageFeedback,
     stopGeneration,
     hydrateFromServer,
   } = useChatStream(chatId, {
@@ -122,9 +133,17 @@ export default function AsideChatPanel() {
   }, [setAsideState]);
 
   const handleSend = useCallback(
-    (content: string, mentions: PageMention[], attachments: ChatAttachment[]) => {
+    (
+      content: string,
+      mentions: PageMention[],
+      attachments: ChatAttachment[],
+      options?: SendMessageOptions,
+    ) => {
       const contextPageId = contextPages.length > 0 ? contextPages[0].id : undefined;
-      sendMessage(content, mentions, attachments, contextPageId);
+      sendMessage(content, mentions, attachments, {
+        ...options,
+        ...(contextPageId ? { contextPageId } : {}),
+      });
     },
     [sendMessage, contextPages],
   );
@@ -138,13 +157,27 @@ export default function AsideChatPanel() {
 
   const hasMessages = messages.length > 0 || isStreaming;
 
+  // The prompt is sent in the UI language so the assistant answers in it.
+  const asideInputRef = useRef<ChatInputHandle>(null);
+  const asideActions = useMemo(
+    () => ({
+      ...lastTurnIds(messages),
+      busy: isStreaming,
+      onFollowUp: sendFollowUp,
+      onRegenerate: regenerate,
+      onEditQuestion: (text: string) => asideInputRef.current?.setText(text),
+    }),
+    [messages, isStreaming, sendFollowUp, regenerate],
+  );
+
   const quickActions: QuickAction[] = [
-    { icon: <IconFileText size={16} />, label: t("Summarize this page"), prompt: "Summarize this page" },
-    { icon: <IconLanguage size={16} />, label: t("Translate this page"), prompt: "Translate this page" },
-    { icon: <IconSearch size={16} />, label: t("Analyze for insights"), prompt: "Analyze this page for insights" },
+    { icon: <IconFileText size={16} />, key: "Summarize this page" },
+    { icon: <IconLanguage size={16} />, key: "Translate this page" },
+    { icon: <IconSearch size={16} />, key: "Analyze this page for insights" },
   ];
 
   return (
+    <ChatActionsContext.Provider value={asideActions}>
     <div className={classes.panel}>
       <div className={classes.toolbar}>
         <Popover
@@ -179,35 +212,34 @@ export default function AsideChatPanel() {
             variant="subtle"
             color="dark"
             onClick={handleNewChat}
+            aria-label={t("New chat")}
           >
             <IconPlus size={20} stroke={1.75} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={t("Open full page")} openDelay={250}>
-          <ActionIcon variant="subtle" color="dark" onClick={handleExpand}>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={handleExpand}
+            aria-label={t("Open full page")}
+          >
             <IconArrowsDiagonal size={18} stroke={1.5} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={t("Close")} openDelay={250}>
-          <ActionIcon variant="subtle" color="dark" onClick={handleClose}>
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={handleClose}
+            aria-label={t("Close")}
+          >
             <IconX size={20} stroke={1.75} />
           </ActionIcon>
         </Tooltip>
       </div>
-
-      {error && (
-        <div
-          style={{
-            padding: "var(--mantine-spacing-xs) var(--mantine-spacing-sm)",
-            color: "var(--mantine-color-red-6)",
-            fontSize: "var(--mantine-font-size-xs)",
-          }}
-        >
-          {error}
-        </div>
-      )}
 
       {hasMessages ? (
         <>
@@ -217,6 +249,7 @@ export default function AsideChatPanel() {
               isStreaming={isStreaming}
               streamingContent={streamingContent}
               streamingToolCalls={streamingToolCalls}
+              onFeedback={setMessageFeedback}
             />
           </div>
         </>
@@ -227,21 +260,33 @@ export default function AsideChatPanel() {
           <div className={classes.quickActions}>
             {quickActions.map((action) => (
               <button
-                key={action.label}
+                key={action.key}
                 type="button"
                 className={classes.quickAction}
-                onClick={() => handleQuickAction(action.prompt)}
+                onClick={() => handleQuickAction(t(action.key))}
               >
                 <span className={classes.quickActionIcon}>{action.icon}</span>
-                {action.label}
+                {t(action.key)}
               </button>
             ))}
           </div>
         </div>
       )}
 
+      {error && (
+        <div className={classes.errorArea}>
+          <ChatStreamError
+            error={error}
+            canRetry={canRetry}
+            onRetry={retryLast}
+            compact
+          />
+        </div>
+      )}
+
       <div className={classes.inputArea}>
         <ChatInput
+          ref={asideInputRef}
           isStreaming={isStreaming}
           onSend={handleSend}
           onStop={stopGeneration}
@@ -254,5 +299,6 @@ export default function AsideChatPanel() {
         />
       </div>
     </div>
+    </ChatActionsContext.Provider>
   );
 }

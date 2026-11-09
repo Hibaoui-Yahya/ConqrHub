@@ -7,6 +7,8 @@ const envMock = {
   getMistralApiKey: jest.fn(() => 'sk-test'),
   getAiSttEnabled: jest.fn(() => true),
   getAiSttModel: jest.fn(() => 'voxtral-small-2507'),
+  // No ffmpeg: the transcode falls back to the original bytes on any host.
+  getFfmpegPath: jest.fn(() => '/nonexistent/ffmpeg'),
 };
 
 const providerMock = {
@@ -38,7 +40,7 @@ describe('SttService.transcribeAndCorrect', () => {
   it('happy path: returns raw + corrected', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: 'raw transcript' }),
+      text: async () => JSON.stringify({ text: 'raw transcript' }),
     });
 
     const result = await makeService().transcribeAndCorrect(
@@ -63,7 +65,7 @@ describe('SttService.transcribeAndCorrect', () => {
   it('falls back to raw when correction throws', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: 'raw text' }),
+      text: async () => JSON.stringify({ text: 'raw text' }),
     });
     providerMock.generate.mockRejectedValueOnce(new Error('boom'));
 
@@ -82,7 +84,7 @@ describe('SttService.transcribeAndCorrect', () => {
   it('returns empty corrected when raw is empty (no LLM call)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: '' }),
+      text: async () => JSON.stringify({ text: '' }),
     });
 
     const result = await makeService().transcribeAndCorrect(
@@ -120,7 +122,7 @@ describe('SttService.transcribeAndCorrect', () => {
   it('resolves page title for kind=page and includes it in correction prompt', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: 'lets discuss voxtral migration' }),
+      text: async () => JSON.stringify({ text: 'lets discuss voxtral migration' }),
     });
     pageRepoMock.findById.mockResolvedValueOnce({
       id: 'page-id',
@@ -143,10 +145,12 @@ describe('SttService.transcribeAndCorrect', () => {
     expect(call?.temperature ?? 1).toBeLessThanOrEqual(0.2);
   });
 
-  it('rejects when page belongs to a different workspace', async () => {
+  // A page of another workspace is never read into the prompt; the raw
+  // transcript is still corrected without it (no leak, no failure).
+  it('never lets a page of another workspace into the correction prompt', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: 'raw' }),
+      text: async () => JSON.stringify({ text: 'raw' }),
     });
     pageRepoMock.findById.mockResolvedValueOnce({
       id: 'page-id',
@@ -163,13 +167,17 @@ describe('SttService.transcribeAndCorrect', () => {
         'workspace-id',
         'Acme Wiki',
       ),
-    ).rejects.toThrow(/forbidden|workspace/i);
+    ).resolves.toBeDefined();
+    const calls = providerMock.generate.mock.calls;
+    const call = calls[calls.length - 1]?.[0];
+    expect(call?.prompt).toContain('raw');
+    expect(call?.prompt).not.toContain('Other workspace page');
   });
 
   it('skips page lookup for kind=search', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ text: 'raw' }),
+      text: async () => JSON.stringify({ text: 'raw' }),
     });
 
     await makeService().transcribeAndCorrect(

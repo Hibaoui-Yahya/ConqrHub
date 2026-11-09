@@ -8,6 +8,7 @@ import * as fs from 'fs-extra';
 import { Readable } from 'stream';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
+import { StorageObjectNotFoundError } from '../storage.errors';
 
 export class LocalDriver implements StorageDriver {
   private readonly config: LocalStorageConfig;
@@ -66,14 +67,18 @@ export class LocalDriver implements StorageDriver {
     try {
       return await fs.readFile(this._fullPath(filePath));
     } catch (err) {
-      throw new Error(`Failed to read file: ${(err as Error).message}`);
+      const message = `Failed to read file: ${(err as Error).message}`;
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        throw new StorageObjectNotFoundError(message, { cause: err });
+      }
+      throw new Error(message);
     }
   }
 
   async readStream(filePath: string): Promise<Readable> {
     const fullPath = this._fullPath(filePath);
     if (!(await fs.pathExists(fullPath))) {
-      throw new Error(`File not found: ${filePath}`);
+      throw new StorageObjectNotFoundError(`File not found: ${filePath}`);
     }
     return createReadStream(fullPath);
   }
@@ -84,7 +89,7 @@ export class LocalDriver implements StorageDriver {
   ): Promise<Readable> {
     const fullPath = this._fullPath(filePath);
     if (!(await fs.pathExists(fullPath))) {
-      throw new Error(`File not found: ${filePath}`);
+      throw new StorageObjectNotFoundError(`File not found: ${filePath}`);
     }
     return createReadStream(fullPath, {
       start: range.start,
