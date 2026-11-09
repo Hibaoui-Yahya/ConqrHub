@@ -1472,21 +1472,26 @@ suite('meetings: Strict Private access, deletion, durable processing', () => {
       const meetingId = await addMeeting({ by: creator, status: 'analyzing', withTranscript: true });
       const request = await kickBy(meetingId, creator.id, 'analyzing');
       // Microsecond timestamps inside ONE millisecond: a JavaScript Date
-      // would see them equal.
-      await sql`update meeting_processing_events set created_at = '2026-10-14 10:00:00.000500+00' where id = ${request.id}`.execute(db);
+      // would see them equal. The millisecond is taken an hour ahead of the
+      // database clock, so the request stays the meeting's latest transition
+      // whatever day the suite runs (a fixed date here expired on 2026-10-14).
+      const { rows: [{ base }] } = await sql<{ base: string }>`select to_char(date_trunc('second', now() + interval '1 hour') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as base`.execute(db);
+      const at = (micros: number) => sql`(${base}::timestamptz + make_interval(secs => ${micros / 1e6}))`;
+      await sql`update meeting_processing_events set created_at = ${at(500)} where id = ${request.id}`.execute(db);
       const legacy = { runId: randomUUID() }; // written before requestIds existed
       await sql`insert into meeting_processing_events (meeting_id, event, detail, created_at)
-        values (${meetingId}, 'run_claimed', ${JSON.stringify(legacy)}::text::jsonb, '2026-10-14 10:00:00.000200+00')`.execute(db);
+        values (${meetingId}, 'run_claimed', ${JSON.stringify(legacy)}::text::jsonb, ${at(200)})`.execute(db);
+      // Claims naming ANOTHER request, made after this one, do not serve it.
       await sql`insert into meeting_processing_events (meeting_id, event, detail, created_at)
-        values (${meetingId}, 'run_claimed', ${JSON.stringify({ runId: randomUUID(), requestId: randomUUID() })}::text::jsonb, now())`.execute(db);
+        values (${meetingId}, 'run_claimed', ${JSON.stringify({ runId: randomUUID(), requestId: randomUUID() })}::text::jsonb, ${at(600)})`.execute(db);
       // Legacy string-encoded detail (the old bug) is still read as an object.
       await sql`insert into meeting_processing_events (meeting_id, event, detail, created_at)
-        values (${meetingId}, 'run_claimed', to_jsonb(${JSON.stringify({ runId: randomUUID(), requestId: randomUUID() })}::text), now())`.execute(db);
+        values (${meetingId}, 'run_claimed', to_jsonb(${JSON.stringify({ runId: randomUUID(), requestId: randomUUID() })}::text), ${at(700)})`.execute(db);
       expect(await service.continueRequestedRun(meetingId)).toBe(true);
       await (await queue.getJob(pipelineJobId(meetingId)))?.remove();
       // A legacy claim strictly after the request (by database time) serves it.
       await sql`insert into meeting_processing_events (meeting_id, event, detail, created_at)
-        values (${meetingId}, 'run_claimed', to_jsonb(${JSON.stringify(legacy)}::text), '2026-10-14 10:00:00.000900+00')`.execute(db);
+        values (${meetingId}, 'run_claimed', to_jsonb(${JSON.stringify(legacy)}::text), ${at(900)})`.execute(db);
       expect(await service.continueRequestedRun(meetingId)).toBe(false);
     });
 

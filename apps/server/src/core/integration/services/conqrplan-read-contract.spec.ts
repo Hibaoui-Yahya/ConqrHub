@@ -30,7 +30,7 @@ const enabled = process.env.CONTRACT_SUITE === '1';
 const d = enabled ? describe : describe.skip;
 
 // --- fixtures, from seed_mcp_integration.py --------------------------------
-const F = JSON.parse(readFileSync(process.env.FIXTURES as string, 'utf8'));
+const F = enabled ? JSON.parse(readFileSync(process.env.FIXTURES as string, 'utf8')) : ({} as any);
 const MCP_BASE = process.env.MCP_BASE ?? 'http://localhost:8797';
 const CLIENT_TOKEN = process.env.CLIENT_TOKEN as string;
 const HUB_KID = process.env.HUB_KID ?? 'hub-container-test';

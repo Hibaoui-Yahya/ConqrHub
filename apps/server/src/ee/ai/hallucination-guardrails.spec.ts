@@ -376,8 +376,8 @@ describe('hallucination guardrails | SttService correction prompt', () => {
     // Mock the Mistral transcription endpoint so the correction step runs.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ text: 'raw transcript text' }),
-      text: jest.fn().mockResolvedValue(''),
+      // The service reads the body as text, then parses it.
+      text: jest.fn().mockResolvedValue(JSON.stringify({ text: 'raw transcript text' })),
     }) as any;
   });
 
@@ -390,6 +390,7 @@ describe('hallucination guardrails | SttService correction prompt', () => {
     const env = {
       getMistralApiKey: jest.fn().mockReturnValue('key-xyz'),
       getAiSttModel: jest.fn().mockReturnValue('voxtral-1'),
+      getFfmpegPath: jest.fn().mockReturnValue('/nonexistent/ffmpeg'),
     };
     const pageRepo = { findById: jest.fn().mockResolvedValue(undefined) };
     const svc = new SttService(env as any, ai as any, pageRepo as any);
