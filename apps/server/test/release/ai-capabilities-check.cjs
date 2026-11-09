@@ -62,6 +62,26 @@ const un = (m) => { console.log(`UNVERIFIED  ${m}`); unverified++; };
       }
     }
   }
+  // 3. Ask AI: a verified page is embedded (mistral-embed) and retrieved to answer.
+  const sp = await post("/api/spaces", {}); const spaceId = (sp.j.data?.items ?? [])[0]?.id;
+  const fact = String(1000 + Math.floor(Math.random() * 9000));
+  const pg = await post("/api/pages/create", { spaceId, title: `Entrepôt fictif Orion ${fact}`, format: "markdown",
+    content: `## Consignes de l'entrepôt fictif Orion\n\nLe code d'accès du quai de chargement de l'entrepôt fictif Orion est ${fact}. Ce document est synthétique.` });
+  const pageId = pg.j.data?.id;
+  const me = await post("/api/users/me", {}); const meId = me.j.data?.user?.id ?? me.j.data?.id;
+  const cv = await post("/api/pages/create-verification", { pageId, type: "expiring", mode: "indefinite", verifierIds: [meId] });
+  if (cv.status >= 300) ok(false, `create the page verification (HTTP ${cv.status})`);
+  const ver = await post("/api/pages/verify", { pageId });
+  if (ver.status >= 300) ok(false, `verify the page (HTTP ${ver.status})`);
+  let answer = "", st = 0;
+  for (let i = 0; i < 24; i++) {
+    await new Promise((res) => setTimeout(res, 5000));
+    const r3 = await post("/api/ai/ask", { question: "Quel est le code d'accès du quai de chargement de l'entrepôt fictif Orion ?", spaceId });
+    st = r3.status; answer = JSON.stringify(r3.j.data ?? r3.j);
+    if (st === 503 || answer.includes(fact)) break;
+  }
+  if (st === 503) un("Ask AI: AI not configured (HTTP 503)");
+  else ok(answer.includes(fact), `Ask AI retrieves the verified page and answers with its fact (HTTP ${st}): ${answer.slice(0, 140)}…`);
   console.log(`\n${fails} failure(s), ${unverified} unverified capability(ies)`);
   process.exit(fails ? 1 : unverified ? 4 : 0);
 })().catch((e) => { console.error("FATAL", e.message); process.exit(2); });
