@@ -166,7 +166,11 @@ export class AiProviderService implements OnModuleInit {
     prompt: string;
     temperature?: number;
     maxOutputTokens?: number;
-  }): Promise<{ text: string; usage?: { totalTokens?: number } }> {
+  }): Promise<{
+    text: string;
+    usage?: { totalTokens?: number };
+    finishReason?: string;
+  }> {
     const model = this.requireCompletionModel();
     const result = await generateText({
       model,
@@ -175,7 +179,11 @@ export class AiProviderService implements OnModuleInit {
       temperature: args.temperature ?? 0.7,
       maxOutputTokens: args.maxOutputTokens,
     });
-    return { text: result.text, usage: result.usage };
+    return {
+      text: result.text,
+      usage: result.usage,
+      finishReason: result.finishReason,
+    };
   }
 
   /**
@@ -189,7 +197,7 @@ export class AiProviderService implements OnModuleInit {
     prompt: string;
     temperature?: number;
     maxOutputTokens?: number;
-  }): Promise<{ text: string; json?: unknown }> {
+  }): Promise<{ text: string; json?: unknown; finishReason?: string }> {
     const model = this.requireCompletionModel();
     try {
       const result = await generateText({
@@ -206,11 +214,17 @@ export class AiProviderService implements OnModuleInit {
       } catch {
         json = undefined;
       }
-      return { text: result.text, json };
+      return { text: result.text, json, finishReason: result.finishReason };
     } catch (err) {
       // The SDK refuses an answer that is not JSON; hand back its text.
       const text = (err as { text?: unknown })?.text;
-      if (typeof text === 'string') return { text };
+      const finishReason = (err as { finishReason?: unknown })?.finishReason;
+      if (typeof text === 'string') {
+        return {
+          text,
+          finishReason: typeof finishReason === 'string' ? finishReason : undefined,
+        };
+      }
       throw err;
     }
   }

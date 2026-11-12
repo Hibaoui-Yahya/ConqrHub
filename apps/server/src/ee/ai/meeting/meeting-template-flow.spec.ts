@@ -137,12 +137,67 @@ describe('MeetingService with templates', () => {
     });
 
     it('stops after the bounded attempts and writes no fake empty report', async () => {
+      // 3 JSON attempts, then one plain-Markdown call per section; the
+      // default double answers "{}" to those, which is not a section body.
       const t = run(['nope', new Error('provider 502'), '{"autre": 1}']);
       const error = await t.result;
       expect(error).toContain('n’a pas pu être généré');
-      expect(t.ai.generate).toHaveBeenCalledTimes(3);
+      expect(t.ai.generate).toHaveBeenCalledTimes(3 + 4);
       expect(docOf(t.inserts)).toBeUndefined();
       expect(t.deletes).toEqual([]); // the previous drafts are kept
+    });
+
+    it('does not call the per-section fallback when the provider is down', async () => {
+      const down = new Error('provider 503');
+      const t = run([down, down, down]);
+      expect(await t.result).toContain('n’a pas pu être généré');
+      expect(t.ai.generate).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps the complete sections of a truncated answer and asks only for the rest (prod 2026-11-12)', async () => {
+      // The model hit its output limit inside the third section.
+      const truncated = '{"sections": {"summary": "Budget 45 000 $.\n- Phase deux validée", "decisions": "- Phase deux", "actions": "- [Marie] Prépa';
+      const rest = JSON.stringify({ sections: { actions: '- [Marie] Plan', next_steps: '- Jeudi' } });
+      const t = run([truncated, rest]);
+      expect(await t.result).toBeNull();
+      expect(t.ai.generate).toHaveBeenCalledTimes(2);
+      const retry = (t.ai.generate.mock.calls[1] as any[])[0].prompt as string;
+      expect(retry).toContain('"actions"');
+      expect(retry).toContain('"next_steps"');
+      expect(retry).not.toContain('"summary" ·');
+      const doc = docOf(t.inserts);
+      expect(JSON.parse(doc.structured).sections).toEqual({
+        summary: 'Budget 45 000 $.\n- Phase deux validée',
+        decisions: '- Phase deux',
+        actions: '- [Marie] Plan',
+        next_steps: '- Jeudi',
+      });
+      expect(JSON.parse(doc.structured).generation.status).toBe('complete');
+    });
+
+    it('falls back to one plain-Markdown call per section when every JSON answer is unusable', async () => {
+      const t = run([
+        'nope',
+        'still nope',
+        '{"sections": {"summ',
+        'Budget 45 000 $ validé.',
+        '```markdown\n- Phase deux\n```',
+        '_Rien de consigné._',
+        '- Jeudi : point d’étape',
+      ]);
+      expect(await t.result).toBeNull();
+      expect(t.ai.generate).toHaveBeenCalledTimes(7);
+      const fallback = (t.ai.generate.mock.calls[3] as any[])[0];
+      expect(fallback.system).toContain('pas de JSON');
+      const doc = docOf(t.inserts);
+      const structured = JSON.parse(doc.structured);
+      expect(structured.sections).toEqual({
+        summary: 'Budget 45 000 $ validé.',
+        decisions: '- Phase deux',
+        actions: '_Rien de consigné._',
+        next_steps: '- Jeudi : point d’étape',
+      });
+      expect(structured.generation.status).toBe('complete');
     });
 
     it('completes missing sections from a second answer', async () => {

@@ -129,8 +129,10 @@ import {
 import { MeetingTemplateService } from './meeting-template.service';
 import {
   buildSectionsPrompt,
+  buildSingleSectionPrompt,
   documentPublishBlocker,
   interpretSectionsAnswer,
+  interpretSingleSectionAnswer,
   legacyOutputsFromSections,
   sectionsToMarkdown,
   type TemplateSpec,
@@ -177,6 +179,9 @@ const PROCESSABLE_STATUSES = new Set([
 
 /** Template report: first answer + bounded retries on unusable answers. */
 const MAX_REPORT_ATTEMPTS = 3;
+/** Output budget of one report answer. 3 500 truncated the JSON of long
+ *  meetings (prod 2026-11-12: three "unparseable" answers in a row). */
+const REPORT_MAX_OUTPUT_TOKENS = 8000;
 /** Below this many words a transcript may honestly yield an empty report. */
 const SUBSTANTIVE_TRANSCRIPT_WORDS = 40;
 /**
@@ -4688,22 +4693,35 @@ export class MeetingService {
     prompt: string;
     temperature: number;
     maxOutputTokens: number;
-  }): Promise<unknown> {
+  }): Promise<{ value: unknown; finishReason?: string; chars: number }> {
     const ai = this.ai as AiProviderService & {
-      generateJson?: (a: typeof args) => Promise<{ text: string; json?: unknown }>;
+      generateJson?: (
+        a: typeof args,
+      ) => Promise<{ text: string; json?: unknown; finishReason?: string }>;
     };
     if (typeof ai.generateJson === 'function') {
       try {
         const result = await ai.generateJson(args);
-        return result.json ?? result.text;
+        return {
+          value: result.json ?? result.text,
+          finishReason: result.finishReason,
+          chars: (result.text ?? '').length,
+        };
       } catch (err) {
         this.logger.debug(
           `JSON response mode unavailable (${(err as Error).message}); plain generation`,
         );
       }
     }
-    const result = await this.ai.generate(args);
-    return result.text ?? '';
+    const result = (await this.ai.generate(args)) as {
+      text?: string;
+      finishReason?: string;
+    };
+    return {
+      value: result.text ?? '',
+      finishReason: result.finishReason,
+      chars: (result.text ?? '').length,
+    };
   }
 
   /**
@@ -4973,6 +4991,9 @@ export class MeetingService {
     const got = new Map<string, { kind: 'filled' | 'empty'; value: string }>();
     const attempts: string[] = [];
     for (let attempt = 1; attempt <= MAX_REPORT_ATTEMPTS; attempt++) {
+      // A retry asks only for what is still missing: a shorter answer that
+      // does not hit the output limit again.
+      const stillMissing = enabled.filter((s) => !got.has(s.id)).map((s) => s.id);
       const { system, prompt, sections } = buildSectionsPrompt({
         title,
         templateName: template.name,
@@ -4980,22 +5001,28 @@ export class MeetingService {
         transcript: text,
         language,
         strict: attempt > 1,
+        only: got.size > 0 && stillMissing.length ? stillMissing : undefined,
       });
       let answer: unknown;
+      let finish = '';
       try {
-        answer = await this.generateStructured({
+        const out = await this.generateStructured({
           system,
           prompt,
           temperature: attempt > 1 ? 0.1 : 0.3,
-          maxOutputTokens: 3500,
+          maxOutputTokens: REPORT_MAX_OUTPUT_TOKENS,
         });
+        answer = out.value;
+        if (out.finishReason && out.finishReason !== 'stop') {
+          finish = `(finish=${out.finishReason},chars=${out.chars})`;
+        }
       } catch (err) {
         attempts.push(`provider_error: ${(err as Error).message}`.slice(0, 160));
         continue;
       }
       const result = interpretSectionsAnswer(answer, sections, labels.nothingRecorded);
       if (result.ok === false) {
-        attempts.push((result as { reason: string }).reason);
+        attempts.push((result as { reason: string }).reason + finish);
         continue;
       }
       for (const id of result.filled) {
@@ -5012,7 +5039,46 @@ export class MeetingService {
         attempts.push('ok');
         break;
       }
-      attempts.push(missing.length ? 'missing_sections' : 'all_sections_empty');
+      attempts.push((missing.length ? 'missing_sections' : 'all_sections_empty') + finish);
+    }
+
+    // Last resort: the sections still missing, one call each, in plain
+    // Markdown — no JSON to break. Skipped when the provider itself is down.
+    const providerDown =
+      attempts.length > 0 && attempts.every((a) => a.startsWith('provider_error'));
+    if (!providerDown) {
+      for (const section of enabled.filter((s) => !got.has(s.id))) {
+        try {
+          const { system, prompt } = buildSingleSectionPrompt({
+            title,
+            templateName: template.name,
+            spec: template.spec,
+            section,
+            transcript: text,
+            language,
+          });
+          const answer = await this.ai.generate({
+            system,
+            prompt,
+            temperature: 0.2,
+            maxOutputTokens: 2000,
+          });
+          const one = interpretSingleSectionAnswer(answer.text);
+          if (!one) {
+            attempts.push(`section_fallback_unusable:${section.id}`);
+          } else if (one.empty) {
+            got.set(section.id, { kind: 'empty', value: labels.nothingRecorded });
+            attempts.push(`section_fallback_empty:${section.id}`);
+          } else {
+            got.set(section.id, { kind: 'filled', value: one.markdown });
+            attempts.push(`section_fallback_ok:${section.id}`);
+          }
+        } catch (err) {
+          attempts.push(
+            `section_fallback_error:${section.id}: ${(err as Error).message}`.slice(0, 160),
+          );
+        }
+      }
     }
 
     const filled = enabled.filter((s) => got.get(s.id)?.kind === 'filled');
