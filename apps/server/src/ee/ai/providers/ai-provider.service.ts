@@ -172,7 +172,7 @@ export class AiProviderService implements OnModuleInit {
     finishReason?: string;
   }> {
     const model = this.requireCompletionModel();
-    const result = await generateText({
+    const result = await this.oneShot({
       model,
       system: args.system,
       prompt: args.prompt,
@@ -184,6 +184,61 @@ export class AiProviderService implements OnModuleInit {
       usage: result.usage,
       finishReason: result.finishReason,
     };
+  }
+
+  /** False once the provider refused `reasoning_effort` (a model without
+   *  adjustable reasoning); later calls stop sending it. */
+  private reasoningOffAccepted = true;
+
+  /**
+   * One-shot calls (summaries, JSON reports, punctuation…) ask Mistral for no
+   * hidden reasoning. A reasoning model otherwise spends the whole output
+   * budget thinking and returns NO text with finishReason "length": prod
+   * 2026-11-12, three report attempts of ~90 s each ended with 0 characters.
+   * `AI_ONE_SHOT_REASONING=default` keeps the model's own behaviour.
+   */
+  private oneShotProviderOptions(): Record<string, any> | undefined {
+    if (this.getDriver() !== 'mistral') return undefined;
+    if (!this.reasoningOffAccepted) return undefined;
+    if ((process.env.AI_ONE_SHOT_REASONING ?? '').trim().toLowerCase() === 'default') {
+      return undefined;
+    }
+    return { mistral: { reasoningEffort: 'none' } };
+  }
+
+  private async oneShot(
+    params: Omit<Parameters<typeof generateText>[0], 'providerOptions'>,
+  ): Promise<Awaited<ReturnType<typeof generateText>>> {
+    const providerOptions = this.oneShotProviderOptions();
+    let result: Awaited<ReturnType<typeof generateText>>;
+    try {
+      result = await generateText({ ...params, providerOptions } as any);
+    } catch (err) {
+      const e = err as { statusCode?: number; message?: string; responseBody?: string };
+      const refused =
+        providerOptions &&
+        (e.statusCode === 400 || e.statusCode === 422) &&
+        /reasoning/i.test(`${e.message ?? ''} ${e.responseBody ?? ''}`);
+      if (!refused) throw err;
+      this.reasoningOffAccepted = false;
+      this.logger.warn(
+        'The AI model refuses reasoning_effort=none; one-shot calls now use its default reasoning',
+      );
+      result = await generateText(params as any);
+    }
+    if (result.finishReason === 'length') {
+      const usage = result.usage as {
+        outputTokens?: number;
+        reasoningTokens?: number;
+        outputTokenDetails?: { reasoningTokens?: number };
+      };
+      const reasoning =
+        usage?.reasoningTokens ?? usage?.outputTokenDetails?.reasoningTokens;
+      this.logger.warn(
+        `AI answer cut at the output limit: chars=${(result.text ?? '').length} outputTokens=${usage?.outputTokens ?? '?'} reasoningTokens=${reasoning ?? '?'}`,
+      );
+    }
+    return result;
   }
 
   /**
@@ -200,7 +255,7 @@ export class AiProviderService implements OnModuleInit {
   }): Promise<{ text: string; json?: unknown; finishReason?: string }> {
     const model = this.requireCompletionModel();
     try {
-      const result = await generateText({
+      const result = await this.oneShot({
         model,
         system: args.system,
         prompt: args.prompt,

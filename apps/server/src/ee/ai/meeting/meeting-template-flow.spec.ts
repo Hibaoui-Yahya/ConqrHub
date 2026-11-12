@@ -175,6 +175,18 @@ describe('MeetingService with templates', () => {
       expect(JSON.parse(doc.structured).generation.status).toBe('complete');
     });
 
+    it('doubles the output budget after an answer cut at the limit with no text (prod 2026-11-12)', async () => {
+      const t = setup();
+      jest.spyOn(t.service as any, 'getMeetingOrThrow').mockResolvedValue({ id: 'm1', title: 'Point Atlas', startedAt: '2026-10-13T15:05:00Z', aiOutputs: {} });
+      t.ai.generate
+        .mockResolvedValueOnce({ text: '', finishReason: 'length' } as any)
+        .mockResolvedValueOnce({ text: full, finishReason: 'stop' } as any);
+      const error = await (t.service as any).generateTemplateDocument('m1', generic, conversation, 1, { language: 'fr' });
+      expect(error).toBeNull();
+      const budgets = t.ai.generate.mock.calls.map((c: any[]) => c[0].maxOutputTokens);
+      expect(budgets).toEqual([8000, 16000]);
+    });
+
     it('falls back to one plain-Markdown call per section when every JSON answer is unusable', async () => {
       const t = run([
         'nope',

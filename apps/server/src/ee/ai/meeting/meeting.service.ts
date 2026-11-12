@@ -134,6 +134,7 @@ import {
   interpretSectionsAnswer,
   interpretSingleSectionAnswer,
   legacyOutputsFromSections,
+  parseJsonLoose,
   sectionsToMarkdown,
   type TemplateSpec,
 } from './meeting-template.util';
@@ -182,6 +183,8 @@ const MAX_REPORT_ATTEMPTS = 3;
 /** Output budget of one report answer. 3 500 truncated the JSON of long
  *  meetings (prod 2026-11-12: three "unparseable" answers in a row). */
 const REPORT_MAX_OUTPUT_TOKENS = 8000;
+/** Upper bound when an answer keeps hitting the limit. */
+const REPORT_MAX_OUTPUT_TOKENS_CEILING = 24000;
 /** Below this many words a transcript may honestly yield an empty report. */
 const SUBSTANTIVE_TRANSCRIPT_WORDS = 40;
 /**
@@ -4081,6 +4084,7 @@ export class MeetingService {
       }
       batch.push(segment);
     }
+    const failures: string[] = [];
     for (const batch of batches) {
       try {
         const result = await this.ai.generate({
@@ -4095,7 +4099,14 @@ export class MeetingService {
             Math.ceil(batch.reduce((n, s) => n + s.text.length, 0) * 1.5),
           ),
         });
-        const corrected = JSON.parse(this.stripCodeFence(result.text ?? '{}'));
+        const parsed = parseJsonLoose(result.text ?? '');
+        if (!parsed || typeof parsed !== 'object') {
+          failures.push(
+            `unparseable(finish=${(result as { finishReason?: string }).finishReason ?? '?'},chars=${(result.text ?? '').length})`,
+          );
+          continue;
+        }
+        const corrected = parsed as Record<string, unknown>;
         for (const segment of batch) {
           const candidate = corrected[segment.id];
           if (
@@ -4105,11 +4116,16 @@ export class MeetingService {
             segment.text = candidate.trim();
           }
         }
-      } catch {
-        this.logger.warn(
-          'Meeting punctuation correction unavailable; original speech retained',
-        );
+      } catch (err) {
+        failures.push(`error: ${(err as Error).message}`.slice(0, 160));
       }
+    }
+    if (failures.length) {
+      // One line per transcript with the causes, instead of one bare line
+      // per batch (prod 2026-11-12: nine identical warnings, no cause).
+      this.logger.warn(
+        `Meeting punctuation correction unavailable for ${failures.length}/${batches.length} batch(es); original speech retained: ${[...new Set(failures)].join(' | ')}`,
+      );
     }
   }
 
@@ -4990,6 +5006,9 @@ export class MeetingService {
     // Section id → best content seen across attempts.
     const got = new Map<string, { kind: 'filled' | 'empty'; value: string }>();
     const attempts: string[] = [];
+    // Doubled after an answer cut at the limit (a reasoning model may spend
+    // the budget before writing anything).
+    let budget = REPORT_MAX_OUTPUT_TOKENS;
     for (let attempt = 1; attempt <= MAX_REPORT_ATTEMPTS; attempt++) {
       // A retry asks only for what is still missing: a shorter answer that
       // does not hit the output limit again.
@@ -5010,11 +5029,14 @@ export class MeetingService {
           system,
           prompt,
           temperature: attempt > 1 ? 0.1 : 0.3,
-          maxOutputTokens: REPORT_MAX_OUTPUT_TOKENS,
+          maxOutputTokens: budget,
         });
         answer = out.value;
         if (out.finishReason && out.finishReason !== 'stop') {
           finish = `(finish=${out.finishReason},chars=${out.chars})`;
+        }
+        if (out.finishReason === 'length') {
+          budget = Math.min(budget * 2, REPORT_MAX_OUTPUT_TOKENS_CEILING);
         }
       } catch (err) {
         attempts.push(`provider_error: ${(err as Error).message}`.slice(0, 160));
@@ -5061,11 +5083,14 @@ export class MeetingService {
             system,
             prompt,
             temperature: 0.2,
-            maxOutputTokens: 2000,
+            maxOutputTokens: 4000,
           });
           const one = interpretSingleSectionAnswer(answer.text);
           if (!one) {
-            attempts.push(`section_fallback_unusable:${section.id}`);
+            const why = (answer as { finishReason?: string }).finishReason;
+            attempts.push(
+              `section_fallback_unusable:${section.id}${why && why !== 'stop' ? `(finish=${why},chars=${(answer.text ?? '').length})` : ''}`,
+            );
           } else if (one.empty) {
             got.set(section.id, { kind: 'empty', value: labels.nothingRecorded });
             attempts.push(`section_fallback_empty:${section.id}`);
