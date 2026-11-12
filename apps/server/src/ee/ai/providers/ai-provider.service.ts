@@ -65,6 +65,10 @@ const MISTRAL_DEFAULTS: DriverDefaults = {
 
 const MISTRAL_OCR_URL = 'https://api.mistral.ai/v1/ocr';
 
+/** Extra output tokens for a model that cannot stop reasoning (see
+ *  AiProviderService.withReasoningHeadroom). */
+const REASONING_HEADROOM_TOKENS = 8000;
+
 /**
  * OCR failure. `retryable` marks transient conditions (timeout, network,
  * 408/409/425/429, 5xx); anything else (bad request, auth, unsupported or
@@ -206,13 +210,32 @@ export class AiProviderService implements OnModuleInit {
     return { mistral: { reasoningEffort: 'none' } };
   }
 
+  /**
+   * A model that always reasons (it refused reasoning_effort=none) spends
+   * tokens thinking before it writes, so a budget sized for the answer alone
+   * yields no text at all (prod 2026-11-12: summary 1 200, actions 900,
+   * classification 700 → 0 characters each). Its calls get this much extra
+   * room for the reasoning. `AI_REASONING_HEADROOM_TOKENS` overrides it.
+   */
+  private withReasoningHeadroom<T extends { maxOutputTokens?: number }>(params: T): T {
+    if (this.reasoningOffAccepted || this.getDriver() !== 'mistral') return params;
+    if (typeof params.maxOutputTokens !== 'number') return params;
+    const configured = Number(process.env.AI_REASONING_HEADROOM_TOKENS);
+    const headroom =
+      Number.isFinite(configured) && configured >= 0 ? configured : REASONING_HEADROOM_TOKENS;
+    return { ...params, maxOutputTokens: params.maxOutputTokens + headroom };
+  }
+
   private async oneShot(
     params: Omit<Parameters<typeof generateText>[0], 'providerOptions'>,
   ): Promise<Awaited<ReturnType<typeof generateText>>> {
     const providerOptions = this.oneShotProviderOptions();
     let result: Awaited<ReturnType<typeof generateText>>;
     try {
-      result = await generateText({ ...params, providerOptions } as any);
+      result = await generateText({
+        ...this.withReasoningHeadroom(params),
+        providerOptions,
+      } as any);
     } catch (err) {
       const e = err as { statusCode?: number; message?: string; responseBody?: string };
       const refused =
@@ -224,7 +247,7 @@ export class AiProviderService implements OnModuleInit {
       this.logger.warn(
         'The AI model refuses reasoning_effort=none; one-shot calls now use its default reasoning',
       );
-      result = await generateText(params as any);
+      result = await generateText(this.withReasoningHeadroom(params) as any);
     }
     if (result.finishReason === 'length') {
       const usage = result.usage as {

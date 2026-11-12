@@ -82,6 +82,27 @@ describe('one-shot calls and reasoning models', () => {
     expect(generateText.mock.calls[2][0].providerOptions).toBeUndefined();
   });
 
+  it('gives an always-reasoning model room to think before it writes (prod 2026-11-12)', async () => {
+    const refusal = Object.assign(new Error('Bad request'), { statusCode: 400, message: 'reasoning_effort is not supported for this model' });
+    generateText.mockRejectedValueOnce(refusal).mockResolvedValue(ok);
+    const svc = service('mistral');
+    await svc.generate({ prompt: 'x', maxOutputTokens: 900 });
+    // First call: reasoning off, budget as asked. Replay and later calls: +8 000.
+    expect(generateText.mock.calls[0][0].maxOutputTokens).toBe(900);
+    expect(generateText.mock.calls[1][0].maxOutputTokens).toBe(8900);
+    await svc.generateJson({ prompt: 'y', maxOutputTokens: 1200 });
+    expect(generateText.mock.calls[2][0].maxOutputTokens).toBe(9200);
+    // A call without a cap stays without one.
+    await svc.generate({ prompt: 'z' });
+    expect(generateText.mock.calls[3][0].maxOutputTokens).toBeUndefined();
+  });
+
+  it('adds no headroom while the model accepts reasoning off', async () => {
+    generateText.mockResolvedValue(ok);
+    await service('mistral').generate({ prompt: 'x', maxOutputTokens: 900 });
+    expect(generateText.mock.calls[0][0].maxOutputTokens).toBe(900);
+  });
+
   it('does not swallow other provider errors', async () => {
     generateText.mockRejectedValue(Object.assign(new Error('rate limited'), { statusCode: 429 }));
     await expect(service('mistral').generate({ prompt: 'x' })).rejects.toThrow('rate limited');
